@@ -28,6 +28,8 @@ export function dbErrorMessage(context: string, error: { code?: string; message:
   console.error(`${context} :`, error.code, error.message);
   if (error.code === "42501") return "Action non permise.";
   if (error.code === "23514") return "Valeur refusée par la base de données.";
+  // Limite de nombre (migration 0008) : le message de la base est déjà en français.
+  if (error.code === "54000") return error.message;
   if (error.code === "PGRST202" || error.code === "42703" || error.code === "42883") {
     return "La base de données n'est pas à jour : applique les fichiers supabase/migration-000N.sql manquants (voir README).";
   }

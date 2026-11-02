@@ -57,6 +57,13 @@
       "when": 1793655566913,
       "tag": "0007_review_kick_new_code",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793655861573,
+      "tag": "0008_review_row_limits",
+      "breakpoints": true
     }
   ]
 }

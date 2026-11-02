@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0007.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0008.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -122,6 +122,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0005.sql",
       "supabase/migration-0006.sql",
       "supabase/migration-0007.sql",
+      "supabase/migration-0008.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -1411,6 +1412,60 @@ describe("Groupes : un membre retiré ne revient pas avec l'ancien lien (revue)"
       { user_id: C, role: "member" },
     ]);
     await expect(join_(A, g.code)).rejects.toThrow(/Code d'invitation invalide/);
+  });
+});
+
+describe("Limites de nombre de lieux et de blocs (revue)", () => {
+  const ajouterBlocs = (uid: string, n: number) =>
+    as(uid, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, start_time, end_time, weekday)
+         SELECT 'Cours', '10:00', '11:00', 1 FROM generate_series(1, $1)`,
+        [n],
+      ),
+    );
+  const ajouterLieux = (uid: string, n: number, groupId: string | null = null) =>
+    as(uid, () =>
+      rows(
+        `INSERT INTO places (name, lat, lng, group_id, is_group_favorite)
+         SELECT 'Lieu', 45.5, -73.5, $2::uuid, $2::uuid IS NOT NULL FROM generate_series(1, $1)`,
+        [n, groupId],
+      ),
+    );
+
+  it("1000 blocs par personne au plus ; les autres ne sont pas touchés", async () => {
+    await ajouterBlocs(A, 1000);
+    await expect(ajouterBlocs(A, 1)).rejects.toThrow(/Trop de blocs dans l'horaire/);
+    await ajouterBlocs(B, 5);
+    await as(A, () =>
+      rows("DELETE FROM busy_blocks WHERE ctid IN (SELECT ctid FROM busy_blocks LIMIT 1)"),
+    );
+    await ajouterBlocs(A, 1);
+  });
+
+  it("200 lieux par personne et 100 lieux par groupe au plus, même en déplaçant un lieu", async () => {
+    await ajouterLieux(A, 200);
+    await expect(ajouterLieux(A, 1)).rejects.toThrow(/Trop de lieux \(200/);
+    const g = await createGroup(B, "Le cégep");
+    await join_(C, g.code);
+    await ajouterLieux(B, 60, g.id);
+    await ajouterLieux(C, 40, g.id);
+    await expect(ajouterLieux(C, 1, g.id)).rejects.toThrow(/Trop de lieux dans ce groupe/);
+    const [perso] = await as(C, () =>
+      rows<{ id: string }>(
+        "INSERT INTO places (name, lat, lng) VALUES ('Parc', 45.5, -73.5) RETURNING id",
+      ),
+    );
+    await expect(
+      as(C, () =>
+        rows("UPDATE places SET group_id = $1, is_group_favorite = true WHERE id = $2", [
+          g.id,
+          perso.id,
+        ]),
+      ),
+    ).rejects.toThrow(/Trop de lieux dans ce groupe/);
+    // Renommer un lieu du groupe reste permis à la limite.
+    await as(B, () => rows("UPDATE places SET name = 'Café' WHERE group_id = $1", [g.id]));
   });
 });
 

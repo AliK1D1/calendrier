@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatInTimeZone } from "date-fns-tz";
 
 import {
+  MAX_SEARCH_DAYS,
   availabilityInWindow,
   findMeetupCandidates,
   intersectIntervals,
@@ -445,5 +446,36 @@ describe("findMeetupCandidates : règles générales", () => {
     );
     const shift: BusyBlock = leo.busyBlocks[0];
     expect(out.filter((p) => overlaps(p, shift.start, shift.end))).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Revue sécurité : validation de la requête
+// ---------------------------------------------------------------------------
+
+describe("findMeetupCandidates : validation de la requête (revue)", () => {
+  it("refuse une durée minimale ou une marge qui n'est pas un nombre fini", async () => {
+    const run = (o: Partial<MeetupRequest>) =>
+      findMeetupCandidates(PEOPLE, request({ personIds: [ali.id, sam.id], ...o }), estimated());
+    await expect(run({ minDurationMinutes: Number.NaN })).rejects.toThrow(/durée minimale/);
+    await expect(run({ minDurationMinutes: Number.POSITIVE_INFINITY })).rejects.toThrow(
+      /durée minimale/,
+    );
+    await expect(run({ bufferMinutes: Number.NaN })).rejects.toThrow(/marge/);
+    await expect(run({ bufferMinutes: Number.POSITIVE_INFINITY })).rejects.toThrow(/marge/);
+  });
+
+  it("refuse une période trop longue ou un jour inexistant, accepte la limite exacte", async () => {
+    const run = (from: string, to: string) =>
+      findMeetupCandidates(
+        PEOPLE,
+        request({ personIds: [ali.id], dates: { from, to } }),
+        estimated(),
+      );
+    await expect(run("2025-01-01", "2034-12-31")).rejects.toThrow(/dépasse/);
+    await expect(run("2025-02-30", "2025-03-02")).rejects.toThrow(/Jour invalide/);
+    // 2024 est bissextile : du 1er janvier au 31 décembre = 366 jours, juste à la limite.
+    expect(MAX_SEARCH_DAYS).toBe(366);
+    await expect(run("2024-01-01", "2024-12-31")).resolves.toBeInstanceOf(Array);
   });
 });

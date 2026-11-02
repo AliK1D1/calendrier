@@ -1,9 +1,17 @@
+import { differenceInCalendarDays, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 
 import { getFreeWindows } from "./freeWindows";
 import { DEFAULT_WEIGHTS, type ScoreWeights, overlapRatio, scoreProposal } from "./score";
 import { type TravelTimeProvider, isSamePlace } from "./travel";
-import { TIME_ZONE, addMinutesTo, eachDay, minutesBetween, zonedDayBounds } from "./time";
+import {
+  TIME_ZONE,
+  addMinutesTo,
+  assertDay,
+  eachDay,
+  minutesBetween,
+  zonedDayBounds,
+} from "./time";
 import type {
   Availability,
   DayHours,
@@ -19,6 +27,13 @@ import type {
 
 /** Heures de la journée considérées par défaut pour se voir. */
 export const DEFAULT_DAY_HOURS: DayHours = { start: "08:00", end: "22:00" };
+
+/**
+ * Nombre maximal de jours d'une recherche. Le coût est proportionnel à
+ * jours × lieux × personnes : sans limite, une requête sur des années (venue d'un
+ * formulaire ou d'une API) bloquerait le serveur. Un an suffit largement.
+ */
+export const MAX_SEARCH_DAYS = 366;
 
 /** Intervalle où une personne peut être au lieu P, avec ses trajets pour y aller et repartir. */
 export interface PlaceAvailability extends Availability {
@@ -106,8 +121,21 @@ function indexPlaces(participants: readonly Person[], request: MeetupRequest): M
 
 /** Valide la requête et renvoie les participants dans l'ordre de `personIds`. */
 function resolveParticipants(people: readonly Person[], request: MeetupRequest): Person[] {
-  if (request.minDurationMinutes <= 0) throw new Error("La durée minimale doit être positive.");
-  if (request.bufferMinutes < 0) throw new Error("La marge ne peut pas être négative.");
+  // Number.isFinite : NaN passait les comparaisons (« NaN <= 0 » est faux) et une durée
+  // minimale NaN acceptait alors n'importe quel créneau, même de 1 minute.
+  if (!Number.isFinite(request.minDurationMinutes) || request.minDurationMinutes <= 0) {
+    throw new Error("La durée minimale doit être un nombre positif.");
+  }
+  if (!Number.isFinite(request.bufferMinutes) || request.bufferMinutes < 0) {
+    throw new Error("La marge doit être un nombre positif ou nul.");
+  }
+  assertDay(request.dates.from);
+  assertDay(request.dates.to);
+  const days =
+    differenceInCalendarDays(parseISO(request.dates.to), parseISO(request.dates.from)) + 1;
+  if (days > MAX_SEARCH_DAYS) {
+    throw new Error(`La période de recherche dépasse ${MAX_SEARCH_DAYS} jours.`);
+  }
   const byId = new Map(people.map((p) => [p.id, p]));
   return [...new Set(request.personIds)].map((id) => {
     const person = byId.get(id);

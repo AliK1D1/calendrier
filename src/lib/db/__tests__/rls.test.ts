@@ -124,12 +124,13 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0004.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0005.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
       "supabase/migration-0003.sql",
       "supabase/migration-0004.sql",
+      "supabase/migration-0005.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -171,6 +172,36 @@ describe("migrations (supabase/setup.sql)", () => {
       await ancienne.close();
     }
   }, 60_000);
+
+  it("migration-0005 s'applique sur une base en 0004, même avec une ligne trop longue (revue)", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      for (const tag of [
+        "0000_schema",
+        "0001_rls_triggers",
+        "0002_review_hardening",
+        "0003_onboarding",
+        "0004_quiet_hours",
+      ]) {
+        await ancienne.exec(drizzleSql(tag));
+      }
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      await ancienne.query("UPDATE profiles SET display_name = $1 WHERE id = $2", [
+        "n".repeat(70),
+        A,
+      ]);
+      await ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0005.sql"), "utf8"));
+      // L'ancienne ligne reste ; toute nouvelle écriture respecte la limite.
+      await expect(
+        ancienne.query("UPDATE profiles SET display_name = $1 WHERE id = $2", ["n".repeat(61), A]),
+      ).rejects.toThrow(/profiles_display_name_length/);
+    } finally {
+      await ancienne.close();
+    }
+  });
 
   it("migration-0004 s'applique sur la base d'ali déjà en 0003, avec des données", async () => {
     const ancienne = new PGlite();
@@ -835,5 +866,69 @@ describe("Mon horaire : blocs manuels et heures où je ne sors pas", () => {
       ),
     );
     expect(vu).toEqual([{ b: "09:00:00", a: "22:00:00" }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Revue sécurité : la BD applique les mêmes limites que les formulaires
+// ---------------------------------------------------------------------------
+// La clé « anon » est publique : une personne connectée peut écrire directement dans
+// Supabase (API REST) sans passer par les actions serveur et leur validation.
+
+describe("Contraintes : limites appliquées aussi par la base (revue)", () => {
+  it("refuse un titre de bloc de plus de 100 caractères, écrit directement", async () => {
+    await expect(
+      as(A, () =>
+        db.query(
+          `INSERT INTO busy_blocks (title, start_time, end_time, weekday, valid_from, valid_until)
+           VALUES ($1, '10:00', '12:00', 1, '2025-08-25', '2025-12-19')`,
+          ["x".repeat(101)],
+        ),
+      ),
+    ).rejects.toThrow(/busy_blocks_title_length/);
+    // 100 caractères : permis (même limite que le formulaire).
+    await as(A, () =>
+      db.query(
+        `INSERT INTO busy_blocks (title, start_time, end_time, weekday, valid_from, valid_until)
+         VALUES ($1, '10:00', '12:00', 1, '2025-08-25', '2025-12-19')`,
+        ["x".repeat(100)],
+      ),
+    );
+  });
+
+  it("refuse une session de plus de 366 jours et un nom affiché de plus de 60 caractères", async () => {
+    await expect(
+      as(A, () =>
+        db.query(
+          `INSERT INTO busy_blocks (title, start_time, end_time, weekday, valid_from, valid_until)
+           VALUES ('Chimie', '10:00', '12:00', 1, '2025-01-01', '2099-12-31')`,
+        ),
+      ),
+    ).rejects.toThrow(/busy_blocks_validity_span/);
+    await expect(
+      as(A, () =>
+        db.query("UPDATE profiles SET display_name = $1 WHERE id = $2", ["n".repeat(61), A]),
+      ),
+    ).rejects.toThrow(/profiles_display_name_length/);
+    const ok = await as(
+      A,
+      async () =>
+        (await db.query("UPDATE profiles SET display_name = $1 WHERE id = $2", ["n".repeat(60), A]))
+          .affectedRows,
+    );
+    expect(ok).toBe(1);
+  });
+
+  it("l'inscription marche encore avec un nom Google de plus de 60 caractères (coupé)", async () => {
+    const D = "00000000-0000-4000-8000-00000000000d";
+    await db.query(
+      "INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES ($1, 'long@example.com', $2)",
+      [D, JSON.stringify({ full_name: "N".repeat(80) })],
+    );
+    const [p] = await rows<{ display_name: string }>(
+      "SELECT display_name FROM profiles WHERE id = $1",
+      [D],
+    );
+    expect(p.display_name).toBe("N".repeat(60));
   });
 });

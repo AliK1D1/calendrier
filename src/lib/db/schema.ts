@@ -76,6 +76,8 @@ export const profiles = pgTable(
     created_at: createdAt(),
   },
   (t) => [
+    // Même limite que validateDisplayName (le nom est visible par les membres des groupes).
+    check("profiles_display_name_length", sql`length(${t.display_name}) <= 60`),
     check(
       "profiles_unavailable_order",
       sql`${t.unavailable_before} is null or ${t.unavailable_after} is null or ${t.unavailable_after} > ${t.unavailable_before}`,
@@ -140,6 +142,13 @@ export const busyBlocks = pgTable(
     check(
       "busy_blocks_validity_order",
       sql`${t.valid_from} is null or ${t.valid_until} is null or ${t.valid_until} >= ${t.valid_from}`,
+    ),
+    // Mêmes limites que le formulaire (validateBlockForm), appliquées aussi par la BD : la clé
+    // « anon » est publique, on peut écrire dans Supabase sans passer par les actions serveur.
+    check("busy_blocks_title_length", sql`length(${t.title}) <= 100`),
+    check(
+      "busy_blocks_validity_span",
+      sql`${t.valid_from} is null or ${t.valid_until} is null or ${t.valid_until} - ${t.valid_from} < 366`,
     ),
     check(
       "busy_blocks_one_off_has_day",

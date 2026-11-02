@@ -1,0 +1,41 @@
+import { describe, expect, it } from "vitest";
+
+import { eachDay, minutesBetween, nextDay, zonedDayBounds, zonedTime } from "../time";
+
+describe("time", () => {
+  it("convertit une heure locale en instant (HNE et HAE)", () => {
+    expect(zonedTime("2025-01-15", "12:00").toISOString()).toBe("2025-01-15T17:00:00.000Z");
+    expect(zonedTime("2025-07-15", "12:00").toISOString()).toBe("2025-07-15T16:00:00.000Z");
+  });
+
+  it("« 24:00 » désigne minuit le lendemain", () => {
+    expect(zonedTime("2025-12-31", "24:00").toISOString()).toBe("2026-01-01T05:00:00.000Z");
+  });
+
+  it("une journée de changement d'heure dure 23 h (mars) ou 25 h (novembre)", () => {
+    const mars = zonedDayBounds("2025-03-09");
+    const nov = zonedDayBounds("2025-11-02");
+    const normal = zonedDayBounds("2025-11-03");
+    expect(minutesBetween(mars.start, mars.end)).toBe(23 * 60);
+    expect(minutesBetween(nov.start, nov.end)).toBe(25 * 60);
+    expect(minutesBetween(normal.start, normal.end)).toBe(24 * 60);
+  });
+
+  it("énumère les jours d'une plage, en changeant de mois et d'année", () => {
+    expect(nextDay("2025-02-28")).toBe("2025-03-01");
+    expect(eachDay("2025-12-30", "2026-01-02")).toEqual([
+      "2025-12-30",
+      "2025-12-31",
+      "2026-01-01",
+      "2026-01-02",
+    ]);
+    expect(eachDay("2025-11-01", "2025-11-03")).toHaveLength(3);
+    expect(eachDay("2025-11-03", "2025-11-01")).toEqual([]);
+  });
+
+  it("refuse les formats invalides", () => {
+    expect(() => zonedTime("2025-9-1", "08:00")).toThrow();
+    expect(() => zonedTime("2025-09-01", "8h")).toThrow();
+    expect(() => zonedTime("2025-09-01", "24:30")).toThrow();
+  });
+});

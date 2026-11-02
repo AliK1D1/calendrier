@@ -10,7 +10,6 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
-    // Fuseau fixe pour que les tests ne dépendent pas de la machine.
-    env: { TZ: "America/Toronto" },
+    // Le TZ de la machine ne doit pas compter : le code utilise toujours date-fns-tz.
   },
 });

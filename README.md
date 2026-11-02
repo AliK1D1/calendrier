@@ -188,6 +188,45 @@ prend la première.
   des blocs, colonnes côte à côte, clic-glisser), `quietHours.ts`. Conversion BD ↔ formulaire :
   `toBlockSpec` / `fromBlockSpec` dans `src/lib/db/convert.ts`.
 
+## Import d'horaire .ics (segment 9)
+
+Dans `/horaire`, bouton **« Importer un fichier .ics »** (exporté de Google Agenda, Outlook ou
+d'une plateforme scolaire). Aucune migration de BD n'est nécessaire.
+
+1. **Téléverser** le fichier (1 Mo au maximum). Une action serveur le lit et renvoie un
+   **aperçu** : rien n'est écrit dans la BD à cette étape (elle compte seulement les blocs déjà
+   importés).
+2. **Aperçu** : blocs détectés (chaque semaine / une seule fois), remarques (journées
+   entières, événements annulés ou « disponibles » ignorés, titres raccourcis…). Chaque texte
+   « LOCATION » distinct est associé à un de mes lieux (proposé si le nom correspond) ou à un
+   **nouveau lieu** (nom + recherche d'adresse). On peut décocher des blocs.
+3. **Confirmer** : création des nouveaux lieux, insertion de tous les blocs
+   (`source = 'ics'`, une seule requête : tout ou rien), puis suppression des anciens blocs
+   `ics` de la personne créés avant. Un ré-import **remplace** donc l'import précédent sans
+   doublon ; les blocs ajoutés à la main ne changent pas. Si l'insertion échoue, l'ancien
+   horaire reste intact.
+
+Lecture du fichier (`src/lib/import/ics.ts`, fonction pure `parseIcs`, avec ical.js) :
+
+- **Récurrences** : RRULE `WEEKLY`/`DAILY` (BYDAY, INTERVAL, UNTIL, COUNT), `MONTHLY`/`YEARLY`
+  simples, RDATE, EXDATE, exceptions RECURRENCE-ID (occurrence déplacée ou annulée). Les autres
+  règles sont ignorées avec une remarque (pas de boucle infinie).
+- **Fuseaux** : TZID (IANA, préfixe Mozilla, noms Windows courants), heures UTC (« Z ») et
+  heures flottantes (lues à l'heure du Québec). La récurrence est calculée en heure murale du
+  TZID : un cours à 10 h reste à 10 h après le changement d'heure. Un horaire écrit en UTC se
+  décale d'une heure en heure locale (deux blocs).
+- **Vers `busy_blocks`** : les occurrences identiques (titre, lieu, jour, heures) qui se suivent
+  chaque semaine deviennent un bloc hebdomadaire `weekday` + `valid_from`/`valid_until`. Une
+  semaine sautée (semaine de relâche exclue par EXDATE) coupe la série en **deux blocs** :
+  c'est la représentation exacte (un bloc unique rendrait la relâche occupée). Une occurrence
+  isolée devient un bloc ponctuel ; une occurrence de nuit est coupée à minuit.
+- **Limites** : 1 Mo, 1000 événements, 5000 occurrences, 300 blocs ; seules les occurrences
+  d'aujourd'hui à dans un an sont gardées (période d'un bloc < 366 jours, comme l'exige la
+  migration 0005) ; titre raccourci à 100 caractères avec « … » (signalé dans l'aperçu).
+- Tests : `src/lib/import/__tests__/` (fichier d'exemple `fixtures/horaire-hiver-2027.ics` :
+  cours hebdomadaires, semaine de relâche exclue, changement d'heure, exception, UTC) et
+  `src/lib/db/__tests__/rls.test.ts` (remplacement sur PGlite, RLS, tout ou rien).
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -216,7 +255,8 @@ prend la première.
 | 6   | Base de données et comptes    | Fait    |
 | 7   | Mes lieux                     | Fait    |
 | 8   | Mon horaire (saisie manuelle) | Fait    |
-| 9+  | Import .ics, groupes, app…    | À faire |
+| 9   | Import d'horaire .ics         | Fait    |
+| 10+ | Groupes, app…                 | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 

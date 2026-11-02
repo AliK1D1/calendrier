@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { BlockDialog, type BlockDraft } from "./block-dialog";
+import { IcsImport } from "./ics-import";
 import type { ScheduleBlock, ScheduleEditorProps } from "./types";
 
 const RANGE = DEFAULT_GRID_RANGE;
@@ -67,6 +68,7 @@ export function ScheduleEditor({
   quiet,
   today,
   actions,
+  icsActions,
 }: ScheduleEditorProps) {
   const [monday, setMonday] = useState(() => weekStart(today));
   const days = useMemo(() => weekDays(monday), [monday]);
@@ -239,16 +241,25 @@ export function ScheduleEditor({
             Revenir à cette semaine
           </Button>
         )}
-        <Button
-          size="sm"
-          className="ml-auto"
-          onClick={() => {
-            setMessage(null);
-            setDraft(newDraft(activeDay, 9 * 60, 10 * 60));
-          }}
-        >
-          <Plus /> Ajouter un bloc
-        </Button>
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
+          <IcsImport
+            places={places}
+            homeId={homeId}
+            defaultPlaceId={defaultPlace}
+            actions={icsActions}
+            onOpen={() => setMessage(null)}
+            onImported={(text) => setMessage(text)}
+          />
+          <Button
+            size="sm"
+            onClick={() => {
+              setMessage(null);
+              setDraft(newDraft(activeDay, 9 * 60, 10 * 60));
+            }}
+          >
+            <Plus /> Ajouter un bloc
+          </Button>
+        </div>
       </div>
 
       {/* Onglets des jours (téléphone seulement : un jour à la fois) */}

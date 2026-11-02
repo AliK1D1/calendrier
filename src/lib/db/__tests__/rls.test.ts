@@ -11,6 +11,10 @@ import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildSeparateMigrations, buildSetupSql } from "../../../../scripts/build-setup-sql.mjs";
+import { parseIcs } from "@/lib/import/ics";
+import { confirmIcsImport, type IcsConfirmInput, type IcsStore } from "@/lib/import/icsImport";
+import type { BlockSpec } from "@/lib/scheduling/weeklyBlocks";
+import { fromBlockSpec } from "../convert";
 
 const ROOT = join(__dirname, "../../../..");
 const SETUP_SQL = readFileSync(join(ROOT, "supabase/setup.sql"), "utf8");
@@ -930,5 +934,257 @@ describe("Contraintes : limites appliquées aussi par la base (revue)", () => {
       [D],
     );
     expect(p.display_name).toBe("N".repeat(60));
+  });
+});
+
+// ─── Segment 9 : import .ics ────────────────────────────────────────────────────────────────
+
+/**
+ * Magasin de l'import .ics sur PGlite : mêmes requêtes que celles que supabase-js envoie
+ * (src/app/horaire/import-actions.ts), au nom de `uid` (rôle authenticated, donc RLS).
+ */
+function pgliteIcsStore(uid: string): IcsStore {
+  const fail = (e: unknown) => ({ ok: false as const, error: (e as Error).message });
+  return {
+    async countIcsBlocks() {
+      const [r] = await as(uid, () =>
+        rows<{ n: number }>(
+          "SELECT count(*)::int AS n FROM busy_blocks WHERE owner_id = $1 AND source = 'ics'",
+          [uid],
+        ),
+      );
+      return { ok: true, value: r.n };
+    },
+    async createPlaces(places) {
+      try {
+        const ids = places.map(() => crypto.randomUUID());
+        await as(uid, () =>
+          rows(
+            `INSERT INTO places (id, owner_id, name, lat, lng)
+             SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::float8[], $5::float8[])`,
+            [
+              ids,
+              places.map(() => uid),
+              places.map((p) => p.name),
+              places.map((p) => p.lat),
+              places.map((p) => p.lng),
+            ],
+          ),
+        );
+        return { ok: true, value: ids };
+      } catch (e) {
+        return fail(e);
+      }
+    },
+    async deletePlaces(ids) {
+      await as(uid, () =>
+        rows("DELETE FROM places WHERE owner_id = $1 AND id = ANY($2::uuid[])", [uid, ids]),
+      );
+      return { ok: true, value: undefined };
+    },
+    async insertIcsBlocks(blocks: BlockSpec[]) {
+      // Une seule requête INSERT de plusieurs lignes, comme PostgREST : tout ou rien.
+      const params: unknown[] = [];
+      const values = blocks.map((b) => {
+        const r = fromBlockSpec(b);
+        const cols = [
+          uid,
+          r.title,
+          r.place_id,
+          r.start_time,
+          r.end_time,
+          r.weekday,
+          r.valid_from,
+          r.valid_until,
+        ];
+        const ph = cols.map((v) => `$${params.push(v)}`);
+        return `(${ph.join(", ")}, 'ics')`;
+      });
+      try {
+        const res = await as(uid, () =>
+          rows<{ created_at: string }>(
+            `INSERT INTO busy_blocks (owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, source)
+             VALUES ${values.join(", ")} RETURNING created_at::text`,
+            params,
+          ),
+        );
+        return { ok: true, value: { createdAt: res[0].created_at } };
+      } catch (e) {
+        return fail(e);
+      }
+    },
+    async deleteIcsBlocksBefore(createdAt) {
+      const res = await as(uid, () =>
+        rows(
+          "DELETE FROM busy_blocks WHERE owner_id = $1 AND source = 'ics' AND created_at < $2::timestamptz RETURNING id",
+          [uid, createdAt],
+        ),
+      );
+      return { ok: true, value: res.length };
+    },
+  };
+}
+
+const ICS_FIXTURE = readFileSync(
+  join(ROOT, "src/lib/import/__tests__/fixtures/horaire-hiver-2027.ics"),
+  "utf8",
+);
+
+/** Confirmation de l'aperçu du fichier d'exemple, tous les lieux associés à `placeId`. */
+function icsConfirmation(placeId: string | null): IcsConfirmInput {
+  const r = parseIcs(ICS_FIXTURE, { today: "2026-11-02" });
+  if (!r.ok) throw new Error(r.error);
+  return {
+    blocks: r.value.blocks.map(
+      ({ title, startMinute, endMinute, weekday, validFrom, validUntil, locationText }) => ({
+        title,
+        startMinute,
+        endMinute,
+        weekday,
+        validFrom,
+        validUntil,
+        locationText,
+      }),
+    ),
+    places: r.value.locations.map((l) => ({
+      locationText: l,
+      choice: placeId ? { kind: "place" as const, id: placeId } : { kind: "home" as const },
+    })),
+  };
+}
+
+async function blocksOf(uid: string) {
+  return rows<{
+    title: string;
+    source: string;
+    weekday: number | null;
+    valid_from: string;
+    valid_until: string;
+  }>(
+    `SELECT title, source::text, weekday, valid_from::text, valid_until::text FROM busy_blocks
+     WHERE owner_id = $1 ORDER BY source, title, weekday, valid_from`,
+    [uid],
+  );
+}
+
+describe("Import .ics : remplacement des blocs source='ics' (PGlite)", () => {
+  it("importe le fichier d'exemple, puis un ré-import remplace sans doublon ni toucher au reste", async () => {
+    const cegep = await seedSchedule(A, "Manuel"); // bloc « manual » à garder
+    await seedSchedule(B, "De B");
+    await as(B, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, start_time, end_time, valid_from, source)
+         VALUES ('Ancien import de B', '09:00', '10:00', '2027-01-04', 'ics')`,
+      ),
+    );
+    await as(A, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, start_time, end_time, valid_from, source)
+         VALUES ('Ancien import', '09:00', '10:00', '2027-01-04', 'ics')`,
+      ),
+    );
+
+    const premier = await confirmIcsImport(pgliteIcsStore(A), icsConfirmation(cegep));
+    expect(premier).toEqual({ ok: true, imported: 13, replaced: 1, placesCreated: 0 });
+    let mine = await blocksOf(A);
+    expect(mine.filter((b) => b.source === "manual").map((b) => b.title)).toEqual(["Manuel"]);
+    expect(mine.filter((b) => b.source === "ics")).toHaveLength(13);
+    expect(mine.some((b) => b.title === "Ancien import")).toBe(false);
+    // La relâche coupe la chimie du lundi en deux blocs.
+    expect(
+      mine
+        .filter((b) => b.title === "Chimie générale" && b.weekday === 1)
+        .map((b) => [b.valid_from, b.valid_until]),
+    ).toEqual([
+      ["2027-01-18", "2027-02-22"],
+      ["2027-03-08", "2027-05-10"],
+    ]);
+
+    const second = await confirmIcsImport(pgliteIcsStore(A), icsConfirmation(cegep));
+    expect(second).toEqual({ ok: true, imported: 13, replaced: 13, placesCreated: 0 });
+    mine = await blocksOf(A);
+    expect(mine.filter((b) => b.source === "ics")).toHaveLength(13);
+    expect(mine.filter((b) => b.source === "manual")).toHaveLength(1);
+    // L'horaire de B (manuel et importé) n'a pas bougé.
+    expect((await blocksOf(B)).map((b) => b.title)).toEqual(["Ancien import de B", "De B"]);
+  });
+
+  it("crée les nouveaux lieux et y place les blocs", async () => {
+    const input = icsConfirmation(null);
+    input.places = input.places.map((p) => ({
+      locationText: p.locationText,
+      choice: { kind: "new" as const, name: p.locationText, lat: 45.56, lng: -73.72 },
+    }));
+    const r = await confirmIcsImport(pgliteIcsStore(A), input);
+    expect(r).toEqual({ ok: true, imported: 13, replaced: 0, placesCreated: 4 });
+    const parLieu = await rows<{ name: string; n: number }>(
+      `SELECT p.name, count(*)::int AS n FROM busy_blocks b JOIN places p ON p.id = b.place_id
+       WHERE b.owner_id = $1 GROUP BY p.name ORDER BY p.name`,
+      [A],
+    );
+    expect(parLieu).toEqual([
+      { name: "Café Le Grain, Laval", n: 1 },
+      { name: "Cégep Montmorency, gymnase", n: 2 },
+      { name: "Cégep Montmorency, local A-110", n: 2 },
+      { name: "Cégep Montmorency, local B-201", n: 8 },
+    ]);
+  });
+
+  it("si la BD refuse un bloc (lieu de B), rien n'est importé et l'ancien horaire reste", async () => {
+    const lieuDeB = await seedSchedule(B, "De B");
+    await as(A, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, start_time, end_time, valid_from, source)
+         VALUES ('Ancien import', '09:00', '10:00', '2027-01-04', 'ics')`,
+      ),
+    );
+    const input = icsConfirmation(null);
+    input.places.push({
+      locationText: "Chez B",
+      choice: { kind: "new", name: "x", lat: 1, lng: 1 },
+    });
+    input.places[0] = {
+      locationText: input.places[0].locationText,
+      choice: { kind: "place", id: lieuDeB },
+    };
+    const r = await confirmIcsImport(pgliteIcsStore(A), input);
+    expect(r.ok).toBe(false);
+    expect((await blocksOf(A)).map((b) => b.title)).toEqual(["Ancien import"]);
+    expect(await rows("SELECT 1 FROM places WHERE owner_id = $1", [A])).toEqual([]);
+  });
+
+  it("insertion de plusieurs lignes : tout ou rien (contrainte titre ≤ 100 de la migration 0005)", async () => {
+    const store = pgliteIcsStore(A);
+    const ok: BlockSpec = {
+      title: "Bon",
+      placeId: null,
+      startMinute: 600,
+      endMinute: 660,
+      weekday: null,
+      validFrom: "2027-01-04",
+      validUntil: "2027-01-04",
+    };
+    const r = await store.insertIcsBlocks([ok, { ...ok, title: "x".repeat(101) }]);
+    expect(r.ok).toBe(false);
+    expect(await blocksOf(A)).toEqual([]);
+  });
+
+  it("la suppression des anciens blocs ne touche jamais l'horaire d'une autre personne (RLS)", async () => {
+    const g = await createGroup(A, "Gang");
+    await join_(B, g.code);
+    await as(B, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, start_time, end_time, valid_from, source)
+         VALUES ('Import de B', '09:00', '10:00', '2027-01-04', 'ics')`,
+      ),
+    );
+    // Même sans le filtre owner_id, la politique DELETE limite A à ses propres lignes.
+    const supprimes = await as(A, () =>
+      rows(
+        "DELETE FROM busy_blocks WHERE source = 'ics' AND created_at < now() + interval '1 day' RETURNING id",
+      ),
+    );
+    expect(supprimes).toEqual([]);
+    expect((await blocksOf(B)).map((b) => b.title)).toEqual(["Import de B"]);
   });
 });

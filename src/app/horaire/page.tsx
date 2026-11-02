@@ -11,6 +11,7 @@ import { TIME_ZONE } from "@/lib/scheduling/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { ajouterBlocs, modifierBloc, supprimerBloc } from "./actions";
+import { apercuIcs, confirmerIcs } from "./import-actions";
 import { ScheduleEditor } from "./schedule-editor";
 import type { ScheduleBlock } from "./types";
 
@@ -70,6 +71,7 @@ export default async function MonHoraire() {
           quiet={quiet}
           today={formatInTimeZone(new Date(), TIME_ZONE, "yyyy-MM-dd")}
           actions={{ ajouterBlocs, modifierBloc, supprimerBloc }}
+          icsActions={{ apercuIcs, confirmerIcs }}
         />
       </main>
     </>

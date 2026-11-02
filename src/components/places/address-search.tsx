@@ -14,6 +14,8 @@ export interface AddressSearchProps {
   label: string;
   placeholder?: string;
   selectedId?: string | null;
+  /** Texte de départ de la recherche (ex. le lieu lu dans un fichier .ics). */
+  initialQuery?: string;
   onSelect: (result: GeocodeResult) => void;
 }
 
@@ -21,9 +23,15 @@ export interface AddressSearchProps {
  * Recherche d'adresse : on tape, on appuie sur « Chercher » (pas d'appel à chaque touche,
  * comme le demande Nominatim), puis on choisit un résultat.
  */
-export function AddressSearch({ label, placeholder, selectedId, onSelect }: AddressSearchProps) {
+export function AddressSearch({
+  label,
+  placeholder,
+  selectedId,
+  initialQuery,
+  onSelect,
+}: AddressSearchProps) {
   const id = useId();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [results, setResults] = useState<GeocodeResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

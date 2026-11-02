@@ -1,4 +1,5 @@
 import type { ActionResult } from "@/lib/actions";
+import type { ConfirmResult, PreviewResult } from "@/lib/import/icsImport";
 import type { QuietHours } from "@/lib/scheduling/quietHours";
 import type { BlockSpec } from "@/lib/scheduling/weeklyBlocks";
 
@@ -20,6 +21,12 @@ export interface ScheduleActions {
   supprimerBloc: (id: unknown) => Promise<ActionResult>;
 }
 
+/** Actions de l'import .ics : aperçu (lecture seule) puis confirmation. */
+export interface IcsActions {
+  apercuIcs: (data: FormData) => Promise<PreviewResult>;
+  confirmerIcs: (input: unknown) => Promise<ConfirmResult>;
+}
+
 export interface ScheduleEditorProps {
   blocks: ScheduleBlock[];
   places: SchedulePlace[];
@@ -29,4 +36,5 @@ export interface ScheduleEditorProps {
   /** Aujourd'hui, `yyyy-MM-dd` dans le fuseau America/Toronto (calculé par le serveur). */
   today: string;
   actions: ScheduleActions;
+  icsActions: IcsActions;
 }

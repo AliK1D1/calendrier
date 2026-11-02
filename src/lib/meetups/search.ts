@@ -35,7 +35,7 @@ import {
 } from "@/lib/scheduling/period";
 import { minutesBetween, TIME_ZONE } from "@/lib/scheduling/time";
 import type { TravelTimeProvider } from "@/lib/scheduling/travel";
-import type { DateRange, DayHours, MeetupProposal, PersonId } from "@/lib/scheduling/types";
+import type { DateRange, DayHours, MeetupProposal, Person, PersonId } from "@/lib/scheduling/types";
 import { formatClockFr, parseClock } from "@/lib/scheduling/weeklyBlocks";
 
 /** Durées minimales proposées, en minutes. */
@@ -55,6 +55,17 @@ export const MAX_PROPOSALS_PER_DAY = 5;
 
 /** Nombre maximal de participants d'une recherche (borne le coût du calcul). */
 export const MAX_PARTICIPANTS = 20;
+
+/**
+ * Lieux essayés au plus par une recherche. Chaque lieu candidat est essayé pour chaque jour et
+ * chaque participant : sans borne, quelqu'un qui crée des milliers de lieux (par l'API REST)
+ * bloquerait le serveur plusieurs secondes à chaque recherche. Au-delà, on garde les maisons,
+ * puis les favoris du groupe, puis les autres lieux de chacun à tour de rôle.
+ */
+export const MAX_CANDIDATE_PLACES = 80;
+
+/** Blocs d'horaire des participants dans la période, au plus (même raison). */
+export const MAX_SEARCH_BLOCKS = 4000;
 
 /** Demande validée. */
 export interface MeetupSearchInput {
@@ -240,6 +251,13 @@ export async function searchGroupMeetups(
   const profileRows = profiles.value.filter((p) => idSet.has(p.id));
   const personalRows = personal.value.filter((p) => idSet.has(p.owner_id));
   const blockRows = blocks.value.filter((b) => idSet.has(b.owner_id));
+  if (blockRows.filter((b) => blockTouchesRange(b, range)).length > MAX_SEARCH_BLOCKS) {
+    return {
+      ok: false,
+      error:
+        "L'horaire des participants a trop de blocs pour ce calcul. Choisis moins de participants.",
+    };
+  }
   const placeRows = dedupeById([...personalRows, ...favorites.value]);
 
   const nameOf = new Map(profileRows.map((p) => [p.id, p.display_name || "Sans nom"]));
@@ -293,6 +311,7 @@ export async function searchGroupMeetups(
       minDurationMinutes: input.durationMinutes,
       bufferMinutes: input.bufferMinutes,
       favoritePlaces: favorites.value.map(toPlace),
+      candidatePlaceIds: limitCandidatePlaces(people, favorites.value, MAX_CANDIDATE_PLACES),
       dayHours: deps.dayHours,
       notBefore: ceilToMinutes(deps.now, 15),
     },
@@ -322,6 +341,48 @@ export async function searchGroupMeetups(
       computeMs,
     },
   };
+}
+
+/** Le bloc peut-il tomber dans la période ? (ponctuel : son jour ; hebdomadaire : sa validité) */
+function blockTouchesRange(b: BusyBlockInput, range: DateRange): boolean {
+  if (b.weekday === null) {
+    return b.valid_from !== null && b.valid_from >= range.from && b.valid_from <= range.to;
+  }
+  return (
+    (b.valid_until === null || b.valid_until >= range.from) &&
+    (b.valid_from === null || b.valid_from <= range.to)
+  );
+}
+
+/**
+ * Lieux candidats à passer à findMeetups, ou `undefined` (tous les lieux, comportement par
+ * défaut) quand il y en a au plus `max`. Sinon : les maisons, puis les favoris du groupe, puis
+ * les autres lieux de chaque participant à tour de rôle, jusqu'à `max`.
+ */
+export function limitCandidatePlaces(
+  people: readonly Person[],
+  favorites: readonly PlaceInput[],
+  max: number,
+): string[] | undefined {
+  const all = new Set<string>();
+  for (const person of people) for (const p of person.places) all.add(p.id);
+  for (const f of favorites) all.add(f.id);
+  if (all.size <= max) return undefined;
+
+  const chosen = new Set<string>();
+  const add = (id: string) => {
+    if (chosen.size < max) chosen.add(id);
+  };
+  for (const person of people) add(person.homePlaceId);
+  for (const f of favorites) add(f.id);
+  const longest = Math.max(0, ...people.map((p) => p.places.length));
+  for (let i = 0; i < longest && chosen.size < max; i++) {
+    for (const person of people) {
+      const place = person.places[i];
+      if (place) add(place.id);
+    }
+  }
+  return [...chosen];
 }
 
 function dedupeById<T extends { id: string }>(rows: T[]): T[] {

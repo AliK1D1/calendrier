@@ -42,7 +42,7 @@ Aucune variable d'environnement n'est nécessaire pour les segments 0 à 5 (voir
 | --- | ------------------------------ | ------- |
 | 0   | Mise en place du projet        | Fait    |
 | 1   | Types et données de test       | Fait    |
-| 2   | Fenêtres libres                | À faire |
+| 2   | Fenêtres libres                | Fait    |
 | 3   | Temps de trajet (estimation)   | À faire |
 | 4   | Recherche de rencontres        | À faire |
 | 5   | Classement des propositions    | À faire |

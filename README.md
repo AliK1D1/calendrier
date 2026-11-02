@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Temps libre commun
 
-## Getting Started
+Application web où des amis entrent leurs horaires (cours, travail…) et leurs lieux habituels,
+et qui leur propose **des moments ET des endroits** où se voir qui sont vraiment faisables :
+temps de trajet, durée minimale de rencontre et lieu où chacun se trouve avant et après.
 
-First, run the development server:
+Le plan complet du projet est dans [`docs/plan-projet.md`](docs/plan-projet.md) et les règles
+de travail dans [`CLAUDE.md`](CLAUDE.md).
+
+## Pile technique
+
+- Next.js 15 (App Router) + TypeScript strict
+- Tailwind CSS 4 + shadcn/ui (style « new-york », composants dans `src/components/ui`)
+- Vitest pour les tests, ESLint + Prettier
+- date-fns + date-fns-tz (fuseau `America/Toronto`)
+
+## Installation
+
+Prérequis : Node.js 22 et npm.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Aucune variable d'environnement n'est nécessaire pour les segments 0 à 5 (voir `.env.example`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Commandes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Commande             | Effet                                              |
+| -------------------- | -------------------------------------------------- |
+| `npm run dev`        | Serveur de développement sur http://localhost:3000 |
+| `npm test`           | Tests Vitest (une passe)                           |
+| `npm run test:watch` | Tests en mode surveillance                         |
+| `npm run lint`       | ESLint puis vérification des types (`tsc`)         |
+| `npm run typecheck`  | Vérification des types seulement                   |
+| `npm run build`      | Build de production                                |
+| `npm run format`     | Formatage Prettier                                 |
 
-## Learn More
+## État des segments
 
-To learn more about Next.js, take a look at the following resources:
+| #   | Segment                        | État    |
+| --- | ------------------------------ | ------- |
+| 0   | Mise en place du projet        | Fait    |
+| 1   | Types et données de test       | À faire |
+| 2   | Fenêtres libres                | À faire |
+| 3   | Temps de trajet (estimation)   | À faire |
+| 4   | Recherche de rencontres        | À faire |
+| 5   | Classement des propositions    | À faire |
+| 6+  | Base de données, comptes, app… | À faire |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Notes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **shadcn/ui** : le registre `ui.shadcn.com` n'était pas joignable depuis l'environnement de
+  développement initial (refus du proxy réseau). L'initialisation a donc été faite à la main :
+  `components.json`, `src/lib/utils.ts` (`cn`), variables CSS du thème dans
+  `src/app/globals.css`, et les composants `Button` et `Card` recopiés depuis la source
+  officielle. Sur une machine qui a accès au registre, `npx shadcn@latest add <composant>`
+  fonctionne normalement avec cette configuration.

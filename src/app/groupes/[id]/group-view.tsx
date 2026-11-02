@@ -251,10 +251,14 @@ export function GroupView(props: Props) {
                   variant="outline"
                   disabled={pending}
                   onClick={() => {
-                    if (window.confirm(`Retirer ${m.displayName} du groupe ?`)) {
+                    if (
+                      window.confirm(
+                        `Retirer ${m.displayName} du groupe ? Le lien d'invitation sera remplacé, pour qu'il ne puisse pas revenir avec l'ancien.`,
+                      )
+                    ) {
                       run(
                         () => retirerMembre(groupId, m.userId),
-                        `${m.displayName} a été retiré·e.`,
+                        `${m.displayName} a été retiré·e. Le lien d'invitation a été remplacé.`,
                       );
                     }
                   }}

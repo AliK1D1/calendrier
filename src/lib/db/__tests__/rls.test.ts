@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0006.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0007.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -121,6 +121,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0004.sql",
       "supabase/migration-0005.sql",
       "supabase/migration-0006.sql",
+      "supabase/migration-0007.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -1348,6 +1349,68 @@ describe("Groupes (segment 10) : créer, inviter, rejoindre", () => {
     );
     expect(await as(A, () => rows("SELECT * FROM groups"))).toEqual([]);
     expect(await as(A, () => rows("SELECT * FROM group_members"))).toEqual([]);
+  });
+});
+
+describe("Groupes : un membre retiré ne revient pas avec l'ancien lien (revue)", () => {
+  const codeDe = async (uid: string, gid: string) =>
+    (
+      await as(uid, () =>
+        rows<{ invite_code: string }>("SELECT invite_code FROM groups WHERE id = $1", [gid]),
+      )
+    )[0]?.invite_code;
+  const retirer = (par: string, gid: string, uid: string) =>
+    as(par, () =>
+      rows("DELETE FROM group_members WHERE group_id = $1 AND user_id = $2", [gid, uid]),
+    );
+
+  it("retiré par l'admin : l'ancien lien ne marche plus, ni pour lui ni pour les autres", async () => {
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    await join_(C, g.code);
+    await retirer(A, g.id, C);
+    // Avant la revue, C revenait aussitôt avec le lien qu'il avait vu comme membre.
+    await expect(join_(C, g.code)).rejects.toThrow(/Code d'invitation invalide/);
+    await expect(
+      as(C, () => rows("SELECT * FROM public.group_invite_preview($1)", [g.code])),
+    ).resolves.toEqual([]);
+    const nouveau = await codeDe(A, g.id);
+    expect(nouveau).toMatch(/^[0-9a-f]{32}$/);
+    expect(nouveau).not.toBe(g.code);
+    expect(await codeDe(B, g.id)).toBe(nouveau); // les membres voient le nouveau lien
+  });
+
+  it("quitter soi-même le groupe ne change pas le lien ; supprimer un compte non plus", async () => {
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    await join_(C, g.code);
+    await retirer(B, g.id, B);
+    expect(await codeDe(A, g.id)).toBe(g.code);
+    expect(await join_(B, g.code)).toBe(g.id); // B peut revenir s'il le veut
+    await db.query("DELETE FROM auth.users WHERE id = $1", [C]);
+    expect(await codeDe(A, g.id)).toBe(g.code);
+  });
+
+  it("le dernier admin retiré par un autre admin : promotion et nouveau lien", async () => {
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    await join_(C, g.code);
+    await as(A, () =>
+      rows("UPDATE group_members SET role = 'admin' WHERE group_id = $1 AND user_id = $2", [
+        g.id,
+        B,
+      ]),
+    );
+    await retirer(B, g.id, A);
+    const membres = await rows<{ user_id: string; role: string }>(
+      "SELECT user_id, role FROM group_members WHERE group_id = $1 ORDER BY user_id",
+      [g.id],
+    );
+    expect(membres).toEqual([
+      { user_id: B, role: "admin" },
+      { user_id: C, role: "member" },
+    ]);
+    await expect(join_(A, g.code)).rejects.toThrow(/Code d'invitation invalide/);
   });
 });
 

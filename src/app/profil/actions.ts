@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { type ActionResult, dbErrorMessage, fail, requireUser } from "@/lib/actions";
 import { validateDisplayName, validateTravelMode } from "@/lib/places/validation";
+import { quietHoursToDb, validateQuietHours } from "@/lib/scheduling/quietHours";
 
 /** Met à jour mon nom affiché et mon mode de transport. */
 export async function enregistrerProfil(input: unknown): Promise<ActionResult> {
@@ -23,5 +24,24 @@ export async function enregistrerProfil(input: unknown): Promise<ActionResult> {
   if (error) return fail(dbErrorMessage("Profil", error));
   if (!data?.length) return fail("Profil introuvable.");
   revalidatePath("/profil");
+  return { ok: true };
+}
+
+/** Enregistre mes « heures où je ne sors pas » (traitées comme des blocs occupés). */
+export async function enregistrerHeuresCalmes(input: unknown): Promise<ActionResult> {
+  const quiet = validateQuietHours(input);
+  if (!quiet.ok) return fail(quiet.error);
+  const ctx = await requireUser();
+  if (!ctx.ok) return fail(ctx.error);
+
+  const { data, error } = await ctx.supabase
+    .from("profiles")
+    .update(quietHoursToDb(quiet.value))
+    .eq("id", ctx.user.id)
+    .select("id");
+  if (error) return fail(dbErrorMessage("Heures où je ne sors pas", error));
+  if (!data?.length) return fail("Profil introuvable.");
+  revalidatePath("/profil");
+  revalidatePath("/horaire");
   return { ok: true };
 }

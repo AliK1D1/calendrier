@@ -9,6 +9,7 @@
  */
 import { getISODay, parseISO } from "date-fns";
 
+import { quietHoursBlocks, quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { eachDay, TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
 import type {
   BusyBlock,
@@ -18,14 +19,24 @@ import type {
   Place,
   TravelMode,
 } from "@/lib/scheduling/types";
+import {
+  type BlockSpec,
+  formatClock,
+  parseClock,
+  type Weekday,
+} from "@/lib/scheduling/weeklyBlocks";
 
 import type { BusyBlockRow, PlaceRow, ProfileRow } from "./schema";
 
-/** Colonnes utiles d'un profil. */
+/**
+ * Colonnes utiles d'un profil. Les « heures où je ne sors pas » sont facultatives (absentes
+ * avant la migration 0004 : pas de limite).
+ */
 export type ProfileInput = Pick<
   ProfileRow,
   "id" | "display_name" | "travel_mode" | "home_place_id"
->;
+> &
+  Partial<Pick<ProfileRow, "unavailable_before" | "unavailable_after">>;
 /** Colonnes utiles d'un lieu. */
 export type PlaceInput = Pick<PlaceRow, "id" | "owner_id" | "name" | "lat" | "lng">;
 /** Colonnes utiles d'un bloc occupé. */
@@ -49,6 +60,47 @@ export function toHHmm(pgTime: string): string {
   const m = TIME_RE.exec(pgTime);
   if (!m) throw new Error(`Heure invalide venant de la BD : ${pgTime}`);
   return `${m[1]}:${m[2]}`;
+}
+
+/** Ligne `busy_blocks` → `BlockSpec` (heures locales en minutes), pour /horaire. */
+export function toBlockSpec(row: BusyBlockInput): BlockSpec {
+  const start = parseClock(toHHmm(row.start_time));
+  const end = parseClock(toHHmm(row.end_time));
+  if (start === null || end === null) {
+    throw new Error(`Heures invalides venant de la BD : ${row.start_time}–${row.end_time}`);
+  }
+  const weekday = row.weekday;
+  if (weekday != null && !(Number.isInteger(weekday) && weekday >= 1 && weekday <= 7)) {
+    throw new Error(`Jour de semaine invalide venant de la BD : ${weekday}`);
+  }
+  return {
+    id: row.id,
+    title: row.title,
+    placeId: row.place_id,
+    startMinute: start,
+    endMinute: end,
+    weekday: weekday == null ? null : (weekday as Weekday),
+    validFrom: row.valid_from,
+    validUntil: row.valid_until,
+  };
+}
+
+/** `BlockSpec` → colonnes à écrire dans `busy_blocks` (sans `id`, `owner_id` ni `source`). */
+export function fromBlockSpec(
+  spec: BlockSpec,
+): Pick<
+  BusyBlockRow,
+  "title" | "place_id" | "start_time" | "end_time" | "weekday" | "valid_from" | "valid_until"
+> {
+  return {
+    title: spec.title,
+    place_id: spec.placeId,
+    start_time: formatClock(spec.startMinute),
+    end_time: formatClock(spec.endMinute),
+    weekday: spec.weekday,
+    valid_from: spec.validFrom,
+    valid_until: spec.validUntil,
+  };
 }
 
 /** Ligne `places` → `Place`. */
@@ -133,7 +185,8 @@ export interface PeopleResult {
 /**
  * Construit les `Person` de la logique d'horaire à partir des profils, lieux et blocs lus en
  * BD. Les lieux et blocs sont rattachés à leur propriétaire (`owner_id`). Un profil sans lieu
- * maison (ou dont la maison n'est pas dans ses lieux) est mis dans `incomplete`.
+ * maison (ou dont la maison n'est pas dans ses lieux) est mis dans `incomplete`. Les « heures
+ * où je ne sors pas » du profil deviennent des blocs occupés à la maison (`quietHoursBlocks`).
  */
 export function toPeople(
   profiles: ProfileInput[],
@@ -158,7 +211,14 @@ export function toPeople(
     const ownBlocks = (blocksByOwner.get(profile.id) ?? []).map((b) =>
       b.place_id && !knownPlaceIds.has(b.place_id) ? { ...b, place_id: null } : b,
     );
-    const busyBlocks = expandBusyBlocks(ownBlocks, range, home, timeZone);
+    const quiet = quietHoursFromDb(
+      profile.unavailable_before ?? null,
+      profile.unavailable_after ?? null,
+    );
+    const busyBlocks = [
+      ...expandBusyBlocks(ownBlocks, range, home, timeZone),
+      ...quietHoursBlocks(quiet, range, home, timeZone),
+    ].sort((a, b) => a.start.getTime() - b.start.getTime() || a.id.localeCompare(b.id));
     // La logique exige que les lieux des blocs soient dans `places` : on ajoute ceux qui
     // viendraient d'un autre propriétaire (ex. lieu favori du groupe) s'ils sont fournis.
     const ownIds = new Set(own.map((p) => p.id));

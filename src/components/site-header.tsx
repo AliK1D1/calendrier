@@ -1,7 +1,8 @@
 import Link from "next/link";
 
 const LIENS = [
-  { href: "/lieux", label: "Mes lieux" },
+  { href: "/horaire", label: "Horaire" },
+  { href: "/lieux", label: "Lieux" },
   { href: "/profil", label: "Profil" },
 ];
 

@@ -55,19 +55,33 @@ const createdAt = () =>
  * Profil d'un utilisateur ; `id` = identifiant Supabase Auth. Créé par un trigger.
  * `onboarded_at` : moment où la personne a fini (ou passé) l'accueil de première connexion
  * (maison, cégep, mode de transport) ; nul tant qu'elle ne l'a pas fait.
+ * `unavailable_before` / `unavailable_after` : « heures où je ne sors pas » (heures locales,
+ * ex. pas avant 09:00, pas après 22:00), nulles = pas de limite. La logique les traite comme
+ * des blocs occupés à la maison (`quietHoursBlocks`).
  */
-export const profiles = pgTable("profiles", {
-  id: uuid("id")
-    .primaryKey()
-    .references(() => authUsers.id, { onDelete: "cascade" }),
-  display_name: text("display_name").notNull().default(""),
-  travel_mode: travelModeEnum("travel_mode").notNull().default("transit"),
-  home_place_id: uuid("home_place_id").references((): AnyPgColumn => places.id, {
-    onDelete: "set null",
-  }),
-  onboarded_at: timestamp("onboarded_at", { withTimezone: true, mode: "string" }),
-  created_at: createdAt(),
-});
+export const profiles = pgTable(
+  "profiles",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    display_name: text("display_name").notNull().default(""),
+    travel_mode: travelModeEnum("travel_mode").notNull().default("transit"),
+    home_place_id: uuid("home_place_id").references((): AnyPgColumn => places.id, {
+      onDelete: "set null",
+    }),
+    onboarded_at: timestamp("onboarded_at", { withTimezone: true, mode: "string" }),
+    unavailable_before: time("unavailable_before"),
+    unavailable_after: time("unavailable_after"),
+    created_at: createdAt(),
+  },
+  (t) => [
+    check(
+      "profiles_unavailable_order",
+      sql`${t.unavailable_before} is null or ${t.unavailable_after} is null or ${t.unavailable_after} > ${t.unavailable_before}`,
+    ),
+  ],
+);
 
 /** Lieu enregistré par un utilisateur (maison, cégep, café favori du groupe…). */
 export const places = pgTable(

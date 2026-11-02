@@ -72,6 +72,9 @@ export default async function Accueil() {
       {user ? (
         <div className="flex flex-wrap items-center gap-3">
           <Button asChild>
+            <Link href="/horaire">Mon horaire</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href="/lieux">Mes lieux</Link>
           </Button>
           <Button asChild variant="outline">

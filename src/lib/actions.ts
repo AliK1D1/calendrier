@@ -29,7 +29,7 @@ export function dbErrorMessage(context: string, error: { code?: string; message:
   if (error.code === "42501") return "Action non permise.";
   if (error.code === "23514") return "Valeur refusée par la base de données.";
   if (error.code === "PGRST202" || error.code === "42703" || error.code === "42883") {
-    return "La base de données n'est pas à jour : applique supabase/migration-0003.sql (voir README).";
+    return "La base de données n'est pas à jour : applique les fichiers supabase/migration-000N.sql manquants (voir README).";
   }
   return "L'enregistrement n'a pas fonctionné. Réessaie.";
 }

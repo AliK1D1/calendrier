@@ -548,4 +548,10 @@ REVOKE EXECUTE ON FUNCTION public.complete_onboarding(text, double precision, do
 
 GRANT EXECUTE ON FUNCTION public.complete_onboarding(text, double precision, double precision, text, double precision, double precision, public.travel_mode) TO authenticated;
 
+-- ─── Migration 0004_quiet_hours ──────────────────────────────────────────────────────
+
+ALTER TABLE "profiles" ADD COLUMN "unavailable_before" time;
+ALTER TABLE "profiles" ADD COLUMN "unavailable_after" time;
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_unavailable_order" CHECK ("profiles"."unavailable_before" is null or "profiles"."unavailable_after" is null or "profiles"."unavailable_after" > "profiles"."unavailable_before");
+
 COMMIT;

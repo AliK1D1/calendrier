@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { PlaceRow, ProfileRow } from "@/lib/db/schema";
+import type { BusyBlockRow, PlaceRow, ProfileRow } from "@/lib/db/schema";
 
 export type MyProfile = Pick<ProfileRow, "id" | "display_name" | "travel_mode" | "home_place_id">;
 export type MyPlace = Pick<PlaceRow, "id" | "name" | "lat" | "lng">;
@@ -53,4 +53,57 @@ export async function getMyPlaces(supabase: SupabaseClient, userId: string): Pro
     .returns<MyPlace[]>();
   if (error) throw new Error(`Lecture des lieux : ${error.message}`);
   return data ?? [];
+}
+
+/** Colonnes de `busy_blocks` lues par /horaire. */
+export type MyBusyBlock = Pick<
+  BusyBlockRow,
+  | "id"
+  | "owner_id"
+  | "title"
+  | "place_id"
+  | "start_time"
+  | "end_time"
+  | "weekday"
+  | "valid_from"
+  | "valid_until"
+  | "source"
+>;
+
+/** Mon horaire (tous mes blocs ; la RLS laisse aussi voir ceux de mes groupes : filtre). */
+export async function getMyBusyBlocks(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<MyBusyBlock[]> {
+  const { data, error } = await supabase
+    .from("busy_blocks")
+    .select(
+      "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, source",
+    )
+    .eq("owner_id", userId)
+    .order("weekday", { ascending: true, nullsFirst: false })
+    .order("start_time", { ascending: true })
+    .returns<MyBusyBlock[]>();
+  if (error) throw new Error(`Lecture de l'horaire : ${error.message}`);
+  return data ?? [];
+}
+
+/**
+ * Mes « heures où je ne sors pas » (colonnes de la migration 0004). `null` si on ne peut pas
+ * les lire (migration 0004 pas encore appliquée) : la page l'indique au lieu de planter.
+ */
+export async function getMyQuietHours(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Pick<ProfileRow, "unavailable_before" | "unavailable_after"> | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("unavailable_before, unavailable_after")
+    .eq("id", userId)
+    .maybeSingle<Pick<ProfileRow, "unavailable_before" | "unavailable_after">>();
+  if (error) {
+    console.error("Profil (heures où je ne sors pas) :", error.code, error.message);
+    return null;
+  }
+  return data ?? { unavailable_before: null, unavailable_after: null };
 }

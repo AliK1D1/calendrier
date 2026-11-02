@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { findMeetups } from "@/lib/scheduling/findMeetups";
 import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
+import { validateBlockForm } from "@/lib/scheduling/weeklyBlocks";
 
 import {
   type BusyBlockInput,
   expandBusyBlock,
   expandBusyBlocks,
+  fromBlockSpec,
   type PlaceInput,
   type ProfileInput,
+  toBlockSpec,
   toHHmm,
   toPeople,
 } from "../convert";
@@ -219,5 +222,72 @@ describe("toPeople", () => {
     expect(midi).toBeDefined();
     expect(midi?.kind).toBe("in-person");
     expect(iso(midi!.end)).toBe("2025-09-15T17:00:00.000Z");
+  });
+});
+
+describe("horaire saisi (/horaire) ↔ busy_blocks", () => {
+  it("toBlockSpec et fromBlockSpec font l'aller-retour (heures locales en minutes)", () => {
+    const row = block({ start_time: "10:15:00", end_time: "24:00:00", weekday: 3 });
+    const spec = toBlockSpec(row);
+    expect(spec).toMatchObject({ id: "b1", startMinute: 615, endMinute: 1440, weekday: 3 });
+    expect(fromBlockSpec(spec)).toEqual({
+      title: "Chimie",
+      place_id: "cegep-ali",
+      start_time: "10:15",
+      end_time: "24:00",
+      weekday: 3,
+      valid_from: null,
+      valid_until: null,
+    });
+  });
+
+  it("refuse un jour de semaine hors 1..7 venant de la BD", () => {
+    expect(() => toBlockSpec(block({ weekday: 8 }))).toThrow(/Jour de semaine/);
+  });
+
+  it("un cours saisi le dimanche à 10 h reste à 10 h avant et après le changement d'heure, et s'arrête avec la session", () => {
+    const r = validateBlockForm({
+      title: "Job",
+      placeId: null,
+      start: "10:00",
+      end: "14:00",
+      kind: "weekly",
+      weekdays: [7],
+      date: "",
+      sessionStart: "2025-10-20",
+      sessionEnd: "2025-11-09",
+    });
+    if (!r.ok) throw new Error(r.error);
+    const row: BusyBlockInput = { id: "job", owner_id: ALI, ...fromBlockSpec(r.value[0]) };
+    const blocs = expandBusyBlocks([row], { from: "2025-10-01", to: "2025-12-31" }, "maison-ali");
+    expect(blocs.map((b) => [b.id, iso(b.start), iso(b.end)])).toEqual([
+      ["job@2025-10-26", "2025-10-26T14:00:00.000Z", "2025-10-26T18:00:00.000Z"], // HAE
+      ["job@2025-11-02", "2025-11-02T15:00:00.000Z", "2025-11-02T19:00:00.000Z"], // HNE, le jour même
+      ["job@2025-11-09", "2025-11-09T15:00:00.000Z", "2025-11-09T19:00:00.000Z"],
+    ]);
+    expect(blocs.every((b) => b.placeId === "maison-ali")).toBe(true);
+  });
+
+  it("toPeople ajoute les heures où je ne sors pas comme blocs à la maison", () => {
+    const { people } = toPeople(
+      [
+        {
+          id: ALI,
+          display_name: "Ali",
+          travel_mode: "transit",
+          home_place_id: "maison-ali",
+          unavailable_before: "09:00:00",
+          unavailable_after: "22:00:00",
+        },
+      ],
+      places,
+      [block({})],
+      { from: "2025-09-15", to: "2025-09-15" },
+    );
+    expect(people[0].busyBlocks.map((b) => [b.id, b.placeId])).toEqual([
+      ["calme-avant@2025-09-15", "maison-ali"],
+      ["b1@2025-09-15", "cegep-ali"],
+      ["calme-apres@2025-09-15", "maison-ali"],
+    ]);
   });
 });

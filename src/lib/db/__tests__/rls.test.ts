@@ -15,6 +15,7 @@ import { buildSeparateMigrations, buildSetupSql } from "../../../../scripts/buil
 const ROOT = join(__dirname, "../../../..");
 const SETUP_SQL = readFileSync(join(ROOT, "supabase/setup.sql"), "utf8");
 const MIGRATION_0003 = readFileSync(join(ROOT, "supabase/migration-0003.sql"), "utf8");
+const MIGRATION_0004 = readFileSync(join(ROOT, "supabase/migration-0004.sql"), "utf8");
 
 /** SQL d'une migration Drizzle, sans les marqueurs de séparation. */
 function drizzleSql(tag: string): string {
@@ -123,11 +124,12 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql et migration-0003.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0004.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
       "supabase/migration-0003.sql",
+      "supabase/migration-0004.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -165,6 +167,81 @@ describe("migrations (supabase/setup.sql)", () => {
       // La relancer échoue (colonne déjà là) sans rien casser : elle est transactionnelle.
       await expect(ancienne.exec(MIGRATION_0003)).rejects.toThrow(/already exists/);
       await ancienne.exec("ROLLBACK");
+    } finally {
+      await ancienne.close();
+    }
+  }, 60_000);
+
+  it("migration-0004 s'applique sur la base d'ali déjà en 0003, avec des données", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      // État actuel de la base d'ali : 0000 → 0003 appliquées, avec un compte, un lieu, un cours.
+      for (const tag of [
+        "0000_schema",
+        "0001_rls_triggers",
+        "0002_review_hardening",
+        "0003_onboarding",
+      ]) {
+        await ancienne.exec(drizzleSql(tag));
+      }
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      const { rows: lieux } = await ancienne.query<{ id: string }>(
+        "INSERT INTO places (owner_id, name, lat, lng) VALUES ($1, 'Cégep', 45.5, -73.5) RETURNING id",
+        [A],
+      );
+      await ancienne.query(
+        `INSERT INTO busy_blocks (owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until)
+         VALUES ($1, 'Chimie', $2, '10:00', '12:00', 1, '2025-08-25', '2025-12-19')`,
+        [A, lieux[0].id],
+      );
+      await ancienne.query(
+        "UPDATE profiles SET onboarded_at = now(), travel_mode = 'bike' WHERE id = $1",
+        [A],
+      );
+
+      await ancienne.exec(MIGRATION_0004);
+
+      const { rows: profils } = await ancienne.query<{
+        travel_mode: string;
+        unavailable_before: string | null;
+        unavailable_after: string | null;
+        accueilli: boolean;
+      }>(
+        "SELECT travel_mode, unavailable_before, unavailable_after, onboarded_at IS NOT NULL AS accueilli FROM profiles WHERE id = $1",
+        [A],
+      );
+      // Données conservées ; pas de limite tant que la personne n'en choisit pas.
+      expect(profils).toEqual([
+        { travel_mode: "bike", unavailable_before: null, unavailable_after: null, accueilli: true },
+      ]);
+      const { rows: blocs } = await ancienne.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM busy_blocks",
+      );
+      expect(blocs[0].n).toBe(1);
+
+      // La personne règle ses heures, en son nom (RLS) ; l'ordre est vérifié par la BD.
+      await ancienne.query("SELECT set_config('request.jwt.claim.sub', $1, false)", [A]);
+      await ancienne.exec("SET ROLE authenticated");
+      await ancienne.query(
+        "UPDATE profiles SET unavailable_before = '09:00', unavailable_after = '22:00' WHERE id = $1",
+        [A],
+      );
+      await expect(
+        ancienne.query("UPDATE profiles SET unavailable_before = '23:00' WHERE id = $1", [A]),
+      ).rejects.toThrow(/profiles_unavailable_order/);
+      await ancienne.exec("RESET ROLE");
+
+      // La relancer échoue (colonne déjà là) sans rien casser : elle est transactionnelle.
+      await expect(ancienne.exec(MIGRATION_0004)).rejects.toThrow(/already exists/);
+      await ancienne.exec("ROLLBACK");
+      const { rows: apres } = await ancienne.query<{ b: string; a: string }>(
+        "SELECT unavailable_before AS b, unavailable_after AS a FROM profiles WHERE id = $1",
+        [A],
+      );
+      expect(apres).toEqual([{ b: "09:00:00", a: "22:00:00" }]);
     } finally {
       await ancienne.close();
     }
@@ -681,5 +758,82 @@ describe("Mes lieux : accueil (complete_onboarding) et lieux", () => {
         rows("INSERT INTO places (name, lat, lng) VALUES ($1, 45.5, -73.5)", ["x".repeat(101)]),
       ),
     ).rejects.toThrow(/places_name_length/);
+  });
+});
+
+describe("Mon horaire : blocs manuels et heures où je ne sors pas", () => {
+  it("j'ajoute, modifie et supprime mes blocs ; B (même groupe) les voit sans pouvoir y toucher", async () => {
+    const lieu = await seedSchedule(A, "Chimie");
+    // Deux jours d'un coup (lundi et mercredi), comme le formulaire.
+    const ajoutes = await as(A, () =>
+      rows<{ id: string; source: string }>(
+        `INSERT INTO busy_blocks (title, place_id, start_time, end_time, weekday, valid_from, valid_until)
+         VALUES ('Physique', $1, '13:00', '15:00', 1, '2025-08-25', '2025-12-19'),
+                ('Physique', $1, '13:00', '15:00', 3, '2025-08-25', '2025-12-19')
+         RETURNING id, source`,
+        [lieu],
+      ),
+    );
+    expect(ajoutes.map((b) => b.source)).toEqual(["manual", "manual"]);
+    await as(A, () =>
+      rows("UPDATE busy_blocks SET end_time = '15:30' WHERE id = $1 AND owner_id = $2", [
+        ajoutes[0].id,
+        A,
+      ]),
+    );
+    const g = await createGroup(A, "Gang");
+    await join_(B, g.code);
+    const vus = await as(B, () =>
+      rows<{ title: string }>("SELECT title FROM busy_blocks WHERE owner_id = $1 ORDER BY title", [
+        A,
+      ]),
+    );
+    expect(vus.map((v) => v.title)).toEqual(["Chimie", "Physique", "Physique"]);
+    const touche = await as(
+      B,
+      async () =>
+        (await db.query("UPDATE busy_blocks SET title = 'x' WHERE owner_id = $1", [A]))
+          .affectedRows,
+    );
+    expect(touche).toBe(0);
+    await as(A, () => rows("DELETE FROM busy_blocks WHERE id = $1", [ajoutes[1].id]));
+    const restants = await rows<{ end_time: string }>(
+      "SELECT end_time FROM busy_blocks WHERE owner_id = $1 AND title = 'Physique'",
+      [A],
+    );
+    expect(restants).toEqual([{ end_time: "15:30:00" }]);
+  });
+
+  it("heures où je ne sors pas : seulement sur mon profil, visibles par mon groupe, ordre vérifié", async () => {
+    await as(A, () =>
+      rows(
+        "UPDATE profiles SET unavailable_before = '09:00', unavailable_after = '22:00' WHERE id = $1",
+        [A],
+      ),
+    );
+    const autre = await as(
+      B,
+      async () =>
+        (await db.query("UPDATE profiles SET unavailable_before = '12:00' WHERE id = $1", [A]))
+          .affectedRows,
+    );
+    expect(autre).toBe(0);
+    await expect(
+      as(A, () =>
+        rows(
+          "UPDATE profiles SET unavailable_before = '22:00', unavailable_after = '09:00' WHERE id = $1",
+          [A],
+        ),
+      ),
+    ).rejects.toThrow(/profiles_unavailable_order/);
+    const g = await createGroup(A, "Gang");
+    await join_(B, g.code);
+    const vu = await as(B, () =>
+      rows<{ b: string; a: string }>(
+        "SELECT unavailable_before AS b, unavailable_after AS a FROM profiles WHERE id = $1",
+        [A],
+      ),
+    );
+    expect(vu).toEqual([{ b: "09:00:00", a: "22:00:00" }]);
   });
 });

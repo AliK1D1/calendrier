@@ -64,6 +64,7 @@ manquent, chacune dans une nouvelle requête du SQL Editor :
 | ----------------------------- | ------------------------------------------------------------------------------------------------- |
 | `supabase/migration-0002.sql` | Revue sécurité du segment 6 (droits par colonne, EXECUTE retiré à anon)                           |
 | `supabase/migration-0003.sql` | Segment 7 : `profiles.onboarded_at`, nom de lieu ≤ 100 caractères, fonction `complete_onboarding` |
+| `supabase/migration-0004.sql` | Segment 8 : `profiles.unavailable_before` / `unavailable_after` (heures où je ne sors pas)        |
 
 Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
 (« already exists »).
@@ -163,6 +164,30 @@ prend la première.
 - **Derrière un proxy** (réseau d'entreprise, bac à sable) : le `fetch` de Node ignore
   `HTTPS_PROXY` ; lancer avec `NODE_USE_ENV_PROXY=1 npm run dev`.
 
+## Mon horaire (segment 8)
+
+| Page / élément | Rôle                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| `/horaire`     | Grille lundi → dimanche, 7 h → 23 h par 15 min ; ajouter, modifier, supprimer des blocs     |
+| `/profil`      | « Heures où je ne sors pas » (ex. pas avant 9 h, pas après 22 h), en plus du nom et du mode |
+
+- **Ajouter** : clic-glisser sur la grille (ordinateur) ou toucher une case (téléphone : un jour
+  à la fois, avec des onglets), ou bouton « Ajouter un bloc ». Formulaire : titre, lieu (mes
+  lieux ; « Maison » par défaut si aucun), début/fin, « Chaque semaine » (on coche tous les jours
+  du cours d'un coup : un bloc par jour) ou « Une seule fois », dates de début et de fin de
+  session. La session proposée est celle de mes cours déjà entrés, sinon la session de cégep en
+  cours ou à venir. Les blocs sont enregistrés dans `busy_blocks` avec `source = 'manual'`.
+- **Récurrence** : un bloc hebdomadaire revient chaque semaine entre `valid_from` et
+  `valid_until` (inclus), et plus après. Les flèches changent de semaine.
+- **Chevauchements** : permis (un examen pendant un cours…), mais le formulaire les signale.
+- **Heures où je ne sors pas** : stockées dans `profiles` (migration 0004), hachurées sur la
+  grille et transformées en blocs occupés à la maison par `toPeople` (`quietHoursBlocks`), un
+  par jour, en heure locale (le jour du changement d'heure, « avant 9 h » dure 10 h ou 8 h).
+- Logique pure et testée dans `src/lib/scheduling/` : `weeklyBlocks.ts` (validation du
+  formulaire, récurrence, chevauchements, semaines, session proposée), `weekGrid.ts` (position
+  des blocs, colonnes côte à côte, clic-glisser), `quietHours.ts`. Conversion BD ↔ formulaire :
+  `toBlockSpec` / `fromBlockSpec` dans `src/lib/db/convert.ts`.
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -180,30 +205,34 @@ prend la première.
 
 ## État des segments
 
-| #   | Segment                      | État    |
-| --- | ---------------------------- | ------- |
-| 0   | Mise en place du projet      | Fait    |
-| 1   | Types et données de test     | Fait    |
-| 2   | Fenêtres libres              | Fait    |
-| 3   | Temps de trajet (estimation) | Fait    |
-| 4   | Recherche de rencontres      | Fait    |
-| 5   | Classement des propositions  | Fait    |
-| 6   | Base de données et comptes   | Fait    |
-| 7   | Mes lieux                    | Fait    |
-| 8+  | Horaire, groupes, app…       | À faire |
+| #   | Segment                       | État    |
+| --- | ----------------------------- | ------- |
+| 0   | Mise en place du projet       | Fait    |
+| 1   | Types et données de test      | Fait    |
+| 2   | Fenêtres libres               | Fait    |
+| 3   | Temps de trajet (estimation)  | Fait    |
+| 4   | Recherche de rencontres       | Fait    |
+| 5   | Classement des propositions   | Fait    |
+| 6   | Base de données et comptes    | Fait    |
+| 7   | Mes lieux                     | Fait    |
+| 8   | Mon horaire (saisie manuelle) | Fait    |
+| 9+  | Import .ics, groupes, app…    | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 
 Logique pure (sans BD ni React), entièrement testée avec Vitest (`__tests__/`).
 
-| Fichier          | Rôle                                                                                           |
-| ---------------- | ---------------------------------------------------------------------------------------------- |
-| `types.ts`       | Vocabulaire : `Place`, `BusyBlock`, `Person`, `FreeWindow`, `MeetupRequest`, `MeetupProposal`… |
-| `time.ts`        | Heures locales `America/Toronto` (heure avancée comprise), jours `yyyy-MM-dd`                  |
-| `freeWindows.ts` | `getFreeWindows(person, dayStart, dayEnd, options)` : trous libres + lieu avant/après          |
-| `travel.ts`      | `TravelTimeProvider` et `EstimatedTravelProvider` (haversine × 1,3, vitesse par mode, cache)   |
-| `findMeetups.ts` | `findMeetupCandidates` (algorithme de la section 3) et `findMeetups` (classé, appels)          |
-| `score.ts`       | `scoreProposal(p, weights)` et `DEFAULT_WEIGHTS`                                               |
+| Fichier           | Rôle                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| `types.ts`        | Vocabulaire : `Place`, `BusyBlock`, `Person`, `FreeWindow`, `MeetupRequest`, `MeetupProposal`… |
+| `time.ts`         | Heures locales `America/Toronto` (heure avancée comprise), jours `yyyy-MM-dd`                  |
+| `freeWindows.ts`  | `getFreeWindows(person, dayStart, dayEnd, options)` : trous libres + lieu avant/après          |
+| `travel.ts`       | `TravelTimeProvider` et `EstimatedTravelProvider` (haversine × 1,3, vitesse par mode, cache)   |
+| `findMeetups.ts`  | `findMeetupCandidates` (algorithme de la section 3) et `findMeetups` (classé, appels)          |
+| `score.ts`        | `scoreProposal(p, weights)` et `DEFAULT_WEIGHTS`                                               |
+| `weeklyBlocks.ts` | Horaire saisi : validation, récurrence hebdomadaire, chevauchements, semaines                  |
+| `weekGrid.ts`     | Mise en page de la grille de /horaire (colonnes côte à côte, clic-glisser)                     |
+| `quietHours.ts`   | Heures où je ne sors pas → blocs occupés à la maison                                           |
 
 Exemple :
 

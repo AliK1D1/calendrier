@@ -1,5 +1,8 @@
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getCurrentUser } from "@/lib/supabase/server";
 
 const etapes = [
   {
@@ -17,7 +20,12 @@ const etapes = [
   },
 ];
 
-export default function Accueil() {
+// Toujours rendu à la demande : l'affichage dépend de la session.
+export const dynamic = "force-dynamic";
+
+export default async function Accueil() {
+  const user = await getCurrentUser();
+
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-4 py-12 sm:py-20">
       <header className="flex flex-col gap-3">
@@ -42,9 +50,24 @@ export default function Accueil() {
         ))}
       </section>
 
-      <div>
-        <Button disabled>Bientôt : se connecter</Button>
-      </div>
+      {user ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm">
+            Connecté en tant que <strong>{user.email ?? "utilisateur"}</strong>.
+          </p>
+          <form action="/auth/deconnexion" method="post">
+            <Button type="submit" variant="outline">
+              Se déconnecter
+            </Button>
+          </form>
+        </div>
+      ) : (
+        <div>
+          <Button asChild>
+            <Link href="/connexion">Se connecter</Link>
+          </Button>
+        </div>
+      )}
     </main>
   );
 }

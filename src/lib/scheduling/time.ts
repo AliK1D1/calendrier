@@ -1,5 +1,5 @@
 import { addDays, format, parseISO } from "date-fns";
-import { fromZonedTime } from "date-fns-tz";
+import { formatInTimeZone, fromZonedTime, getTimezoneOffset } from "date-fns-tz";
 
 /** Fuseau horaire de l'app. */
 export const TIME_ZONE = "America/Toronto";
@@ -30,7 +30,12 @@ export function assertDay(day: string): void {
 
 /**
  * Instant correspondant à l'heure locale `time` (« HH:mm ») du jour `day` (« yyyy-MM-dd »)
- * dans le fuseau donné. « 24:00 » désigne minuit le jour suivant. Gère l'heure avancée.
+ * dans le fuseau donné. « 24:00 » désigne minuit le jour suivant. Gère l'heure avancée :
+ * - heure qui existe deux fois (novembre, 1 h 30) : la première (heure avancée) ;
+ * - heure qui n'existe pas (mars, 2 h 30) : décalée vers l'avant de la durée du saut
+ *   (3 h 30 HAE), comme Temporal (« compatible ») et le standard iCalendar. date-fns-tz seul
+ *   renvoyait 1 h 30 HNE, soit *avant* 1 h 59 : un bloc 1 h 45 → 2 h 30 finissait avant
+ *   de commencer.
  */
 export function zonedTime(day: string, time: string, timeZone: string = TIME_ZONE): Date {
   assertDay(day);
@@ -40,7 +45,20 @@ export function zonedTime(day: string, time: string, timeZone: string = TIME_ZON
     if (m[2] !== "00") throw new Error(`Heure invalide : ${time}`);
     return fromZonedTime(`${nextDay(day)}T00:00:00`, timeZone);
   }
-  return fromZonedTime(`${day}T${time}:00`, timeZone);
+  return localToInstant(day, time, timeZone);
+}
+
+function localToInstant(day: string, time: string, timeZone: string): Date {
+  const candidate = fromZonedTime(`${day}T${time}:00`, timeZone);
+  if (formatInTimeZone(candidate, timeZone, "yyyy-MM-dd'T'HH:mm") === `${day}T${time}`) {
+    return candidate;
+  }
+  // Heure inexistante : on l'interprète avec le décalage d'avant le saut.
+  const [y, mo, d] = day.split("-").map(Number);
+  const [h, mi] = time.split(":").map(Number);
+  const naiveUtc = Date.UTC(y, mo - 1, d, h, mi);
+  const offsetBefore = getTimezoneOffset(timeZone, new Date(naiveUtc - 24 * 60 * MS_PER_MINUTE));
+  return new Date(naiveUtc - offsetBefore);
 }
 
 /** Début (minuit local) et fin (minuit local suivant) d'un jour : 23, 24 ou 25 h. */

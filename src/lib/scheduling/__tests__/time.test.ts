@@ -21,6 +21,21 @@ describe("time", () => {
     expect(minutesBetween(normal.start, normal.end)).toBe(24 * 60);
   });
 
+  it("heure qui n'existe pas (saut de mars) : décalée vers l'avant, jamais en arrière", () => {
+    // 2026-03-08 : 2 h HNE → 3 h HAE. 2 h 30 n'existe pas : 3 h 30 HAE (07:30 UTC).
+    expect(zonedTime("2026-03-08", "02:30").toISOString()).toBe("2026-03-08T07:30:00.000Z");
+    expect(zonedTime("2026-03-08", "02:00").toISOString()).toBe("2026-03-08T07:00:00.000Z");
+    expect(zonedTime("2026-03-08", "01:59").toISOString()).toBe("2026-03-08T06:59:00.000Z");
+    expect(zonedTime("2026-03-08", "03:00").toISOString()).toBe("2026-03-08T07:00:00.000Z");
+    expect(zonedTime("2026-03-08", "02:30") > zonedTime("2026-03-08", "01:59")).toBe(true);
+  });
+
+  it("heure qui existe deux fois (novembre) : la première (heure avancée)", () => {
+    // 2026-11-01 : 2 h HAE → 1 h HNE. 1 h 30 existe deux fois ; on prend 1 h 30 HAE.
+    expect(zonedTime("2026-11-01", "01:30").toISOString()).toBe("2026-11-01T05:30:00.000Z");
+    expect(zonedTime("2026-11-01", "02:00").toISOString()).toBe("2026-11-01T07:00:00.000Z");
+  });
+
   it("énumère les jours d'une plage, en changeant de mois et d'année", () => {
     expect(nextDay("2025-02-28")).toBe("2025-03-01");
     expect(eachDay("2025-12-30", "2026-01-02")).toEqual([

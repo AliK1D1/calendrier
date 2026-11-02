@@ -19,6 +19,11 @@ et le segment en cours) avant de commencer une tâche.
   et `npm run build`, et vérifier qu'ils passent.
 - **Secrets** : jamais de clé d'API dans le code ; seulement dans `.env.local` (non commité).
   `.env.example` documente les variables.
+- **Base de données** : schéma dans `src/lib/db/schema.ts` ; RLS/triggers dans
+  `drizzle/0001_rls_triggers.sql` (ou une nouvelle migration `--custom`). Après un changement :
+  `npm run db:generate` (régénère `supabase/setup.sql`). Toute nouvelle table a RLS activé et
+  des tests dans `src/lib/db/__tests__/rls.test.ts` (PGlite). L'app lit la BD avec supabase-js
+  (session de l'utilisateur, donc RLS), jamais avec la clé `service_role`.
 - **Commits** : un segment = un commit, message `Segment N : ...`.
 
 ## Commandes

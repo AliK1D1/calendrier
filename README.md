@@ -56,6 +56,18 @@ Méthode simple, sans mot de passe de BD :
 Le script tourne dans une transaction : en cas d'erreur, rien n'est appliqué. Il est fait
 pour une base **vide** (le relancer échoue sur « type already exists »).
 
+**Base déjà créée avec un ancien `setup.sql`** (ex. celui du segment 6) : ne pas relancer
+`setup.sql`. Coller plutôt, **dans l'ordre et une seule fois chacun**, les migrations qui
+manquent, chacune dans une nouvelle requête du SQL Editor :
+
+| Fichier                       | Contenu                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- |
+| `supabase/migration-0002.sql` | Revue sécurité du segment 6 (droits par colonne, EXECUTE retiré à anon)                           |
+| `supabase/migration-0003.sql` | Segment 7 : `profiles.onboarded_at`, nom de lieu ≤ 100 caractères, fonction `complete_onboarding` |
+
+Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
+(« already exists »).
+
 Méthode alternative (avancée) : mettre `DATABASE_URL` dans `.env.local` (Supabase → Connect →
 « Session pooler », avec le mot de passe de la BD) puis `npm run db:migrate`. **Choisir une
 seule méthode** : Drizzle ne sait pas que `setup.sql` a déjà été appliqué à la main.
@@ -103,8 +115,9 @@ déconnecter**. Une ligne apparaît dans `profiles` (créée par un trigger à l
 | Tests migrations + RLS (PGlite) | `src/lib/db/__tests__/rls.test.ts`                                       |
 
 Après une modification de `schema.ts` : `npm run db:generate` (crée une nouvelle migration et
-régénère `supabase/setup.sql`), puis appliquer **seulement la nouvelle migration**
-(`drizzle/000N_….sql`) dans le SQL Editor. Un test vérifie que `setup.sql` est à jour.
+régénère `supabase/setup.sql` et les fichiers `supabase/migration-000N.sql`), puis coller
+**seulement le nouveau** `supabase/migration-000N.sql` dans le SQL Editor. Des tests vérifient
+que ces fichiers sont à jour et qu'ils s'appliquent sur une base qui a l'ancien `setup.sql`.
 
 Règles d'accès (RLS) : chacun voit son profil, ses lieux et son horaire, et ceux des membres
 de ses groupes ; il ne modifie que les siens. On entre dans un groupe en le créant (on en
@@ -120,6 +133,35 @@ hebdomadaires sur une plage de dates dans le fuseau `America/Toronto` : un cours
 à 10 h après le changement d'heure. Une heure qui n'existe pas (2 h 30 le jour du passage à
 l'heure avancée) est décalée à 3 h 30 ; une heure qui existe deux fois (1 h 30 en novembre)
 prend la première.
+
+## Mes lieux, profil et accueil (segment 7)
+
+| Page / élément     | Rôle                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| `/bienvenue`       | Accueil de première connexion : maison, cégep ou école (facultatif), mode de transport      |
+| `/lieux`           | Mes lieux : ajouter (recherche d'adresse + carte), renommer, supprimer, choisir la maison   |
+| `/profil`          | Nom affiché et mode de transport                                                            |
+| `/api/geocode?q=…` | Recherche d'adresse côté serveur (Nominatim), réservée aux personnes connectées (sinon 401) |
+
+- **Première connexion** : après `/auth/callback`, une personne dont `profiles.onboarded_at`
+  est vide passe par `/bienvenue` (puis va à la page demandée). L'accueil est enregistré en une
+  transaction par la fonction SQL `complete_onboarding` (RLS appliquée ; un double envoi ne
+  crée pas de lieux en double). « Plus tard » marque l'accueil comme fait sans lieu. Si la
+  migration 0003 n'est pas appliquée, la connexion continue de marcher sans accueil.
+- **Géocodage** (`src/lib/geocoding/`, fonctions pures testées) : Nominatim d'OpenStreetMap,
+  appelé **seulement par le serveur**, avec le User-Agent `TempsLibreCommun/0.1 (projet
+étudiant)`, au plus **1 requête/s** pour toute l'app (file d'attente de 10, au-delà : « service
+  occupé »), cache de 24 h (500 recherches), recherche seulement quand on appuie sur
+  « Chercher » (pas à chaque touche). Les arrêts d'autobus et stations de vélos qui portent le
+  nom cherché sont placés après le vrai lieu. `NOMINATIM_EMAIL` (facultatif) est envoyé comme
+  contact.
+- **Carte** : Leaflet + tuiles OpenStreetMap, chargée seulement dans le navigateur
+  (`next/dynamic`, `ssr: false`). Toucher la carte déplace le point avant d'enregistrer.
+- **Validation** (`src/lib/places/validation.ts`) : nom 1 à 100 caractères, coordonnées
+  valides arrondies à 6 décimales, mode de transport connu. Les actions serveur valident tout,
+  puis écrivent avec le client Supabase de la session (RLS).
+- **Derrière un proxy** (réseau d'entreprise, bac à sable) : le `fetch` de Node ignore
+  `HTTPS_PROXY` ; lancer avec `NODE_USE_ENV_PROXY=1 npm run dev`.
 
 ## Commandes
 
@@ -138,16 +180,17 @@ prend la première.
 
 ## État des segments
 
-| #   | Segment                       | État    |
-| --- | ----------------------------- | ------- |
-| 0   | Mise en place du projet       | Fait    |
-| 1   | Types et données de test      | Fait    |
-| 2   | Fenêtres libres               | Fait    |
-| 3   | Temps de trajet (estimation)  | Fait    |
-| 4   | Recherche de rencontres       | Fait    |
-| 5   | Classement des propositions   | Fait    |
-| 6   | Base de données et comptes    | Fait    |
-| 7+  | Lieux, horaire, groupes, app… | À faire |
+| #   | Segment                      | État    |
+| --- | ---------------------------- | ------- |
+| 0   | Mise en place du projet      | Fait    |
+| 1   | Types et données de test     | Fait    |
+| 2   | Fenêtres libres              | Fait    |
+| 3   | Temps de trajet (estimation) | Fait    |
+| 4   | Recherche de rencontres      | Fait    |
+| 5   | Classement des propositions  | Fait    |
+| 6   | Base de données et comptes   | Fait    |
+| 7   | Mes lieux                    | Fait    |
+| 8+  | Horaire, groupes, app…       | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 

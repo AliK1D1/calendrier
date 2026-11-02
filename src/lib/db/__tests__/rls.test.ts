@@ -10,10 +10,19 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { buildSetupSql } from "../../../../scripts/build-setup-sql.mjs";
+import { buildSeparateMigrations, buildSetupSql } from "../../../../scripts/build-setup-sql.mjs";
 
 const ROOT = join(__dirname, "../../../..");
 const SETUP_SQL = readFileSync(join(ROOT, "supabase/setup.sql"), "utf8");
+const MIGRATION_0003 = readFileSync(join(ROOT, "supabase/migration-0003.sql"), "utf8");
+
+/** SQL d'une migration Drizzle, sans les marqueurs de séparation. */
+function drizzleSql(tag: string): string {
+  return readFileSync(join(ROOT, "drizzle", `${tag}.sql`), "utf8").replace(
+    /-->\s*statement-breakpoint/g,
+    "",
+  );
+}
 
 const FAKE_SUPABASE = `
   CREATE ROLE anon NOLOGIN;
@@ -113,6 +122,53 @@ describe("migrations (supabase/setup.sql)", () => {
   it("est à jour avec drizzle/*.sql (npm run db:setup-sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
+
+  it("supabase/migration-0002.sql et migration-0003.sql sont à jour (npm run db:setup-sql)", () => {
+    const separees = buildSeparateMigrations(ROOT);
+    expect(Object.keys(separees)).toEqual([
+      "supabase/migration-0002.sql",
+      "supabase/migration-0003.sql",
+    ]);
+    for (const [rel, content] of Object.entries(separees)) {
+      expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
+    }
+  });
+
+  it("migration-0002 puis migration-0003 s'appliquent sur la base d'ali (setup.sql du segment 6 + données)", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      // État de la base d'ali : setup.sql du segment 6 (migrations 0000 et 0001).
+      await ancienne.exec(drizzleSql("0000_schema"));
+      await ancienne.exec(drizzleSql("0001_rls_triggers"));
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      await ancienne.query(
+        "INSERT INTO places (owner_id, name, lat, lng) VALUES ($1, 'Maison', 45.5, -73.5)",
+        [A],
+      );
+
+      await ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0002.sql"), "utf8"));
+      await ancienne.exec(MIGRATION_0003);
+
+      const { rows: profils } = await ancienne.query<{ onboarded_at: string | null }>(
+        "SELECT onboarded_at FROM profiles WHERE id = $1",
+        [A],
+      );
+      // Un compte existant n'a pas encore vu l'accueil.
+      expect(profils).toEqual([{ onboarded_at: null }]);
+      const { rows: fns } = await ancienne.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'complete_onboarding'",
+      );
+      expect(fns[0].n).toBe(1);
+      // La relancer échoue (colonne déjà là) sans rien casser : elle est transactionnelle.
+      await expect(ancienne.exec(MIGRATION_0003)).rejects.toThrow(/already exists/);
+      await ancienne.exec("ROLLBACK");
+    } finally {
+      await ancienne.close();
+    }
+  }, 60_000);
 
   it("s'applique aussi avec le migrateur Drizzle (équivalent de drizzle-kit migrate)", async () => {
     const vide = new PGlite();
@@ -434,6 +490,28 @@ describe("RLS : revue sécurité des modifications d'appartenance", () => {
     expect(seen).toEqual([]);
   });
 
+  it("un admin ne peut pas changer le user_id d'un membre pour y mettre un inconnu", async () => {
+    await seedSchedule(C, "Horaire privé de Zoé");
+    const g = await createGroup(A, "Groupe de A");
+    await join_(B, g.code);
+    await expect(
+      as(A, () =>
+        db.query("UPDATE group_members SET user_id = $1 WHERE group_id = $2 AND user_id = $3", [
+          C,
+          g.id,
+          B,
+        ]),
+      ),
+    ).rejects.toThrow(/permission denied/);
+    const membres = await rows<{ user_id: string }>(
+      "SELECT user_id FROM group_members WHERE group_id = $1 ORDER BY user_id",
+      [g.id],
+    );
+    expect(membres.map((m) => m.user_id)).toEqual([A, B]);
+    const seen = await as(A, () => rows("SELECT title FROM busy_blocks WHERE owner_id = $1", [C]));
+    expect(seen).toEqual([]);
+  });
+
   it("un admin ne peut pas changer le créateur d'un groupe ; il peut le renommer", async () => {
     const g = await createGroup(A, "Groupe de A");
     await expect(
@@ -487,5 +565,121 @@ describe("RLS : revue sécurité des modifications d'appartenance", () => {
         /permission denied/,
       );
     }
+  });
+});
+
+describe("Mes lieux : accueil (complete_onboarding) et lieux", () => {
+  type Profil = { travel_mode: string; home_place_id: string | null; onboarded_at: string | null };
+  const profilDe = (uid: string) =>
+    rows<Profil>("SELECT travel_mode, home_place_id, onboarded_at FROM profiles WHERE id = $1", [
+      uid,
+    ]).then((r) => r[0]);
+  const lieuxDe = (uid: string) =>
+    rows<{ id: string; name: string; lat: number; lng: number }>(
+      "SELECT id, name, lat, lng FROM places WHERE owner_id = $1 ORDER BY created_at, name",
+      [uid],
+    );
+
+  it("enregistre maison + cégep + mode en une fois, et seulement la première fois", async () => {
+    expect((await profilDe(A)).onboarded_at).toBeNull();
+    const [r] = await as(A, () =>
+      rows<{ ok: boolean }>(
+        `SELECT public.complete_onboarding(
+           home_name => $1, home_lat => 45.52, home_lng => -73.48,
+           school_name => $2, school_lat => 45.535936, school_lng => -73.49389,
+           mode => 'bike') AS ok`,
+        ["Maison", "Cégep Édouard-Montpetit"],
+      ),
+    );
+    expect(r.ok).toBe(true);
+
+    const lieux = await lieuxDe(A);
+    expect(lieux.map((l) => l.name).sort()).toEqual(["Cégep Édouard-Montpetit", "Maison"]);
+    const profil = await profilDe(A);
+    expect(profil.travel_mode).toBe("bike");
+    expect(profil.onboarded_at).not.toBeNull();
+    expect(profil.home_place_id).toBe(lieux.find((l) => l.name === "Maison")?.id);
+
+    // Double envoi du formulaire : rien de plus.
+    const [again] = await as(A, () =>
+      rows<{ ok: boolean }>(
+        "SELECT public.complete_onboarding(home_name => 'Maison', home_lat => 1, home_lng => 1) AS ok",
+      ),
+    );
+    expect(again.ok).toBe(false);
+    expect(await lieuxDe(A)).toHaveLength(2);
+  });
+
+  it("« passer » marque seulement le profil", async () => {
+    await as(A, () => rows("SELECT public.complete_onboarding()"));
+    const profil = await profilDe(A);
+    expect(profil).toMatchObject({ travel_mode: "transit", home_place_id: null });
+    expect(profil.onboarded_at).not.toBeNull();
+    expect(await lieuxDe(A)).toEqual([]);
+  });
+
+  it("tout ou rien : un cégep invalide n'enregistre pas la maison non plus", async () => {
+    await expect(
+      as(A, () =>
+        rows(
+          `SELECT public.complete_onboarding(
+             home_name => 'Maison', home_lat => 45.5, home_lng => -73.5,
+             school_name => 'Cégep', school_lat => 95, school_lng => -73.5)`,
+        ),
+      ),
+    ).rejects.toThrow(/places_lat_range/);
+    expect(await lieuxDe(A)).toEqual([]);
+    expect((await profilDe(A)).onboarded_at).toBeNull();
+  });
+
+  it("un visiteur non connecté ne peut pas l'appeler", async () => {
+    await expect(as(null, () => rows("SELECT public.complete_onboarding()"))).rejects.toThrow(
+      /permission denied/,
+    );
+  });
+
+  it("n'agit que sur le profil de la personne connectée (RLS)", async () => {
+    await as(B, () =>
+      rows(
+        "SELECT public.complete_onboarding(home_name => 'Chez Sam', home_lat => 45.6, home_lng => -73.6)",
+      ),
+    );
+    expect((await profilDe(A)).onboarded_at).toBeNull();
+    expect(await lieuxDe(A)).toEqual([]);
+    expect((await lieuxDe(B)).map((l) => l.name)).toEqual(["Chez Sam"]);
+  });
+
+  it("lieux : ajouter, renommer, choisir la maison, supprimer (la maison se vide)", async () => {
+    const [lieu] = await as(A, () =>
+      rows<{ id: string }>(
+        "INSERT INTO places (name, lat, lng) VALUES ('Cégep', 45.535936, -73.49389) RETURNING id",
+      ),
+    );
+    await as(A, () => rows("UPDATE places SET name = 'Mon cégep' WHERE id = $1", [lieu.id]));
+    await as(A, () => rows("UPDATE profiles SET home_place_id = $1 WHERE id = $2", [lieu.id, A]));
+    expect((await lieuxDe(A))[0].name).toBe("Mon cégep");
+    expect((await profilDe(A)).home_place_id).toBe(lieu.id);
+
+    // B (même groupe) voit le lieu mais ne peut ni le renommer ni le supprimer.
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    const renomme = await as(
+      B,
+      async () => (await db.query("UPDATE places SET name = 'piraté'")).affectedRows,
+    );
+    const supprime = await as(B, async () => (await db.query("DELETE FROM places")).affectedRows);
+    expect([renomme, supprime]).toEqual([0, 0]);
+
+    await as(A, () => rows("DELETE FROM places WHERE id = $1", [lieu.id]));
+    expect(await lieuxDe(A)).toEqual([]);
+    expect((await profilDe(A)).home_place_id).toBeNull();
+  });
+
+  it("refuse un nom de lieu de plus de 100 caractères", async () => {
+    await expect(
+      as(A, () =>
+        rows("INSERT INTO places (name, lat, lng) VALUES ($1, 45.5, -73.5)", ["x".repeat(101)]),
+      ),
+    ).rejects.toThrow(/places_name_length/);
   });
 });

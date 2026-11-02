@@ -51,7 +51,11 @@ export const voteEnum = pgEnum("vote", ["yes", "no", "maybe"]);
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow();
 
-/** Profil d'un utilisateur ; `id` = identifiant Supabase Auth. Créé par un trigger. */
+/**
+ * Profil d'un utilisateur ; `id` = identifiant Supabase Auth. Créé par un trigger.
+ * `onboarded_at` : moment où la personne a fini (ou passé) l'accueil de première connexion
+ * (maison, cégep, mode de transport) ; nul tant qu'elle ne l'a pas fait.
+ */
 export const profiles = pgTable("profiles", {
   id: uuid("id")
     .primaryKey()
@@ -61,6 +65,7 @@ export const profiles = pgTable("profiles", {
   home_place_id: uuid("home_place_id").references((): AnyPgColumn => places.id, {
     onDelete: "set null",
   }),
+  onboarded_at: timestamp("onboarded_at", { withTimezone: true, mode: "string" }),
   created_at: createdAt(),
 });
 
@@ -84,6 +89,7 @@ export const places = pgTable(
     check("places_lat_range", sql`${t.lat} between -90 and 90`),
     check("places_lng_range", sql`${t.lng} between -180 and 180`),
     check("places_name_not_blank", sql`length(trim(${t.name})) > 0`),
+    check("places_name_length", sql`length(${t.name}) <= 100`),
   ],
 );
 

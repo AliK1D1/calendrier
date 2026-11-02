@@ -1,7 +1,8 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { safeNextPath } from "@/lib/auth/paths";
+import { afterLoginPath, safeNextPath } from "@/lib/auth/paths";
+import { getOnboardingStatus } from "@/lib/profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const OTP_TYPES: readonly EmailOtpType[] = [
@@ -50,5 +51,7 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("next", next);
     return NextResponse.redirect(url);
   }
-  return NextResponse.redirect(new URL(next, origin));
+  // Première connexion : accueil (maison, cégep, mode de transport) avant d'aller à `next`.
+  const onboarded = await getOnboardingStatus(supabase);
+  return NextResponse.redirect(new URL(afterLoginPath(next, onboarded), origin));
 }

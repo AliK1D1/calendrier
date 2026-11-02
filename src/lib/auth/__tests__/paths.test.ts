@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isPlausibleEmail, isPublicPath, safeNextPath } from "../paths";
+import { afterLoginPath, isApiPath, isPlausibleEmail, isPublicPath, safeNextPath } from "../paths";
 
 describe("isPublicPath", () => {
   it("laisse passer l'accueil, /connexion et /auth/*", () => {
@@ -53,5 +53,32 @@ describe("isPlausibleEmail", () => {
     expect(isPlausibleEmail("ali@exemple.ca")).toBe(true);
     expect(isPlausibleEmail("ali")).toBe(false);
     expect(isPlausibleEmail("ali @exemple.ca")).toBe(false);
+  });
+});
+
+describe("isApiPath", () => {
+  it("reconnaît /api et /api/*", () => {
+    expect(isApiPath("/api/geocode")).toBe(true);
+    expect(isApiPath("/api")).toBe(true);
+    expect(isApiPath("/apiculture")).toBe(false);
+    expect(isApiPath("/lieux")).toBe(false);
+  });
+});
+
+describe("afterLoginPath", () => {
+  it("envoie vers l'accueil de première connexion en gardant la destination", () => {
+    expect(afterLoginPath("/lieux", false)).toBe("/bienvenue?next=%2Flieux");
+    expect(afterLoginPath(undefined, false)).toBe("/bienvenue?next=%2F");
+  });
+
+  it("va directement à la destination si l'accueil est fait ou inconnu", () => {
+    expect(afterLoginPath("/lieux", true)).toBe("/lieux");
+    expect(afterLoginPath("/lieux", null)).toBe("/lieux");
+  });
+
+  it("ne boucle pas et garde la protection contre les redirections ouvertes", () => {
+    expect(afterLoginPath("/bienvenue", false)).toBe("/bienvenue");
+    expect(afterLoginPath("https://mechant.com", false)).toBe("/bienvenue?next=%2F");
+    expect(afterLoginPath("/.//mechant.com", true)).toBe("/");
   });
 });

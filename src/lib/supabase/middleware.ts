@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-import { isPublicPath } from "@/lib/auth/paths";
+import { isApiPath, isPublicPath } from "@/lib/auth/paths";
 
 import { getSupabaseEnv } from "./env";
 
@@ -9,12 +9,14 @@ import { getSupabaseEnv } from "./env";
  * Rafraîchit la session Supabase (cookies) à chaque requête et protège les pages :
  * un visiteur non connecté qui demande une page protégée est envoyé vers /connexion?next=…
  * Sans configuration Supabase, les pages protégées renvoient vers /connexion?erreur=config.
+ * Les routes /api/* répondent 401 (JSON) au lieu d'être redirigées.
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   const { pathname, search } = request.nextUrl;
   const env = getSupabaseEnv();
 
   if (!env) {
+    if (isApiPath(pathname)) return unauthorized();
     return isPublicPath(pathname)
       ? NextResponse.next({ request })
       : redirectToLogin(request, pathname + search, "config");
@@ -44,6 +46,12 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user && isApiPath(pathname)) {
+    const res = unauthorized();
+    for (const cookie of response.cookies.getAll()) res.cookies.set(cookie);
+    return res;
+  }
+
   if (!user && !isPublicPath(pathname)) {
     const redirect = redirectToLogin(request, pathname + search);
     // Garder les cookies éventuellement mis à jour (ex. session expirée effacée).
@@ -60,4 +68,8 @@ function redirectToLogin(request: NextRequest, next: string, erreur?: string): N
   url.searchParams.set("next", next);
   if (erreur) url.searchParams.set("erreur", erreur);
   return NextResponse.redirect(url);
+}
+
+function unauthorized(): NextResponse {
+  return NextResponse.json({ error: "Connexion requise." }, { status: 401 });
 }

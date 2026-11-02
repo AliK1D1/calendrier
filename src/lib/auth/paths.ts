@@ -55,3 +55,23 @@ export const LOGIN_ERRORS: Record<string, string> = {
 export function isPlausibleEmail(email: string): boolean {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
+
+/** Routes d'API : sans session, réponse 401 en JSON au lieu d'une redirection vers /connexion. */
+export function isApiPath(pathname: string): boolean {
+  return pathname === "/api" || pathname.startsWith("/api/");
+}
+
+/** Page d'accueil de première connexion (maison, cégep, mode de transport). */
+export const ONBOARDING_PATH = "/bienvenue";
+
+/**
+ * Où aller après la connexion : l'accueil de première connexion si le profil ne l'a pas encore
+ * fait (`onboarded === false`), sinon `next`. `onboarded === null` (profil illisible, ex.
+ * migration 0003 pas encore appliquée) : on ne bloque pas, on va à `next`.
+ */
+export function afterLoginPath(next: string | null | undefined, onboarded: boolean | null): string {
+  const target = safeNextPath(next);
+  if (onboarded !== false) return target;
+  if (target === ONBOARDING_PATH || target.startsWith(`${ONBOARDING_PATH}?`)) return target;
+  return `${ONBOARDING_PATH}?${new URLSearchParams({ next: target }).toString()}`;
+}

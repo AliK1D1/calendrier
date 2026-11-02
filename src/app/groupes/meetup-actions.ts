@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { dbErrorMessage, requireUser } from "@/lib/actions";
 import type { BusyBlockInput, PlaceInput, ProfileInput } from "@/lib/db/convert";
+import { createKeyedLimiter } from "@/lib/geocoding/rateLimiter";
 import type { Result } from "@/lib/places/validation";
 import {
   type MeetupSearchView,
@@ -15,6 +16,10 @@ import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
 
 /** Estimation partagée entre les requêtes (cache borné). */
 const travel = new EstimatedTravelProvider();
+
+/** Recherches par minute et par personne : le calcul occupe le serveur (revue de sécurité). */
+const RECHERCHES_PAR_MINUTE = 20;
+const rechercheLimiter = createKeyedLimiter({ limit: RECHERCHES_PAR_MINUTE, windowMs: 60_000 });
 
 /**
  * Lectures Supabase de « Quand on peut se voir », au nom de la personne connectée (jeton de
@@ -80,6 +85,9 @@ export async function chercherMoments(raw: unknown): Promise<Result<MeetupSearch
   if (!input.ok) return input;
   const ctx = await requireUser();
   if (!ctx.ok) return ctx;
+  if (!rechercheLimiter.tryAcquire(ctx.user.id)) {
+    return { ok: false, error: "Trop de recherches d'un coup. Attends une minute et réessaie." };
+  }
   try {
     return await searchGroupMeetups(supabaseMeetupStore(ctx.supabase), input.value, {
       userId: ctx.user.id,

@@ -56,21 +56,59 @@ export function isSamePlace(a: Place, b: Place): boolean {
  * distance haversine × détour ÷ vitesse du mode + temps fixe du mode ; 0 si même lieu.
  */
 export function estimateTravelMinutes(from: Place, to: Place, mode: TravelMode): number {
+  assertValidCoordinates(from);
+  assertValidCoordinates(to);
+  if (!Object.hasOwn(SPEED_KMH, mode)) throw new Error(`Mode de transport inconnu : ${mode}`);
   if (isSamePlace(from, to)) return 0;
   const km = haversineKm(from, to) * DETOUR_FACTOR;
   const minutes = (km / SPEED_KMH[mode]) * 60 + FIXED_OVERHEAD_MINUTES[mode];
   return Math.ceil(minutes);
 }
 
-/** Estimation maison, sans API, avec cache en mémoire par (from, to, mode). */
+/**
+ * Refuse des coordonnées non finies ou hors limites. Sans ce contrôle, un lieu mal saisi
+ * (NaN, latitude 200…) donnait un trajet NaN, et la personne disparaissait en silence de
+ * toutes les propositions au lieu d'avoir une erreur claire.
+ */
+export function assertValidCoordinates(place: Pick<Place, "id" | "lat" | "lng">): void {
+  const { lat, lng } = place;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    throw new Error(`Coordonnées invalides pour le lieu ${place.id} : ${lat}, ${lng}`);
+  }
+}
+
+/** Nombre maximal de paires gardées en cache par défaut. */
+export const DEFAULT_TRAVEL_CACHE_SIZE = 10_000;
+
+/**
+ * Estimation maison, sans API, avec cache en mémoire par (from, to, mode).
+ *
+ * Le cache est borné (les paires les moins récemment utilisées sont retirées) : un provider
+ * partagé côté serveur ne doit pas grossir sans fin quand des utilisateurs ajoutent des lieux.
+ */
 export class EstimatedTravelProvider implements TravelTimeProvider {
   private readonly cache = new Map<string, number>();
+
+  constructor(private readonly maxCacheEntries: number = DEFAULT_TRAVEL_CACHE_SIZE) {
+    if (!Number.isInteger(maxCacheEntries) || maxCacheEntries < 1) {
+      throw new Error("La taille du cache doit être un entier positif.");
+    }
+  }
 
   async minutes(from: Place, to: Place, mode: TravelMode): Promise<number> {
     const key = cacheKey(from, to, mode);
     const cached = this.cache.get(key);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) {
+      // Remis en fin de file : c'est maintenant la paire la plus récemment utilisée.
+      this.cache.delete(key);
+      this.cache.set(key, cached);
+      return cached;
+    }
     const value = estimateTravelMinutes(from, to, mode);
+    if (this.cache.size >= this.maxCacheEntries) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest !== undefined) this.cache.delete(oldest);
+    }
     this.cache.set(key, value);
     return value;
   }
@@ -86,7 +124,10 @@ export class EstimatedTravelProvider implements TravelTimeProvider {
   }
 }
 
-/** Clé de cache : identifiants et coordonnées (un lieu déplacé n'utilise pas l'ancienne valeur). */
+/**
+ * Clé de cache : identifiants et coordonnées (un lieu déplacé n'utilise pas l'ancienne valeur).
+ * JSON.stringify rend la clé non ambiguë même si un id contient « @ », « , » ou « | ».
+ */
 function cacheKey(from: Place, to: Place, mode: TravelMode): string {
-  return `${from.id}@${from.lat},${from.lng}|${to.id}@${to.lat},${to.lng}|${mode}`;
+  return JSON.stringify([from.id, from.lat, from.lng, to.id, to.lat, to.lng, mode]);
 }

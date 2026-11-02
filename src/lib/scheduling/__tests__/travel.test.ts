@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_TRAVEL_CACHE_SIZE,
   DETOUR_FACTOR,
   EstimatedTravelProvider,
   FIXED_OVERHEAD_MINUTES,
@@ -126,5 +127,48 @@ describe("EstimatedTravelProvider", () => {
     const moved: Place = { ...PLACES.udem, lat: PLACES.cegepEM.lat + 0.001 };
     const after = await provider.minutes(PLACES.cegepEM, moved, "transit");
     expect(after).toBeLessThan(before);
+  });
+});
+
+describe("Revue sécurité : entrées invalides et cache borné", () => {
+  it("refuse des coordonnées non finies ou hors limites, et un mode inconnu", () => {
+    const bad = (lat: number, lng: number): Place => ({ id: "x", name: "x", lat, lng });
+    expect(() => estimateTravelMinutes(PLACES.udem, bad(Number.NaN, -73), "car")).toThrow(
+      /Coordonnées invalides/,
+    );
+    expect(() => estimateTravelMinutes(bad(95, -73), PLACES.udem, "car")).toThrow(
+      /Coordonnées invalides/,
+    );
+    expect(() => estimateTravelMinutes(PLACES.udem, bad(45, 200), "car")).toThrow(
+      /Coordonnées invalides/,
+    );
+    expect(() =>
+      estimateTravelMinutes(PLACES.udem, PLACES.cegepEM, "teleport" as TravelMode),
+    ).toThrow(/Mode de transport inconnu/);
+  });
+
+  it("le cache ne dépasse jamais sa taille et garde les paires récemment utilisées", async () => {
+    expect(DEFAULT_TRAVEL_CACHE_SIZE).toBe(10_000);
+    const provider = new EstimatedTravelProvider(2);
+    const p = (i: number): Place => ({ id: `p${i}`, name: `p${i}`, lat: 45 + i / 100, lng: -73 });
+    await provider.minutes(p(0), p(1), "car");
+    await provider.minutes(p(0), p(2), "car");
+    await provider.minutes(p(0), p(1), "car"); // (0,1) redevient la plus récente
+    await provider.minutes(p(0), p(3), "car"); // retire (0,2), la moins récente
+    expect(provider.cacheSize).toBe(2);
+    for (let i = 4; i < 50; i++) await provider.minutes(p(0), p(i), "car");
+    expect(provider.cacheSize).toBe(2);
+    expect(() => new EstimatedTravelProvider(0)).toThrow();
+  });
+
+  it("deux paires différentes ne partagent jamais la même entrée de cache", async () => {
+    const provider = new EstimatedTravelProvider();
+    const a: Place = { id: "a|b", name: "", lat: 45.5, lng: -73.6 };
+    const b: Place = { id: "c", name: "", lat: 45.6, lng: -73.5 };
+    const c: Place = { id: "a", name: "", lat: 45.5, lng: -73.6 };
+    const d: Place = { id: "b|c", name: "", lat: 45.6, lng: -73.5 };
+    await provider.minutes(a, b, "car");
+    await provider.minutes(c, d, "car");
+    expect(provider.cacheSize).toBe(2);
   });
 });

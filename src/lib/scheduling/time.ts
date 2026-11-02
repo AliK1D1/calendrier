@@ -7,11 +7,25 @@ export const TIME_ZONE = "America/Toronto";
 /** Nombre de millisecondes dans une minute. */
 export const MS_PER_MINUTE = 60_000;
 
-const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_RE = /^([01]\d|2[0-4]):([0-5]\d)$/;
 
-function assertDay(day: string): void {
-  if (!DAY_RE.test(day)) throw new Error(`Jour invalide (attendu yyyy-MM-dd) : ${day}`);
+/**
+ * Vérifie qu'un jour est au format `yyyy-MM-dd` **et** existe au calendrier. Sans la seconde
+ * vérification, « 2025-02-30 » passait le format : `eachDay` s'arrêtait alors en silence et
+ * `zonedTime` levait une erreur date-fns peu claire (« Invalid time value »).
+ */
+export function assertDay(day: string): void {
+  const m = DAY_RE.exec(day);
+  if (m) {
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const date = new Date(Date.UTC(2000, mo - 1, d));
+    date.setUTCFullYear(y);
+    if (date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d) {
+      return;
+    }
+  }
+  throw new Error(`Jour invalide (attendu yyyy-MM-dd, date existante) : ${day}`);
 }
 
 /**

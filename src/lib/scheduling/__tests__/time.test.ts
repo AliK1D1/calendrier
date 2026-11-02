@@ -38,4 +38,16 @@ describe("time", () => {
     expect(() => zonedTime("2025-09-01", "8h")).toThrow();
     expect(() => zonedTime("2025-09-01", "24:30")).toThrow();
   });
+
+  it("refuse les jours qui n'existent pas au calendrier (au lieu de s'arrêter en silence)", () => {
+    expect(() => zonedTime("2025-02-30", "08:00")).toThrow(/Jour invalide/);
+    expect(() => zonedTime("2025-13-01", "08:00")).toThrow(/Jour invalide/);
+    expect(() => zonedTime("2025-04-31", "08:00")).toThrow(/Jour invalide/);
+    expect(() => eachDay("2025-02-28", "2025-02-30")).toThrow(/Jour invalide/);
+    expect(() => nextDay("2025-00-10")).toThrow(/Jour invalide/);
+    // Les vrais jours limites restent acceptés.
+    expect(nextDay("2024-02-29")).toBe("2024-03-01");
+    expect(() => zonedTime("2025-02-29", "08:00")).toThrow(/Jour invalide/);
+    expect(eachDay("2025-12-31", "2025-12-31")).toEqual(["2025-12-31"]);
+  });
 });

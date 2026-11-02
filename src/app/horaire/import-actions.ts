@@ -5,6 +5,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { revalidatePath } from "next/cache";
 
 import { dbErrorMessage, requireUser } from "@/lib/actions";
+import { createKeyedLimiter } from "@/lib/geocoding/rateLimiter";
 import { fromBlockSpec } from "@/lib/db/convert";
 import {
   type ConfirmResult,
@@ -67,12 +68,23 @@ function supabaseIcsStore(supabase: SupabaseClient, userId: string): IcsStore {
   };
 }
 
+/**
+ * Aperçus permis par personne et par minute. Lire un fichier .ics demande du calcul côté
+ * serveur : sans limite, une seule personne pouvait relancer l'aperçu en boucle et ralentir
+ * l'app pour tout le monde. Un usage normal (choisir un fichier, puis un autre) en fait 1 ou 2.
+ */
+const APERCUS_PAR_MINUTE = 10;
+const apercuLimiter = createKeyedLimiter({ limit: APERCUS_PAR_MINUTE, windowMs: 60_000 });
+
 /** Aperçu d'un fichier .ics (champ « fichier ») : lit seulement, n'écrit rien. */
 export async function apercuIcs(formData: FormData): Promise<PreviewResult> {
   const file = formData.get("fichier");
   if (!(file instanceof File)) return { ok: false, error: "Choisis un fichier .ics." };
   const ctx = await requireUser();
   if (!ctx.ok) return ctx;
+  if (!apercuLimiter.tryAcquire(ctx.user.id)) {
+    return { ok: false, error: "Trop d'aperçus d'un coup. Attends une minute et réessaie." };
+  }
   const today = formatInTimeZone(new Date(), TIME_ZONE, "yyyy-MM-dd");
   return previewIcsImport(supabaseIcsStore(ctx.supabase, ctx.user.id), file, today);
 }

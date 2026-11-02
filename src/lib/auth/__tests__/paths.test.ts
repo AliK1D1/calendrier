@@ -37,6 +37,15 @@ describe("safeNextPath", () => {
       expect(safeNextPath(bad)).toBe("/");
     }
   });
+
+  it("refuse les chemins qui deviennent « //site » une fois normalisés (revue)", () => {
+    for (const bad of ["/.//mechant.com", "/a/..//mechant.com", "/%2e%2e//mechant.com", "/.///x"]) {
+      expect(safeNextPath(bad)).toBe("/");
+    }
+    // Les chemins internes avec « . » ou « .. » restent acceptés, normalisés.
+    expect(safeNextPath("/groupes/../horaire")).toBe("/horaire");
+    expect(safeNextPath("/./lieux?x=1")).toBe("/lieux?x=1");
+  });
 });
 
 describe("isPlausibleEmail", () => {

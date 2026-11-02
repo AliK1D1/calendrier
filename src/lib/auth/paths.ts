@@ -30,6 +30,10 @@ export function safeNextPath(next: string | null | undefined): string {
   try {
     const url = new URL(next, "http://interne.invalid");
     if (url.origin !== "http://interne.invalid") return DEFAULT_AFTER_LOGIN;
+    // La normalisation des « . » et « .. » peut recréer un « // » au début :
+    // « /.//mechant.com » devient « //mechant.com », que le navigateur lit comme un autre
+    // site. On revérifie donc le chemin final.
+    if (url.pathname.startsWith("//")) return DEFAULT_AFTER_LOGIN;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return DEFAULT_AFTER_LOGIN;

@@ -23,6 +23,18 @@ export interface PlaceMapProps {
   className?: string;
 }
 
+/**
+ * Contenu de bulle en texte brut. Leaflet insère une chaîne avec `innerHTML` : un nom de lieu
+ * comme « <img src=x onerror=…> » (tapé par quelqu'un ou venant d'OpenStreetMap, que tout le
+ * monde peut modifier) exécutait du JavaScript dans l'app. Un nœud avec `textContent` s'affiche
+ * pareil pour un nom normal, mais n'est jamais interprété comme du HTML.
+ */
+function textContent(label: string): HTMLElement {
+  const span = document.createElement("span");
+  span.textContent = label;
+  return span;
+}
+
 /** Centre par défaut : Montréal. */
 const DEFAULT_CENTER: L.LatLngExpression = [45.5017, -73.5673];
 
@@ -70,7 +82,7 @@ export default function PlaceMap({ points, onPick, className }: PlaceMapProps) {
         weight: 3,
         fillOpacity: 0.6,
       })
-        .bindTooltip(p.label)
+        .bindTooltip(textContent(p.label))
         .addTo(layer);
     }
     const focus = points.find((p) => p.highlighted);

@@ -1,6 +1,9 @@
+import { formatInTimeZone } from "date-fns-tz";
+
 import { getFreeWindows } from "./freeWindows";
-import type { TravelTimeProvider } from "./travel";
-import { addMinutesTo, eachDay, minutesBetween, zonedDayBounds } from "./time";
+import { DEFAULT_WEIGHTS, type ScoreWeights, overlapRatio, scoreProposal } from "./score";
+import { type TravelTimeProvider, isSamePlace } from "./travel";
+import { TIME_ZONE, addMinutesTo, eachDay, minutesBetween, zonedDayBounds } from "./time";
 import type {
   Availability,
   DayHours,
@@ -114,17 +117,17 @@ function resolveParticipants(people: readonly Person[], request: MeetupRequest):
 }
 
 /**
- * Recherche des rencontres réalistes (section 3 du plan).
+ * Recherche des rencontres réalistes en personne (section 3 du plan, étapes 1 à 4).
  *
  * Pour chaque jour de la requête et chaque lieu candidat P : pour chaque personne et chaque
  * fenêtre libre, disponibilité à P = [fin + trajet(lieuAvant → P) + marge,
  * début suivant − trajet(P → lieuAprès) − marge] ; intersection entre toutes les personnes ;
  * on garde les intervalles d'au moins `minDurationMinutes`.
  *
- * Fonction pure : le fournisseur de trajets est injecté. Les propositions sont renvoyées dans
- * l'ordre chronologique, avec `score = 0` (le classement est fait par `score.ts`).
+ * Fonction pure : le fournisseur de trajets est injecté. Toutes les propositions sont
+ * renvoyées, dans l'ordre chronologique, avec `score = 0`. `findMeetups` les classe.
  */
-export async function findMeetups(
+export async function findMeetupCandidates(
   people: readonly Person[],
   request: MeetupRequest,
   travelProvider: TravelTimeProvider,
@@ -170,6 +173,7 @@ export async function findMeetups(
       for (const interval of shared ?? []) {
         if (minutesBetween(interval.start, interval.end) < request.minDurationMinutes) continue;
         proposals.push({
+          kind: "in-person",
           placeId: place.id,
           start: interval.start,
           end: interval.end,
@@ -180,9 +184,145 @@ export async function findMeetups(
     }
   }
 
-  return proposals.sort(
-    (a, b) => a.start.getTime() - b.start.getTime() || a.placeId.localeCompare(b.placeId),
-  );
+  return proposals.sort(compareChronologically);
+}
+
+/**
+ * Créneaux d'appel/visio d'un jour : trous communs à tous (sans trajet, donc sans marge)
+ * d'au moins `minDurationMinutes`.
+ */
+export function findCallSlots(
+  people: readonly Person[],
+  request: MeetupRequest,
+  day: string,
+): MeetupProposal[] {
+  const participants = resolveParticipants(people, request);
+  if (participants.length === 0) return [];
+  const dayHours = request.dayHours ?? DEFAULT_DAY_HOURS;
+  const { start: dayStart, end: dayEnd } = zonedDayBounds(day);
+
+  let shared: SharedInterval[] | null = null;
+  for (const person of participants) {
+    const own = getFreeWindows(person, dayStart, dayEnd, { dayHours }).map((w) => ({
+      start: w.start,
+      end: w.end,
+      legs: { [person.id]: { to: 0, from: 0 } },
+    }));
+    shared = shared === null ? own : intersectIntervals(shared, own);
+    if (shared.length === 0) return [];
+  }
+  return (shared ?? [])
+    .filter((i) => minutesBetween(i.start, i.end) >= request.minDurationMinutes)
+    .map((i) => ({
+      kind: "call" as const,
+      placeId: null,
+      start: i.start,
+      end: i.end,
+      travelByPerson: i.legs,
+      score: 0,
+    }));
+}
+
+/** Options du classement des propositions. */
+export interface FindMeetupsOptions {
+  /** Nombre maximal de propositions par jour (défaut 3). */
+  maxPerDay?: number;
+  /** Poids du score (défaut : DEFAULT_WEIGHTS). */
+  weights?: ScoreWeights;
+  /**
+   * Au-delà de cette part de chevauchement (0 à 1), deux propositions au même lieu sont
+   * considérées comme des doublons et seule la meilleure est gardée (défaut 0,8).
+   */
+  overlapThreshold?: number;
+  /** Proposer un appel les jours sans rencontre en personne possible (défaut : oui). */
+  includeCalls?: boolean;
+}
+
+/** Nombre maximal de propositions par jour, par défaut. */
+export const DEFAULT_MAX_PER_DAY = 3;
+
+/** Part de chevauchement au-delà de laquelle deux propositions au même lieu sont des doublons. */
+export const DEFAULT_OVERLAP_THRESHOLD = 0.8;
+
+/**
+ * Classe des propositions : calcul du score, tri du meilleur au moins bon, retrait des
+ * doublons (même lieu, chevauchement > seuil) et limite par jour local. Fonction pure.
+ */
+export function rankProposals(
+  proposals: readonly MeetupProposal[],
+  places: ReadonlyMap<PlaceId, Place>,
+  options: FindMeetupsOptions & { referenceTime?: Date } = {},
+): MeetupProposal[] {
+  const {
+    maxPerDay = DEFAULT_MAX_PER_DAY,
+    weights = DEFAULT_WEIGHTS,
+    overlapThreshold = DEFAULT_OVERLAP_THRESHOLD,
+    referenceTime,
+  } = options;
+
+  const scored = proposals
+    .map((p) => ({ ...p, score: scoreProposal(p, weights, { referenceTime }) }))
+    .sort((a, b) => b.score - a.score || compareChronologically(a, b));
+
+  const sameLocation = (a: MeetupProposal, b: MeetupProposal): boolean => {
+    if (a.placeId === null || b.placeId === null) return a.placeId === b.placeId;
+    if (a.placeId === b.placeId) return true;
+    const pa = places.get(a.placeId);
+    const pb = places.get(b.placeId);
+    return pa !== undefined && pb !== undefined && isSamePlace(pa, pb);
+  };
+
+  const kept: MeetupProposal[] = [];
+  const countByDay = new Map<string, number>();
+  for (const p of scored) {
+    const day = formatInTimeZone(p.start, TIME_ZONE, "yyyy-MM-dd");
+    const count = countByDay.get(day) ?? 0;
+    if (count >= maxPerDay) continue;
+    if (kept.some((k) => sameLocation(k, p) && overlapRatio(k, p) > overlapThreshold)) continue;
+    kept.push(p);
+    countByDay.set(day, count + 1);
+  }
+  return kept;
+}
+
+/**
+ * Recherche et classement des rencontres (sections 3 et segment 5).
+ *
+ * 1. Propositions en personne réalistes (`findMeetupCandidates`).
+ * 2. Pour chaque jour sans rencontre en personne possible : proposition « appel » sur les
+ *    trous communs (trajet = 0).
+ * 3. Score (`scoreProposal`), tri du meilleur au moins bon, retrait des propositions au même
+ *    lieu qui se chevauchent à plus de 80 %, au plus `maxPerDay` par jour.
+ */
+export async function findMeetups(
+  people: readonly Person[],
+  request: MeetupRequest,
+  travelProvider: TravelTimeProvider,
+  options: FindMeetupsOptions = {},
+): Promise<MeetupProposal[]> {
+  const participants = resolveParticipants(people, request);
+  if (participants.length === 0) return [];
+
+  const inPerson = await findMeetupCandidates(participants, request, travelProvider);
+
+  const calls: MeetupProposal[] = [];
+  if (options.includeCalls ?? true) {
+    const daysWithMeetup = new Set(
+      inPerson.map((p) => formatInTimeZone(p.start, TIME_ZONE, "yyyy-MM-dd")),
+    );
+    for (const day of eachDay(request.dates.from, request.dates.to)) {
+      if (!daysWithMeetup.has(day)) calls.push(...findCallSlots(participants, request, day));
+    }
+  }
+
+  return rankProposals([...inPerson, ...calls], indexPlaces(participants, request), {
+    ...options,
+    referenceTime: zonedDayBounds(request.dates.from).start,
+  });
+}
+
+function compareChronologically(a: MeetupProposal, b: MeetupProposal): number {
+  return a.start.getTime() - b.start.getTime() || (a.placeId ?? "").localeCompare(b.placeId ?? "");
 }
 
 /** Enveloppe un fournisseur de trajets avec un cache local (une requête par paire et mode). */

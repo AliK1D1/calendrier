@@ -120,15 +120,20 @@ export interface TravelLeg {
   from: number;
 }
 
+/** Type de proposition : rencontre en personne, ou appel/visio (aucun trajet). */
+export type MeetupKind = "in-person" | "call";
+
 /** Une proposition de rencontre : un lieu et un créneau où tout le monde peut être présent. */
 export interface MeetupProposal {
-  /** Lieu de la rencontre. */
-  placeId: PlaceId;
+  /** En personne, ou appel/visio quand aucune rencontre en personne n'est possible ce jour-là. */
+  kind: MeetupKind;
+  /** Lieu de la rencontre (`null` pour un appel). */
+  placeId: PlaceId | null;
   /** Début du créneau commun. */
   start: Date;
   /** Fin du créneau commun. */
   end: Date;
-  /** Trajets de chaque participant, par identifiant de personne. */
+  /** Trajets de chaque participant, par identifiant de personne (0 pour un appel). */
   travelByPerson: Record<PersonId, TravelLeg>;
   /** Score de classement (plus haut = meilleur). */
   score: number;

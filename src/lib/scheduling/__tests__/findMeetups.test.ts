@@ -3,7 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 
 import {
   availabilityInWindow,
-  findMeetups,
+  findMeetupCandidates,
   intersectIntervals,
   memoizeTravel,
 } from "../findMeetups";
@@ -107,7 +107,7 @@ describe("memoizeTravel", () => {
 // Cas du plan (section 3 et segment 4)
 // ---------------------------------------------------------------------------
 
-describe("findMeetups : critères du segment 4", () => {
+describe("findMeetupCandidates : critères du segment 4", () => {
   it("cas « ali » : pause de 1 h au cégep, ami à ~40 min → aucune proposition chez l'ami", async () => {
     // L'ami est à l'UdeM avant et après la pause d'ali (10 h → 11 h).
     const ami: Person = {
@@ -127,7 +127,7 @@ describe("findMeetups : critères du segment 4", () => {
     );
 
     // Restreint à la matinée : la seule fenêtre d'ali est la pause de 10 h à 11 h.
-    const morning = await findMeetups(
+    const morning = await findMeetupCandidates(
       [ali, ami],
       request({ personIds: ["ali", "ami"], dayHours: { start: "08:00", end: "13:00" } }),
       estimated(),
@@ -136,7 +136,7 @@ describe("findMeetups : critères du segment 4", () => {
     expect(morning).toEqual([]);
 
     // Sur toute la journée : rien chez l'ami pendant la pause.
-    const allDay = await findMeetups(
+    const allDay = await findMeetupCandidates(
       [ali, ami],
       request({ personIds: ["ali", "ami"] }),
       estimated(),
@@ -155,7 +155,7 @@ describe("findMeetups : critères du segment 4", () => {
       busyBlocks: [],
     };
     const fake = new FakeTravelProvider([[PLACES.cegepEM.id, "ami-maison", 40]], 40);
-    const out = await findMeetups(
+    const out = await findMeetupCandidates(
       [ali, ami],
       request({
         personIds: ["ali", "ami"],
@@ -173,7 +173,7 @@ describe("findMeetups : critères du segment 4", () => {
 
   it("deux amis au même cégep, pause commune de 30 min, minimum 20 min → proposé au cégep", async () => {
     // Fixtures : mardi, ali et Sam sont au cégep jusqu'à 12 h et reprennent à 12 h 30.
-    const out = await findMeetups(
+    const out = await findMeetupCandidates(
       [ali, sam],
       request({
         personIds: ["ali", "sam"],
@@ -200,7 +200,7 @@ describe("findMeetups : critères du segment 4", () => {
 
   it("fin de journée, chacun rentre chez soi → propositions près de chez l'un d'eux", async () => {
     // Lundi : Sam finit à 15 h, ali à 16 h, tous deux au cégep ; ensuite, retour à la maison.
-    const out = await findMeetups(
+    const out = await findMeetupCandidates(
       [ali, sam],
       request({ personIds: ["ali", "sam"], minDurationMinutes: 60 }),
       estimated(),
@@ -250,12 +250,16 @@ describe("findMeetups : critères du segment 4", () => {
       minDurationMinutes: 30,
     });
     // Deux à deux, ça marche ; à trois, il ne reste que 13 h 45 → 14 h (15 min).
-    expect(await findMeetups(group, { ...req, personIds: ["a", "b"] }, estimated())).toHaveLength(
-      1,
-    );
-    expect(await findMeetups(group, req, estimated())).toEqual([]);
+    expect(
+      await findMeetupCandidates(group, { ...req, personIds: ["a", "b"] }, estimated()),
+    ).toHaveLength(1);
+    expect(await findMeetupCandidates(group, req, estimated())).toEqual([]);
     // Avec un minimum de 15 min, le créneau de 15 min est proposé.
-    const short = await findMeetups(group, { ...req, minDurationMinutes: 15 }, estimated());
+    const short = await findMeetupCandidates(
+      group,
+      { ...req, minDurationMinutes: 15 },
+      estimated(),
+    );
     expect(short).toHaveLength(1);
     expect(minutesBetween(short[0].start, short[0].end)).toBe(15);
   });
@@ -265,7 +269,7 @@ describe("findMeetups : critères du segment 4", () => {
 // Autres règles
 // ---------------------------------------------------------------------------
 
-describe("findMeetups : règles générales", () => {
+describe("findMeetupCandidates : règles générales", () => {
   it("applique exactement la formule avec un faux fournisseur", async () => {
     const A: Place = { id: "A", name: "A", lat: 0, lng: 0 };
     const B: Place = { id: "B", name: "B", lat: 0, lng: 0 };
@@ -298,7 +302,7 @@ describe("findMeetups : règles générales", () => {
       ["A", "P", 15],
       ["P", "B", 20],
     ]);
-    const out = await findMeetups(
+    const out = await findMeetupCandidates(
       [x],
       request({ personIds: ["x"], dates: { from: D, to: D }, candidatePlaceIds: ["P"] }),
       fake,
@@ -308,6 +312,7 @@ describe("findMeetups : règles générales", () => {
         placeId: "P",
         start: zonedTime(D, "10:20"),
         end: zonedTime(D, "11:35"),
+        kind: "in-person",
         travelByPerson: { x: { to: 15, from: 20 } },
         score: 0,
       },
@@ -315,7 +320,7 @@ describe("findMeetups : règles générales", () => {
   });
 
   it("lieux candidats par défaut : lieux des participants + favoris du groupe", async () => {
-    const out = await findMeetups(
+    const out = await findMeetupCandidates(
       [ali, sam],
       request({
         personIds: ["ali", "sam"],
@@ -343,26 +348,30 @@ describe("findMeetups : règles générales", () => {
       dates: { from: WEEK.sam, to: WEEK.sam },
       candidatePlaceIds: [PLACES.cegepEM.id],
     });
-    const out = await findMeetups([ali, sam], req, estimated());
+    const out = await findMeetupCandidates([ali, sam], req, estimated());
     expect(out.length).toBeGreaterThan(0);
     expect(out.every((p) => p.placeId === PLACES.cegepEM.id)).toBe(true);
 
     await expect(
-      findMeetups([ali, sam], { ...req, candidatePlaceIds: ["nulle-part"] }, estimated()),
+      findMeetupCandidates([ali, sam], { ...req, candidatePlaceIds: ["nulle-part"] }, estimated()),
     ).rejects.toThrow(/inconnu/);
   });
 
   it("personne inconnue ou durée invalide : erreur claire", async () => {
     await expect(
-      findMeetups(PEOPLE, request({ personIds: ["fantome"] }), estimated()),
+      findMeetupCandidates(PEOPLE, request({ personIds: ["fantome"] }), estimated()),
     ).rejects.toThrow(/Personne inconnue/);
     await expect(
-      findMeetups(PEOPLE, request({ personIds: ["ali"], minDurationMinutes: 0 }), estimated()),
+      findMeetupCandidates(
+        PEOPLE,
+        request({ personIds: ["ali"], minDurationMinutes: 0 }),
+        estimated(),
+      ),
     ).rejects.toThrow();
   });
 
   it("aucun participant : aucune proposition", async () => {
-    expect(await findMeetups(PEOPLE, request({ personIds: [] }), estimated())).toEqual([]);
+    expect(await findMeetupCandidates(PEOPLE, request({ personIds: [] }), estimated())).toEqual([]);
   });
 
   it("la marge réduit le créneau quand il y a un trajet", async () => {
@@ -372,13 +381,21 @@ describe("findMeetups : règles générales", () => {
       candidatePlaceIds: [PLACES.parcJeanDrapeau.id],
       favoritePlaces: GROUP_FAVORITES,
     });
-    const [sans] = await findMeetups([ali, sam], { ...base, bufferMinutes: 0 }, estimated());
-    const [avec] = await findMeetups([ali, sam], { ...base, bufferMinutes: 10 }, estimated());
+    const [sans] = await findMeetupCandidates(
+      [ali, sam],
+      { ...base, bufferMinutes: 0 },
+      estimated(),
+    );
+    const [avec] = await findMeetupCandidates(
+      [ali, sam],
+      { ...base, bufferMinutes: 10 },
+      estimated(),
+    );
     expect(minutesBetween(avec.start, avec.end)).toBe(minutesBetween(sans.start, sans.end) - 20);
   });
 
   it("plage de plusieurs jours : propositions sur chaque jour, en ordre chronologique", async () => {
-    const out = await findMeetups(
+    const out = await findMeetupCandidates(
       [ali, sam],
       request({ personIds: ["ali", "sam"], dates: { from: WEEK.lun, to: WEEK.dim } }),
       estimated(),
@@ -393,7 +410,7 @@ describe("findMeetups : règles générales", () => {
   it("chaque proposition respecte les blocs occupés, les trajets et la marge de chacun", async () => {
     const buffer = 5;
     const everyone = PEOPLE.map((p) => p.id);
-    const out = await findMeetups(
+    const out = await findMeetupCandidates(
       PEOPLE,
       request({
         personIds: everyone,
@@ -421,7 +438,7 @@ describe("findMeetups : règles générales", () => {
   });
 
   it("bloc de travail de Léo : aucune rencontre avec lui pendant son quart", async () => {
-    const out = await findMeetups(
+    const out = await findMeetupCandidates(
       [leo, maya],
       request({ personIds: ["leo", "maya"], dates: { from: WEEK.lun, to: WEEK.lun } }),
       estimated(),

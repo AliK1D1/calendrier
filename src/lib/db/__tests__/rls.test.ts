@@ -15,6 +15,7 @@ import { parseIcs } from "@/lib/import/ics";
 import { confirmIcsImport, type IcsConfirmInput, type IcsStore } from "@/lib/import/icsImport";
 import type { BlockSpec } from "@/lib/scheduling/weeklyBlocks";
 import { fromBlockSpec } from "../convert";
+import { FAKE_SUPABASE } from "./pgliteHarness";
 
 const ROOT = join(__dirname, "../../../..");
 const SETUP_SQL = readFileSync(join(ROOT, "supabase/setup.sql"), "utf8");
@@ -28,23 +29,6 @@ function drizzleSql(tag: string): string {
     "",
   );
 }
-
-const FAKE_SUPABASE = `
-  CREATE ROLE anon NOLOGIN;
-  CREATE ROLE authenticated NOLOGIN;
-  CREATE SCHEMA auth;
-  CREATE TABLE auth.users (
-    id uuid PRIMARY KEY,
-    email text,
-    raw_user_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb
-  );
-  CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
-    SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-  $$;
-  GRANT USAGE ON SCHEMA auth TO anon, authenticated;
-  GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated;
-  GRANT USAGE ON SCHEMA public TO anon, authenticated;
-`;
 
 const A = "00000000-0000-4000-8000-00000000000a";
 const B = "00000000-0000-4000-8000-00000000000b";

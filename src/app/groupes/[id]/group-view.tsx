@@ -33,6 +33,7 @@ import {
   retirerMembre,
   supprimerFavori,
 } from "../actions";
+import { MeetupFinder } from "./meetup-finder";
 import type { ScheduleLine } from "./schedule-lines";
 
 export interface MemberSchedule {
@@ -152,6 +153,8 @@ export function GroupView(props: Props) {
           {isAdmin ? " · tu es admin" : ""}
         </p>
       </header>
+
+      <MeetupFinder groupId={groupId} myId={myId} members={members} />
 
       {message && (
         <p

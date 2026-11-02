@@ -110,6 +110,12 @@ export interface MeetupRequest {
   favoritePlaces?: Place[];
   /** Heures de la journée où l'on accepte de se voir (défaut : 08:00 à 22:00). */
   dayHours?: DayHours;
+  /**
+   * Ne rien proposer avant cet instant (en général « maintenant ») : un créneau commencé est
+   * raccourci (on peut arriver plus tard), puis gardé seulement s'il dure encore au moins
+   * `minDurationMinutes`.
+   */
+  notBefore?: Date;
 }
 
 /** Temps de trajet d'une personne pour une proposition, en minutes (marge non comprise). */

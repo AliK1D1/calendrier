@@ -479,3 +479,43 @@ describe("findMeetupCandidates : validation de la requête (revue)", () => {
     await expect(run("2024-01-01", "2024-12-31")).resolves.toBeInstanceOf(Array);
   });
 });
+
+describe("findMeetupCandidates : notBefore (segment 11)", () => {
+  it("raccourcit un créneau commencé et ignore ce qui est passé", async () => {
+    const req = request({
+      personIds: ["ali", "sam"],
+      dates: { from: WEEK.lun, to: WEEK.mar },
+      minDurationMinutes: 20,
+    });
+    const all = await findMeetupCandidates([ali, sam], req, estimated());
+    const notBefore = at("mar", "12:10");
+    const later = await findMeetupCandidates([ali, sam], { ...req, notBefore }, estimated());
+    expect(later.length).toBeGreaterThan(0);
+    expect(later.every((p) => p.start.getTime() >= notBefore.getTime())).toBe(true);
+    // Mardi midi au cégep : 12 h 10 → 12 h 30 = 20 min, encore proposé.
+    const midi = later.find(
+      (p) => p.placeId === PLACES.cegepEM.id && p.end.getTime() === at("mar", "12:30").getTime(),
+    );
+    expect(midi?.start).toEqual(notBefore);
+    // Rien le lundi (passé), alors qu'il y en avait sans notBefore.
+    expect(all.some((p) => p.start.getTime() < at("mar", "00:00").getTime())).toBe(true);
+    expect(later.some((p) => p.start.getTime() < at("mar", "00:00").getTime())).toBe(false);
+    // Trop court une fois raccourci : 12 h 15 → 12 h 30 = 15 min < 20.
+    const tooLate = await findMeetupCandidates(
+      [ali, sam],
+      { ...req, notBefore: at("mar", "12:15") },
+      estimated(),
+    );
+    expect(tooLate.some((p) => p.end.getTime() === at("mar", "12:30").getTime())).toBe(false);
+  });
+
+  it("refuse un instant invalide", async () => {
+    await expect(
+      findMeetupCandidates(
+        [ali, sam],
+        request({ personIds: ["ali", "sam"], notBefore: new Date(NaN) }),
+        estimated(),
+      ),
+    ).rejects.toThrow(/invalide/);
+  });
+});

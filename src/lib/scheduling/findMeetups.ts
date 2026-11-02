@@ -92,6 +92,18 @@ export function intersectIntervals(a: SharedInterval[], b: SharedInterval[]): Sh
   return out;
 }
 
+/**
+ * Retire de chaque intervalle ce qui est avant `notBefore` (créneau commencé : on arrive plus
+ * tard, ce qui reste faisable) et enlève les intervalles entièrement passés.
+ */
+function clipNotBefore(intervals: SharedInterval[], notBefore: Date | undefined): SharedInterval[] {
+  if (!notBefore) return intervals;
+  const t = notBefore.getTime();
+  return intervals
+    .filter((i) => i.end.getTime() > t)
+    .map((i) => (i.start.getTime() >= t ? i : { ...i, start: new Date(t) }));
+}
+
 /** Lieux candidats : ceux de la requête, sinon tous les lieux des participants + favoris. */
 export function candidatePlaces(
   participants: readonly Person[],
@@ -128,6 +140,9 @@ function resolveParticipants(people: readonly Person[], request: MeetupRequest):
   }
   if (!Number.isFinite(request.bufferMinutes) || request.bufferMinutes < 0) {
     throw new Error("La marge doit être un nombre positif ou nul.");
+  }
+  if (request.notBefore !== undefined && !Number.isFinite(request.notBefore.getTime())) {
+    throw new Error("L'instant « pas avant » est invalide.");
   }
   assertDay(request.dates.from);
   assertDay(request.dates.to);
@@ -174,6 +189,8 @@ export async function findMeetupCandidates(
 
   for (const day of eachDay(request.dates.from, request.dates.to)) {
     const { start: dayStart, end: dayEnd } = zonedDayBounds(day);
+    // Journée déjà passée (ex. lundi quand on cherche le mercredi) : rien à proposer.
+    if (request.notBefore && dayEnd.getTime() <= request.notBefore.getTime()) continue;
     const windowsByPerson = participants.map((person) =>
       getFreeWindows(person, dayStart, dayEnd, { dayHours }),
     );
@@ -198,7 +215,7 @@ export async function findMeetupCandidates(
         if (shared.length === 0) break;
       }
 
-      for (const interval of shared ?? []) {
+      for (const interval of clipNotBefore(shared ?? [], request.notBefore)) {
         if (minutesBetween(interval.start, interval.end) < request.minDurationMinutes) continue;
         proposals.push({
           kind: "in-person",
@@ -239,7 +256,7 @@ export function findCallSlots(
     shared = shared === null ? own : intersectIntervals(shared, own);
     if (shared.length === 0) return [];
   }
-  return (shared ?? [])
+  return clipNotBefore(shared ?? [], request.notBefore)
     .filter((i) => minutesBetween(i.start, i.end) >= request.minDurationMinutes)
     .map((i) => ({
       kind: "call" as const,

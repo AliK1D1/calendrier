@@ -262,6 +262,37 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
   directes sur les tables comme par l'API REST, migration 0006 sur une base en 0005 avec des
   données) et `src/lib/groups/__tests__/`.
 
+## Quand on peut se voir (segment 11)
+
+**Migration à appliquer : aucune** (tout passe par les tables et fonctions de la 0006).
+
+- En haut de **`/groupes/[id]`** : choisir qui participe (au moins deux), la période (**cette
+  semaine** = d'aujourd'hui à dimanche, ou **la semaine prochaine**), la durée minimale (30, 45,
+  60, 90 ou 120 min) et la marge par trajet (0 à 30 min, 5 par défaut).
+- L'action serveur `chercherMoments` (`src/app/groupes/meetup-actions.ts`) valide la demande
+  (`validateMeetupSearch`), puis lit avec **le jeton de la personne connectée** (RLS, jamais de
+  clé service) : membres du groupe, profils (mode de transport, maison, heures « je ne sors
+  pas »), lieux personnels des participants, lieux favoris du groupe, et l'horaire des membres
+  **uniquement par `group_busy_blocks(gid)`**. Un non-membre est refusé (« Groupe
+  introuvable ») ; un participant qui n'est pas membre aussi. La logique
+  (`src/lib/meetups/search.ts`) convertit avec `toPeople`, appelle `findMeetups` avec
+  `EstimatedTravelProvider` (au plus 5 propositions par jour, rien avant maintenant arrondi au
+  quart d'heure) et met en forme les cartes : jour, heures, lieu, durée, trajet de chacun
+  (« ali : 0 min, Sam : 12 min », retour indiqué s'il diffère).
+- **Rien de possible en personne** : message clair et l'appel proposé (« Pas de moment
+  réaliste en personne sur cette période, voici un appel possible lundi 15 septembre à 10 h »).
+- **Vue grille** (bouton « Grille ») : par demi-heure de 8 h à 22 h, combien de participants
+  sont libres (sans les trajets ; les noms au survol).
+- **Lieu non visible** : un bloc peut pointer vers un lieu que la RLS cache (favori d'un
+  _autre_ groupe de ce membre, ou lieu supprimé). Le bloc compte quand même comme occupé, mais
+  on suppose que la personne est **à sa maison** pendant ce bloc ; ce lieu n'est jamais proposé
+  et l'interface indique combien de blocs sont concernés. Un participant sans maison visible
+  est écarté du calcul, avec la raison affichée.
+- Tests : `src/lib/db/__tests__/meetups.test.ts` (PGlite : fixtures du segment 4 écrites en
+  BD puis relues sous RLS ; mêmes propositions que `findMeetups` sur les fixtures ; cas « pause
+  de 1 h au cégep, ami à 40 min » ; non-membre refusé ; lieu non visible ; temps de calcul
+  pour 5 personnes sur une semaine, environ 40 ms lecture comprise).
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -279,20 +310,21 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
 
 ## État des segments
 
-| #   | Segment                        | État    |
-| --- | ------------------------------ | ------- |
-| 0   | Mise en place du projet        | Fait    |
-| 1   | Types et données de test       | Fait    |
-| 2   | Fenêtres libres                | Fait    |
-| 3   | Temps de trajet (estimation)   | Fait    |
-| 4   | Recherche de rencontres        | Fait    |
-| 5   | Classement des propositions    | Fait    |
-| 6   | Base de données et comptes     | Fait    |
-| 7   | Mes lieux                      | Fait    |
-| 8   | Mon horaire (saisie manuelle)  | Fait    |
-| 9   | Import d'horaire .ics          | Fait    |
-| 10  | Groupes et amis                | Fait    |
-| 11+ | Vue « quand on peut se voir »… | À faire |
+| #   | Segment                       | État    |
+| --- | ----------------------------- | ------- |
+| 0   | Mise en place du projet       | Fait    |
+| 1   | Types et données de test      | Fait    |
+| 2   | Fenêtres libres               | Fait    |
+| 3   | Temps de trajet (estimation)  | Fait    |
+| 4   | Recherche de rencontres       | Fait    |
+| 5   | Classement des propositions   | Fait    |
+| 6   | Base de données et comptes    | Fait    |
+| 7   | Mes lieux                     | Fait    |
+| 8   | Mon horaire (saisie manuelle) | Fait    |
+| 9   | Import d'horaire .ics         | Fait    |
+| 10  | Groupes et amis               | Fait    |
+| 11  | Vue « quand on peut se voir » | Fait    |
+| 12+ | Plan d'action…                | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 

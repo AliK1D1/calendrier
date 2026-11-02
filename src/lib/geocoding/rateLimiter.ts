@@ -66,3 +66,50 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
     },
   };
 }
+
+export interface KeyedLimiterOptions {
+  /** Nombre maximal de requêtes par clé (ex. par personne) dans la fenêtre. */
+  limit: number;
+  /** Durée de la fenêtre glissante (ms). */
+  windowMs: number;
+  /** Nombre maximal de clés suivies (les plus anciennes sortent en premier). */
+  maxKeys?: number;
+  /** Horloge (ms). Défaut : `Date.now`. */
+  now?: () => number;
+}
+
+export interface KeyedLimiter {
+  /** Vrai si la requête de `key` est permise (et la compte), faux si la limite est atteinte. */
+  tryAcquire(key: string): boolean;
+}
+
+/**
+ * Limite par personne (fenêtre glissante). La file « 1 requête/s » est partagée par toute
+ * l'app : sans cette limite, une seule personne connectée pouvait la remplir en boucle et
+ * bloquer la recherche d'adresse pour tout le monde (et faire bannir l'app par Nominatim).
+ */
+export function createKeyedLimiter(options: KeyedLimiterOptions): KeyedLimiter {
+  const { limit, windowMs, maxKeys = 10_000 } = options;
+  const now = options.now ?? Date.now;
+  const hits = new Map<string, number[]>();
+
+  return {
+    tryAcquire(key) {
+      const t = now();
+      const recent = (hits.get(key) ?? []).filter((at) => at > t - windowMs);
+      hits.delete(key);
+      if (recent.length >= limit) {
+        hits.set(key, recent);
+        return false;
+      }
+      recent.push(t);
+      hits.set(key, recent);
+      while (hits.size > maxKeys) {
+        const oldest = hits.keys().next().value;
+        if (oldest === undefined) break;
+        hits.delete(oldest);
+      }
+      return true;
+    },
+  };
+}

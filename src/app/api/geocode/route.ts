@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { GeocodeError, type GeocodeErrorCode } from "@/lib/geocoding/geocoder";
-import { getGeocoder } from "@/lib/geocoding/server";
+import { getGeocodeUserLimiter, getGeocoder } from "@/lib/geocoding/server";
 import { getCurrentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,12 @@ const MESSAGES: Record<GeocodeErrorCode, { status: number; message: string }> = 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Connexion requise." }, { status: 401 });
+  if (!getGeocodeUserLimiter().tryAcquire(user.id)) {
+    return NextResponse.json(
+      { error: "Trop de recherches d'un coup. Attends une minute et réessaie." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    );
+  }
 
   try {
     const results = await getGeocoder().search(request.nextUrl.searchParams.get("q"));

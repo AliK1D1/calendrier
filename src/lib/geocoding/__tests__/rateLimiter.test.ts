@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createRateLimiter, RateLimitQueueFullError } from "../rateLimiter";
+import { createKeyedLimiter, createRateLimiter, RateLimitQueueFullError } from "../rateLimiter";
 
 /** Horloge simulée : `sleep` avance le temps au lieu d'attendre. */
 function fakeClock(start = 10_000) {
@@ -80,5 +80,28 @@ describe("createRateLimiter", () => {
     await expect(limiter.schedule(async () => 3)).rejects.toBeInstanceOf(RateLimitQueueFullError);
     await expect(Promise.all([a, b])).resolves.toEqual([1, 2]);
     await expect(limiter.schedule(async () => 4)).resolves.toBe(4);
+  });
+});
+
+describe("createKeyedLimiter (revue : limite par personne)", () => {
+  it("permet `limit` requêtes par fenêtre et par personne, puis refuse", () => {
+    let t = 0;
+    const limiter = createKeyedLimiter({ limit: 3, windowMs: 60_000, now: () => t });
+    expect([1, 2, 3].map(() => limiter.tryAcquire("a"))).toEqual([true, true, true]);
+    expect(limiter.tryAcquire("a")).toBe(false);
+    // Une autre personne n'est pas touchée.
+    expect(limiter.tryAcquire("b")).toBe(true);
+    // La fenêtre glisse : une minute plus tard, « a » peut recommencer.
+    t = 60_001;
+    expect(limiter.tryAcquire("a")).toBe(true);
+  });
+
+  it("ne garde pas plus de `maxKeys` personnes en mémoire", () => {
+    const limiter = createKeyedLimiter({ limit: 1, windowMs: 60_000, maxKeys: 2, now: () => 0 });
+    expect(limiter.tryAcquire("a")).toBe(true);
+    expect(limiter.tryAcquire("b")).toBe(true);
+    expect(limiter.tryAcquire("c")).toBe(true); // « a » sort de la mémoire
+    expect(limiter.tryAcquire("a")).toBe(true);
+    expect(limiter.tryAcquire("c")).toBe(false);
   });
 });

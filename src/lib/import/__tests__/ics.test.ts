@@ -457,3 +457,55 @@ function r<T extends { ok: boolean }>(x: T): x is T & { ok: true } {
   expect(x.ok).toBe(true);
   return x.ok;
 }
+
+// ---------------------------------------------------------------------------
+// Revue sécurité : un petit fichier piégé ne doit pas bloquer le serveur
+// ---------------------------------------------------------------------------
+
+describe("parseIcs : fichiers piégés (revue)", () => {
+  const H = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n";
+  const F = "END:VCALENDAR\r\n";
+  const ev = (i: number, extra: string, start = "19700105T100000") =>
+    `BEGIN:VEVENT\r\nUID:e${i}\r\nDTSTART;TZID=America/Toronto:${start}\r\nDTEND;TZID=America/Toronto:${start.slice(0, 9)}110000\r\nSUMMARY:Cours ${i}\r\n${extra}END:VEVENT\r\n`;
+  const timed = (text: string) => {
+    const t = performance.now();
+    const r = parseIcs(text, { today: "2026-11-02" });
+    return { r, ms: performance.now() - t };
+  };
+
+  it("15 événements « tous les jours depuis 1970 » (2,4 Ko) : même résultat, en moins d'une seconde", () => {
+    const text =
+      H + Array.from({ length: 15 }, (_, i) => ev(i, "RRULE:FREQ=DAILY\r\n")).join("") + F;
+    expect(text.length).toBeLessThan(3000);
+    const { r, ms } = timed(text);
+    // Avant : environ 7 s de calcul pour le même résultat (règles trop longues, ignorées).
+    expect(r.ok && r.value.blocks.length).toBe(0);
+    expect(ms).toBeLessThan(1000);
+  });
+
+  it("un cours hebdomadaire commencé il y a des années est importé, sans tout recalculer", () => {
+    const text =
+      H +
+      Array.from({ length: 40 }, (_, i) =>
+        ev(i, "RRULE:FREQ=WEEKLY;BYDAY=MO,WE\r\n", "20100104T100000"),
+      ).join("") +
+      F;
+    const { r, ms } = timed(text);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.blocks.length).toBeGreaterThan(0);
+    expect(ms).toBeLessThan(1000);
+  });
+
+  it("des dizaines de milliers de RDATE ou EXDATE sont refusées au lieu d'occuper le serveur", () => {
+    const dates = Array.from({ length: 30000 }, (_, k) =>
+      new Date(Date.UTC(2026, 10, 3) + k * 600000).toISOString().replace(/[-:]/g, "").slice(0, 15),
+    ).join(",");
+    const { r } = timed(
+      H +
+        ev(0, `RRULE:FREQ=WEEKLY\r\nEXDATE;TZID=America/Toronto:${dates}\r\n`, "20261102T100000") +
+        F,
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/trop longues/);
+  });
+});

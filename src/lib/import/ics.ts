@@ -58,6 +58,17 @@ export {
 const MAX_ITERATIONS_PER_EVENT = 20_000;
 /** Itérations maximales pour tout le fichier (protège le serveur d'un fichier piégé). */
 const MAX_ITERATIONS_TOTAL = 300_000;
+/**
+ * Travail réel maximal pour tout le fichier : itérations de règles réellement calculées
+ * (celles sautées d'un coup ne comptent pas) + valeurs RDATE/EXDATE. Sans cette limite, un
+ * fichier de 1,4 Ko (15 événements « tous les jours depuis 1970 ») occupait le serveur 7 s.
+ */
+export const ICS_MAX_WORK = 20_000;
+/**
+ * Marge (jours) avant la fenêtre d'import : une occurrence qui commence plus tôt finit avant la
+ * fenêtre (durée ≤ 7 jours, écart de fuseaux ≤ 1 jour). Inutile de la convertir en instant.
+ */
+const FAR_PAST_MARGIN_DAYS = 9;
 /** Durée maximale d'une occurrence (au-delà : ignorée), en minutes. */
 const MAX_EVENT_MINUTES = 7 * MINUTES_PER_DAY;
 
@@ -154,6 +165,8 @@ export function parseIcs(text: string, options: IcsOptions): IcsResult {
     windowStart: zonedTime(window.from, "00:00", appZone),
     windowEnd: zonedTime(window.to, "24:00", appZone),
     budget: MAX_ITERATIONS_TOTAL,
+    work: ICS_MAX_WORK,
+    farPastBefore: shiftDay(window.from, -FAR_PAST_MARGIN_DAYS),
     notes: new Notes(),
   };
 
@@ -233,6 +246,10 @@ interface Ctx {
   windowStart: Date;
   windowEnd: Date;
   budget: number;
+  /** Travail réel restant (voir ICS_MAX_WORK). */
+  work: number;
+  /** Début des occurrences « bien avant la fenêtre » (heure flottante, 00:00). */
+  farPastBefore: string;
   notes: Notes;
 }
 
@@ -331,8 +348,13 @@ function readEvent(
     .slice(0, ICS_LOCATION_MAX)
     .trim();
 
-  // Occurrences (instants de début).
+  // Occurrences (instants de début). Celles bien avant la fenêtre ne sont pas converties
+  // (coûteux) : elles ne servent qu'à la remarque « occurrences passées » (voir plus bas).
   const starts = new Map<number, Date>();
+  const farPast: FarPast = { skipped: [], certain: false };
+  // Nombre d'occurrences qu'EXDATE et RECURRENCE-ID peuvent retirer (au plus une chacune).
+  let exclusions = replaced?.size ?? 0;
+  for (const prop of ev.getAllProperties("exdate")) exclusions += prop.getValues().length;
   const rrules = ev.getAllProperties("rrule");
   if (rrules.length === 0) {
     starts.set(first.getTime(), first);
@@ -342,7 +364,7 @@ function readEvent(
       if (!(recur instanceof ICAL.Recur) || !isSupportedRule(recur)) {
         return ctx.notes.count("unsupportedRule");
       }
-      if (!expandRule(recur, dtstart, zone, ctx, starts)) {
+      if (!expandRule(recur, dtstart, zone, ctx, starts, farPast, exclusions)) {
         return ctx.notes.count("unsupportedRule");
       }
     }
@@ -350,7 +372,12 @@ function readEvent(
   for (const prop of ev.getAllProperties("rdate")) {
     const z = resolveZone(paramOf(prop, "tzid"), null, zone, ctx.notes);
     for (const v of prop.getValues() as unknown[]) {
+      if (--ctx.work < 0) throw new BudgetError();
       if (v instanceof ICAL.Time && !v.isDate) {
+        if (!isUtc(v) && wallDay(v) < ctx.farPastBefore) {
+          farPast.skipped.push({ t: v, zone: z });
+          continue;
+        }
         const at = wallToInstant(v, z);
         starts.set(at.getTime(), at);
       }
@@ -363,6 +390,7 @@ function readEvent(
   for (const prop of ev.getAllProperties("exdate")) {
     const z = resolveZone(paramOf(prop, "tzid"), null, zone, ctx.notes);
     for (const v of prop.getValues() as unknown[]) {
+      if (--ctx.work < 0) throw new BudgetError();
       if (!(v instanceof ICAL.Time)) continue;
       if (v.isDate) exDays.add(wallDay(v));
       else exInstants.add(wallToInstant(v, z).getTime());
@@ -381,6 +409,18 @@ function readEvent(
         continue;
       }
       out.push({ ...p, ...title, locationText: location });
+    }
+  }
+  // Occurrences bien avant la fenêtre : toutes hors fenêtre. Comme avant, la remarque n'est
+  // ajoutée que si au moins une n'est pas retirée par EXDATE ou RECURRENCE-ID.
+  if (!outside && farPast.certain) outside = true;
+  if (!outside) {
+    for (const { t, zone: z } of farPast.skipped) {
+      const start = wallToInstant(t, z);
+      if (exInstants.has(start.getTime())) continue;
+      if (exDays.size > 0 && exDays.has(formatInTimeZone(start, zone, "yyyy-MM-dd"))) continue;
+      outside = true;
+      break;
     }
   }
   if (outside) ctx.notes.count("past");
@@ -421,6 +461,8 @@ function expandRule(
   zone: string,
   ctx: Ctx,
   out: Map<number, Date>,
+  farPast: FarPast,
+  exclusions: number,
 ): boolean {
   const rule = recur.clone();
   if (rule.until) {
@@ -443,17 +485,84 @@ function expandRule(
     dtstart.minute,
     dtstart.second,
   );
-  const it = rule.iterator(start);
+  let it = rule.iterator(start);
   const stopAfter = ctx.windowEnd.getTime() + 2 * MINUTES_PER_DAY * MS_PER_MINUTE;
+  const jump = jumpPlan(rule, start);
+  let jumped = false;
   for (let i = 0; ; i++) {
     if (i >= MAX_ITERATIONS_PER_EVENT) return false;
     if (--ctx.budget < 0) throw new BudgetError();
+    if (--ctx.work < 0) throw new BudgetError();
     const next = it.next();
     if (!next) return true;
+    if (wallDay(next) < ctx.farPastBefore) {
+      // Bien avant la fenêtre : pas de conversion (l'occurrence est forcément hors fenêtre).
+      farPast.skipped.push({ t: next.clone(), zone });
+      if (!jumped && jump && wallDay(next) >= jump.phaseFrom) {
+        // Saut de `j` périodes entières, toutes bien avant la fenêtre (et avant UNTIL) :
+        // mêmes occurrences que l'itération une par une, sans les calculer. Les compteurs
+        // (par événement et pour le fichier) avancent exactement comme avant.
+        jumped = true;
+        const limit =
+          rule.until && wallDay(rule.until) < ctx.farPastBefore
+            ? wallDay(rule.until)
+            : ctx.farPastBefore;
+        const j = Math.floor(daysBetween(wallDay(next), limit) / jump.periodDays) - 1;
+        const occurrences = j * jump.perPeriod;
+        if (j >= 1 && occurrences > exclusions) {
+          const virtual = occurrences - 1; // l'occurrence courante est déjà comptée
+          const allowed = Math.max(0, MAX_ITERATIONS_PER_EVENT - (i + 1));
+          const steps = Math.min(virtual, allowed);
+          if (steps > ctx.budget) throw new BudgetError();
+          ctx.budget -= steps;
+          i += steps;
+          if (steps < virtual) return false;
+          farPast.certain = true;
+          const restart = next.clone();
+          restart.adjust(j * jump.periodDays, 0, 0, 0);
+          it = rule.iterator(restart);
+        }
+      }
+      continue;
+    }
     const at = wallToInstant(next, zone);
     if (at.getTime() > stopAfter) return true;
     out.set(at.getTime(), at);
   }
+}
+
+/** Occurrences bien avant la fenêtre, gardées sans conversion (remarque « passées »). */
+interface FarPast {
+  skipped: { t: InstanceType<typeof ICAL.Time>; zone: string }[];
+  /** Vrai si un saut a passé plus d'occurrences que EXDATE ne peut en retirer. */
+  certain: boolean;
+}
+
+/**
+ * Règles qu'on peut sauter d'un coup, parce qu'elles se répètent à l'identique à partir d'une
+ * occurrence de phase : DAILY ou WEEKLY sans BYDAY (une occurrence par période, dès DTSTART),
+ * WEEKLY;INTERVAL=1 avec BYDAY (|BYDAY| occurrences par semaine, dès la 2e semaine). Pas de
+ * COUNT (il compte depuis DTSTART). Les autres règles sont itérées une par une.
+ */
+function jumpPlan(
+  rule: InstanceType<typeof ICAL.Recur>,
+  start: InstanceType<typeof ICAL.Time>,
+): { periodDays: number; perPeriod: number; phaseFrom: string } | null {
+  if (rule.count) return null;
+  const interval = rule.interval ?? 1;
+  const byday = (rule.parts?.BYDAY as string[] | undefined) ?? [];
+  const startDay = wallDay(start);
+  if (byday.length === 0) {
+    if (rule.freq === "DAILY") return { periodDays: interval, perPeriod: 1, phaseFrom: startDay };
+    if (rule.freq === "WEEKLY") {
+      return { periodDays: 7 * interval, perPeriod: 1, phaseFrom: startDay };
+    }
+    return null;
+  }
+  if (rule.freq === "WEEKLY" && interval === 1) {
+    return { periodDays: 7, perPeriod: new Set(byday).size, phaseFrom: shiftDay(startDay, 7) };
+  }
+  return null;
 }
 
 /**

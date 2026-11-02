@@ -407,3 +407,85 @@ describe("RLS : groupes, profils, plans et votes", () => {
     expect(parB).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Revue sécurité : un admin ne doit pas pouvoir ajouter quelqu'un de force
+// ---------------------------------------------------------------------------
+
+describe("RLS : revue sécurité des modifications d'appartenance", () => {
+  it("un admin ne peut pas réécrire une ligne de membre pour y mettre un inconnu", async () => {
+    await seedSchedule(C, "Horaire privé de Zoé");
+    const g = await createGroup(A, "Groupe de A");
+    const g2 = await createGroup(A, "Second groupe de A");
+
+    // Tentative : déplacer sa propre ligne de g2 vers g en remplaçant son id par celui de C.
+    const attempt = as(A, () =>
+      db.query("UPDATE group_members SET group_id = $1, user_id = $2 WHERE group_id = $3", [
+        g.id,
+        C,
+        g2.id,
+      ]),
+    );
+    await expect(attempt).rejects.toThrow(/permission denied/);
+
+    const seen = await as(A, () =>
+      rows<{ title: string }>("SELECT title FROM busy_blocks WHERE owner_id = $1", [C]),
+    );
+    expect(seen).toEqual([]);
+  });
+
+  it("un admin ne peut pas changer le créateur d'un groupe ; il peut le renommer", async () => {
+    const g = await createGroup(A, "Groupe de A");
+    await expect(
+      as(A, () => db.query("UPDATE groups SET created_by = $1 WHERE id = $2", [C, g.id])),
+    ).rejects.toThrow(/permission denied/);
+    const renamed = await as(
+      A,
+      async () =>
+        (await db.query("UPDATE groups SET name = 'Nouveau nom' WHERE id = $1", [g.id]))
+          .affectedRows,
+    );
+    expect(renamed).toBe(1);
+  });
+
+  it("l'admin peut encore changer le rôle d'un membre, un membre non", async () => {
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    await join_(C, g.code);
+    const parA = await as(
+      A,
+      async () =>
+        (
+          await db.query(
+            "UPDATE group_members SET role = 'admin' WHERE group_id = $1 AND user_id = $2",
+            [g.id, B],
+          )
+        ).affectedRows,
+    );
+    expect(parA).toBe(1);
+    const parC = await as(
+      C,
+      async () =>
+        (
+          await db.query(
+            "UPDATE group_members SET role = 'admin' WHERE group_id = $1 AND user_id = $2",
+            [g.id, C],
+          )
+        ).affectedRows,
+    );
+    expect(parC).toBe(0);
+  });
+
+  it("anon ne peut exécuter aucune fonction de l'app", async () => {
+    for (const fn of [
+      "is_group_member(gen_random_uuid())",
+      "is_group_admin(gen_random_uuid())",
+      "shares_group_with(gen_random_uuid())",
+      "join_group_by_code('x')",
+    ]) {
+      await expect(as(null, () => db.query(`SELECT public.${fn}`))).rejects.toThrow(
+        /permission denied/,
+      );
+    }
+  });
+});

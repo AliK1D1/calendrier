@@ -42,13 +42,15 @@ export async function getMyProfile(
 
 /**
  * Mes lieux seulement. La RLS laisse aussi voir les lieux des membres de mes groupes : on
- * filtre donc sur `owner_id`.
+ * filtre donc sur `owner_id`. Les lieux favoris d'un groupe (`is_group_favorite`, liés à un
+ * groupe) sont gérés dans la page du groupe, pas ici.
  */
 export async function getMyPlaces(supabase: SupabaseClient, userId: string): Promise<MyPlace[]> {
   const { data, error } = await supabase
     .from("places")
     .select("id, name, lat, lng")
     .eq("owner_id", userId)
+    .eq("is_group_favorite", false)
     .order("created_at", { ascending: true })
     .returns<MyPlace[]>();
   if (error) throw new Error(`Lecture des lieux : ${error.message}`);
@@ -106,4 +108,25 @@ export async function getMyQuietHours(
     return null;
   }
   return data ?? { unavailable_before: null, unavailable_after: null };
+}
+
+/**
+ * Mon réglage de confidentialité (colonne de la migration 0006) : vrai = les membres de mes
+ * groupes voient « Occupé » au lieu du titre de mes blocs. `null` si on ne peut pas le lire
+ * (migration 0006 pas encore appliquée).
+ */
+export async function getMyPrivacy(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<boolean | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("hide_block_titles")
+    .eq("id", userId)
+    .maybeSingle<{ hide_block_titles: boolean }>();
+  if (error) {
+    console.error("Profil (confidentialité) :", error.code, error.message);
+    return null;
+  }
+  return data?.hide_block_titles ?? true;
 }

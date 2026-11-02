@@ -65,6 +65,8 @@ manquent, chacune dans une nouvelle requête du SQL Editor :
 | `supabase/migration-0002.sql` | Revue sécurité du segment 6 (droits par colonne, EXECUTE retiré à anon)                           |
 | `supabase/migration-0003.sql` | Segment 7 : `profiles.onboarded_at`, nom de lieu ≤ 100 caractères, fonction `complete_onboarding` |
 | `supabase/migration-0004.sql` | Segment 8 : `profiles.unavailable_before` / `unavailable_after` (heures où je ne sors pas)        |
+| `supabase/migration-0005.sql` | Revue du segment 8 : limites des formulaires appliquées aussi par la BD                           |
+| `supabase/migration-0006.sql` | Segment 10 : groupes (confidentialité de l'horaire, lieux du groupe, code d'invitation, départs)  |
 
 Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
 (« already exists »).
@@ -227,6 +229,39 @@ Lecture du fichier (`src/lib/import/ics.ts`, fonction pure `parseIcs`, avec ical
   cours hebdomadaires, semaine de relâche exclue, changement d'heure, exception, UTC) et
   `src/lib/db/__tests__/rls.test.ts` (remplacement sur PGlite, RLS, tout ou rien).
 
+## Groupes et amis (segment 10)
+
+**Migration à appliquer : `supabase/migration-0006.sql`** (SQL Editor, une seule fois). Les
+anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 caractères.
+
+- **`/groupes`** : mes groupes (nombre de membres, rôle), créer un groupe (fonction
+  `create_group` : le créateur devient admin), coller un lien ou un code reçu.
+- **`/groupes/[id]`** (membres seulement ; sinon 404, même si le groupe existe) : lien
+  d'invitation à copier ou partager, **Nouveau lien** pour l'admin (`regenerate_invite_code` :
+  l'ancien lien cesse de marcher), membres, **Retirer** (admin), **Quitter**, lieux favoris du
+  groupe (recherche d'adresse + carte), et quand chacun est occupé (semaine type).
+- **`/rejoindre/[code]`** : si on n'est pas connecté, le middleware envoie vers
+  `/connexion?next=/rejoindre/<code>` puis ramène ici (après l'accueil de première connexion
+  s'il y a lieu). La page montre le nom du groupe (`group_invite_preview`) et demande de
+  **confirmer** : ouvrir un lien ne suffit pas à faire entrer quelqu'un dans un groupe.
+- **Confidentialité** (`/profil`, activée par défaut, `profiles.hide_block_titles`) : les
+  membres voient « Occupé », l'heure et le lieu, pas le titre. C'est la **base** qui l'applique :
+  `busy_blocks` n'est plus lisible que par son propriétaire (même par l'API REST avec la clé
+  anon) ; l'horaire des autres passe par la fonction `group_busy_blocks(gid)` (SECURITY
+  DEFINER, membres du groupe seulement), qui masque le titre.
+- **Lieux du groupe** : `places.group_id` + `is_group_favorite` (vont ensemble, contrainte).
+  Visibles et ajoutables seulement par les membres du groupe (pas par ceux qui partagent un
+  autre groupe avec l'auteur) ; on ne peut rattacher un lieu qu'à un groupe dont on est membre ;
+  l'auteur ou un admin le supprime. Ils n'apparaissent pas dans « Mes lieux ».
+- **Départs** : un membre se retire, l'admin retire un autre membre. Si le dernier admin part,
+  le membre le plus ancien devient admin ; si le dernier membre part, le groupe est supprimé
+  (avec ses lieux et ses plans). Rétrograder le dernier admin est refusé.
+- Les visiteurs non connectés (`anon`) ne peuvent exécuter aucune fonction (EXECUTE retiré
+  explicitement : Supabase le donne par défaut aux nouvelles fonctions).
+- Tests : `src/lib/db/__tests__/rls.test.ts` (PGlite, comptes A et B + C hors groupe, requêtes
+  directes sur les tables comme par l'API REST, migration 0006 sur une base en 0005 avec des
+  données) et `src/lib/groups/__tests__/`.
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -244,19 +279,20 @@ Lecture du fichier (`src/lib/import/ics.ts`, fonction pure `parseIcs`, avec ical
 
 ## État des segments
 
-| #   | Segment                       | État    |
-| --- | ----------------------------- | ------- |
-| 0   | Mise en place du projet       | Fait    |
-| 1   | Types et données de test      | Fait    |
-| 2   | Fenêtres libres               | Fait    |
-| 3   | Temps de trajet (estimation)  | Fait    |
-| 4   | Recherche de rencontres       | Fait    |
-| 5   | Classement des propositions   | Fait    |
-| 6   | Base de données et comptes    | Fait    |
-| 7   | Mes lieux                     | Fait    |
-| 8   | Mon horaire (saisie manuelle) | Fait    |
-| 9   | Import d'horaire .ics         | Fait    |
-| 10+ | Groupes, app…                 | À faire |
+| #   | Segment                        | État    |
+| --- | ------------------------------ | ------- |
+| 0   | Mise en place du projet        | Fait    |
+| 1   | Types et données de test       | Fait    |
+| 2   | Fenêtres libres                | Fait    |
+| 3   | Temps de trajet (estimation)   | Fait    |
+| 4   | Recherche de rencontres        | Fait    |
+| 5   | Classement des propositions    | Fait    |
+| 6   | Base de données et comptes     | Fait    |
+| 7   | Mes lieux                      | Fait    |
+| 8   | Mon horaire (saisie manuelle)  | Fait    |
+| 9   | Import d'horaire .ics          | Fait    |
+| 10  | Groupes et amis                | Fait    |
+| 11+ | Vue « quand on peut se voir »… | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 

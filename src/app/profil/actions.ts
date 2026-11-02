@@ -45,3 +45,21 @@ export async function enregistrerHeuresCalmes(input: unknown): Promise<ActionRes
   revalidatePath("/horaire");
   return { ok: true };
 }
+
+/** Confidentialité : les membres de mes groupes voient « Occupé » au lieu de mes titres. */
+export async function enregistrerConfidentialite(hideTitles: unknown): Promise<ActionResult> {
+  if (typeof hideTitles !== "boolean") return fail("Réglage invalide.");
+  const ctx = await requireUser();
+  if (!ctx.ok) return fail(ctx.error);
+
+  const { data, error } = await ctx.supabase
+    .from("profiles")
+    .update({ hide_block_titles: hideTitles })
+    .eq("id", ctx.user.id)
+    .select("id");
+  if (error) return fail(dbErrorMessage("Confidentialité", error));
+  if (!data?.length) return fail("Profil introuvable.");
+  revalidatePath("/profil");
+  revalidatePath("/groupes", "layout");
+  return { ok: true };
+}

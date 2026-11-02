@@ -1,6 +1,8 @@
+import { House } from "lucide-react";
 import Link from "next/link";
 
 const LIENS = [
+  { href: "/groupes", label: "Groupes" },
   { href: "/horaire", label: "Horaire" },
   { href: "/lieux", label: "Lieux" },
   { href: "/profil", label: "Profil" },
@@ -12,10 +14,11 @@ export function SiteHeader() {
     <header className="bg-background/95 sticky top-0 z-10 border-b backdrop-blur">
       <nav
         aria-label="Navigation principale"
-        className="mx-auto flex h-12 max-w-3xl items-center gap-4 px-4 text-sm"
+        className="mx-auto flex h-12 max-w-3xl items-center gap-3 px-4 text-sm sm:gap-4"
       >
-        <Link href="/" className="font-semibold">
-          Temps libre commun
+        <Link href="/" className="font-semibold" aria-label="Accueil">
+          <House className="size-5 sm:hidden" aria-hidden />
+          <span className="hidden sm:inline">Temps libre commun</span>
         </Link>
         <span className="flex-1" />
         {LIENS.map((l) => (

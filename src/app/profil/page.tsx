@@ -5,10 +5,11 @@ import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getMyPlaces, getMyProfile, getMyQuietHours } from "@/lib/profile";
+import { getMyPlaces, getMyPrivacy, getMyProfile, getMyQuietHours } from "@/lib/profile";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+import { PrivacyForm } from "./privacy-form";
 import { ProfileForm } from "./profile-form";
 import { QuietHoursForm } from "./quiet-hours-form";
 
@@ -21,10 +22,11 @@ export default async function Profil() {
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/connexion?next=/profil");
 
-  const [profile, places, quietRow] = await Promise.all([
+  const [profile, places, quietRow, hideTitles] = await Promise.all([
     getMyProfile(supabase, data.user.id),
     getMyPlaces(supabase, data.user.id),
     getMyQuietHours(supabase, data.user.id),
+    getMyPrivacy(supabase, data.user.id),
   ]);
   const quiet = quietRow
     ? quietHoursFromDb(quietRow.unavailable_before, quietRow.unavailable_after)
@@ -67,6 +69,25 @@ export default async function Profil() {
                 La base de données n&apos;est pas à jour : applique supabase/migration-0004.sql
                 (voir README).
               </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Confidentialité</CardTitle>
+            <CardDescription>
+              Ce que les membres de tes groupes voient de ton horaire. Ton nom et tes lieux restent
+              visibles pour qu&apos;on puisse calculer les trajets.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {hideTitles === null ? (
+              <p role="alert" className="text-destructive text-sm">
+                La base de données n&apos;est pas à jour : applique supabase/migration-0006.sql
+                (voir README).
+              </p>
+            ) : (
+              <PrivacyForm hideTitles={hideTitles} />
             )}
           </CardContent>
         </Card>

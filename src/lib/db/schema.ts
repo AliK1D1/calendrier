@@ -73,6 +73,11 @@ export const profiles = pgTable(
     onboarded_at: timestamp("onboarded_at", { withTimezone: true, mode: "string" }),
     unavailable_before: time("unavailable_before"),
     unavailable_after: time("unavailable_after"),
+    /**
+     * Confidentialité : vrai (par défaut) = les membres de mes groupes voient « Occupé » et le
+     * lieu, pas le titre de mes blocs. Appliqué par la BD (fonction `group_busy_blocks`).
+     */
+    hide_block_titles: boolean("hide_block_titles").notNull().default(true),
     created_at: createdAt(),
   },
   (t) => [
@@ -85,7 +90,11 @@ export const profiles = pgTable(
   ],
 );
 
-/** Lieu enregistré par un utilisateur (maison, cégep, café favori du groupe…). */
+/**
+ * Lieu enregistré par un utilisateur (maison, cégep…) ou lieu favori d'un groupe (café,
+ * parc…) : `group_id` renseigné et `is_group_favorite` vrai (les deux vont ensemble). Un lieu
+ * de groupe n'est visible que par les membres de ce groupe (RLS, migration 0006).
+ */
 export const places = pgTable(
   "places",
   {
@@ -98,10 +107,13 @@ export const places = pgTable(
     lat: doublePrecision("lat").notNull(),
     lng: doublePrecision("lng").notNull(),
     is_group_favorite: boolean("is_group_favorite").notNull().default(false),
+    group_id: uuid("group_id").references((): AnyPgColumn => groups.id, { onDelete: "cascade" }),
     created_at: createdAt(),
   },
   (t) => [
     index("places_owner_idx").on(t.owner_id),
+    index("places_group_idx").on(t.group_id),
+    check("places_group_favorite_link", sql`${t.is_group_favorite} = (${t.group_id} is not null)`),
     check("places_lat_range", sql`${t.lat} between -90 and 90`),
     check("places_lng_range", sql`${t.lng} between -180 and 180`),
     check("places_name_not_blank", sql`length(trim(${t.name})) > 0`),
@@ -157,7 +169,11 @@ export const busyBlocks = pgTable(
   ],
 );
 
-/** Groupe d'amis. `invite_code` : code du lien d'invitation (généré automatiquement). */
+/**
+ * Groupe d'amis. `invite_code` : code du lien d'invitation, 32 caractères hexadécimaux
+ * aléatoires (122 bits), régénérable par l'admin (`regenerate_invite_code`). On crée un
+ * groupe avec `create_group` et on le rejoint avec `join_group_by_code` (migration 0006).
+ */
 export const groups = pgTable(
   "groups",
   {
@@ -165,7 +181,7 @@ export const groups = pgTable(
     name: text("name").notNull(),
     invite_code: text("invite_code")
       .notNull()
-      .default(sql`substr(replace(gen_random_uuid()::text, '-', ''), 1, 12)`),
+      .default(sql`replace(gen_random_uuid()::text, '-', '')`),
     created_by: uuid("created_by")
       .notNull()
       .default(sql`auth.uid()`)
@@ -175,6 +191,8 @@ export const groups = pgTable(
   (t) => [
     uniqueIndex("groups_invite_code_key").on(t.invite_code),
     check("groups_name_not_blank", sql`length(trim(${t.name})) > 0`),
+    check("groups_name_length", sql`length(${t.name}) <= 60`),
+    check("groups_invite_code_format", sql`${t.invite_code} ~ '^[0-9a-f]{32}$'`),
   ],
 );
 

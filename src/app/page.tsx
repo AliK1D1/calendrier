@@ -39,7 +39,7 @@ export default async function Accueil() {
   if (supabase && user) return <AccueilConnecte supabase={supabase} user={user} />;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-4 py-12 sm:py-20">
+    <main className="grille-4 mx-auto min-h-dvh max-w-3xl content-start gap-y-8 px-4 py-12 sm:py-20">
       <header className="flex flex-col gap-3">
         <LogoMark className="size-10 rounded-xl [&>svg]:size-5" />
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Temps libre commun</h1>
@@ -101,7 +101,7 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
+      <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold tracking-tight break-words">
             {prenom ? `Salut ${prenom} !` : "Salut !"}
@@ -114,7 +114,7 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
         </header>
 
         {ready && plan.next && (
-          <Button asChild size="lg" className="sm:self-start">
+          <Button asChild size="lg" className="sm:justify-self-start">
             <Link href={plan.next.href}>
               <CalendarSearch /> Trouver un moment
             </Link>

@@ -25,7 +25,7 @@ export function FlashMessage({ message, onClose }: { message: Flash; onClose: ()
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      className="pointer-events-none fixed inset-x-0 bottom-[var(--barre-onglets)] z-20 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:bottom-0"
     >
       {message && (
         <p
@@ -42,7 +42,7 @@ export function FlashMessage({ message, onClose }: { message: Flash; onClose: ()
             type="button"
             onClick={onClose}
             aria-label="Fermer le message"
-            className="text-muted-foreground hover:text-foreground -m-1 p-1"
+            className="text-muted-foreground hover:text-foreground -my-2.5 -mr-2 flex size-10 shrink-0 items-center justify-center rounded-md"
           >
             <X className="size-4" />
           </button>

@@ -58,7 +58,7 @@
   --secondary: oklch(0.95 0.008 255);
   --secondary-foreground: oklch(0.28 0.03 260);
   --muted: oklch(0.955 0.006 255);
-  --muted-foreground: oklch(0.5 0.02 260);
+  --muted-foreground: oklch(0.46 0.02 260);
   --accent: oklch(0.955 0.015 258);
   --accent-foreground: oklch(0.28 0.05 260);
   --destructive: oklch(0.56 0.2 27);
@@ -69,6 +69,26 @@
   --border: oklch(0.915 0.008 255);
   --input: oklch(0.87 0.01 255);
   --ring: oklch(0.49 0.13 258);
+  --gouttiere: 1rem;
+  /* Hauteur de la barre d'onglets du bas (téléphone), sans la zone du geste d'accueil. */
+  --barre-onglets: 3.75rem;
+}
+
+@media (min-width: 40rem) {
+  :root {
+    --gouttiere: 1.5rem;
+  }
+}
+
+/*
+ * Téléphone : petits textes (aides, légendes) à 13 px au lieu de 12 px, plus lisibles à bout
+ * de bras. L'ordinateur garde 12 px.
+ */
+@media (max-width: 39.999rem) {
+  :root {
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: calc(1.125 / 0.8125);
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -99,6 +119,37 @@
   }
 }
 
+/*
+ * Grille mobile à 4 colonnes (segment mobile). Marges de 16 px et gouttière de 16 px au
+ * téléphone, 24 px à partir de 640 px. Les enfants prennent toute la largeur par défaut ;
+ * `grille-4-demi` les met sur 2 colonnes (paires de boutons, Début/Fin…) et `grille-4-quart`
+ * sur 1 colonne (onglets du bas). Le défaut a une spécificité nulle (`:where`), donc un
+ * `col-span-*` sur un enfant l'emporte toujours.
+ */
+@utility grille-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: var(--gouttiere);
+  & > :where(*) {
+    grid-column: 1 / -1;
+  }
+}
+@utility grille-4-demi {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem var(--gouttiere);
+  & > :where(*) {
+    grid-column: span 2 / span 2;
+  }
+}
+@utility grille-4-quart {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  & > :where(*) {
+    grid-column: span 1 / span 1;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -119,6 +170,29 @@
   [role="button"]:not(:disabled),
   summary {
     cursor: pointer;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Pas de délai ni de zoom au double-toucher sur les commandes ; pas de flash gris (iOS). */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  label,
+  summary,
+  [role="button"],
+  [role="tab"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* La barre d'onglets du bas (téléphone) ne doit cacher ni la fin de la page ni le pied. */
+  @media (max-width: 39.999rem) {
+    body:has([data-barre-onglets]) {
+      padding-bottom: calc(var(--barre-onglets) + env(safe-area-inset-bottom));
+    }
   }
   dialog::backdrop {
     backdrop-filter: blur(2px);

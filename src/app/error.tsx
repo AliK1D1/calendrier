@@ -18,7 +18,7 @@ export default function Erreur({
   }, [error]);
 
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-12">
+    <main className="grille-4 mx-auto max-w-xl content-start gap-y-4 px-4 py-12">
       <h1 className="text-2xl font-bold tracking-tight">Oups, quelque chose a planté</h1>
       <p className="text-muted-foreground">
         Rien n&apos;a été perdu. Réessaie ; si ça recommence, attends une minute (la connexion ou le

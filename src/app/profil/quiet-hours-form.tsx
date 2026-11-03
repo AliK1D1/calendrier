@@ -17,7 +17,7 @@ function options(from: number, to: number, current: number | null): number[] {
 }
 
 const SELECT =
-  "border-input focus-visible:ring-ring/50 h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
+  "border-input focus-visible:ring-ring/50 h-11 sm:h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
 
 /** « Heures où je ne sors pas » : avant telle heure, après telle heure. */
 export function QuietHoursForm({ before, after }: { before: number | null; after: number | null }) {

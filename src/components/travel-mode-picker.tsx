@@ -26,7 +26,7 @@ export function TravelModePicker({
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-2 text-sm font-medium">Comment te déplaces-tu d&apos;habitude ?</legend>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grille-4-demi">
         {(Object.keys(TRAVEL_MODE_LABELS) as TravelMode[]).map((mode) => {
           const Icon = ICONS[mode];
           return (

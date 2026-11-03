@@ -159,7 +159,7 @@ function ProposeForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grille-4-demi">
         <div className="col-span-2 flex flex-col gap-2 sm:col-span-1">
           <Label htmlFor={`${id}-jour`}>Jour</Label>
           <Input
@@ -228,7 +228,7 @@ function ProposeForm({
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-sm font-medium">Qui est invité ?</legend>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grille-4-demi">
           {[
             [true, "Tout le groupe"],
             [false, "Certaines personnes"],

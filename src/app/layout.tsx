@@ -27,6 +27,9 @@ export const metadata: Metadata = {
 
 /** Couleur de la barre du navigateur sur téléphone, assortie au fond (clair ou sombre). */
 export const viewport: Viewport = {
+  // Le contenu va jusqu'aux bords (encoche, geste d'accueil) ; les marges sûres sont gérées
+  // avec `env(safe-area-inset-*)` dans l'en-tête, la barre d'onglets et les messages.
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f8f9fb" },
     { media: "(prefers-color-scheme: dark)", color: "#0f1218" },

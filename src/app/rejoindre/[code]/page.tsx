@@ -59,7 +59,7 @@ export default async function Rejoindre({ params }: { params: Promise<{ code: st
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto flex max-w-xl flex-col gap-6 px-4 py-6">
+      <main className="grille-4 mx-auto max-w-xl content-start gap-y-6 px-4 py-6">
         <h1 className="text-2xl font-bold tracking-tight">Invitation</h1>
         {preview === null ? (
           <Card>

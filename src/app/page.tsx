@@ -2,6 +2,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { CalendarSearch, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
+import { FreeNow } from "@/components/free-now";
 import { LogoMark } from "@/components/logo-mark";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
@@ -119,6 +120,9 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
             </Link>
           </Button>
         )}
+
+        {/* Bonus « Je suis libre maintenant » : dès qu'un groupe compte au moins un ami. */}
+        {profile?.home_place_id && groups.some((g) => g.memberCount >= 2) && <FreeNow />}
 
         {!ready && (
           <Card>

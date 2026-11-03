@@ -25,6 +25,7 @@ import {
   ProposeDialog,
   type ProposeDraft,
 } from "@/components/plans/propose-dialog";
+import { FreeNow } from "@/components/free-now";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,6 +72,8 @@ interface Props {
   planActions?: PlanActions;
   propose?: ProposeAction;
   search?: Parameters<typeof MeetupFinder>[0]["search"];
+  /** Action « Je suis libre maintenant » (remplaçable pour une page de démonstration). */
+  freeNowSearch?: Parameters<typeof FreeNow>[0]["search"];
 }
 
 const DEFAULT_PLAN_ACTIONS: PlanActions = { repondre: repondrePlan, annuler: annulerPlan };
@@ -315,6 +318,28 @@ export function GroupView(props: Props) {
               Tous mes plans
             </Link>
           </section>
+          <FreeNow
+            groupId={groupId}
+            onPropose={(m) =>
+              proposeFromSlot(
+                {
+                  key: `maintenant-${m.personId}`,
+                  kind: m.kind,
+                  placeId: m.placeId,
+                  placeName: m.placeName,
+                  start: m.start,
+                  end: m.end,
+                  dayLabel: m.dayLabel,
+                  timeLabel: m.timeLabel,
+                  durationMinutes: m.durationMinutes,
+                  travel: [],
+                  score: 0,
+                },
+                [myId, m.personId],
+              )
+            }
+            {...(props.freeNowSearch ? { search: props.freeNowSearch } : {})}
+          />
           <MeetupFinder
             groupId={groupId}
             myId={myId}

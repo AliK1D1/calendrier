@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PlaceInput, ProfileInput } from "@/lib/db/convert";
+import { searchFreeNow } from "@/lib/meetups/freeNow";
 import { type MeetupStore, searchGroupMeetups } from "@/lib/meetups/search";
 import { estimateTravelMinutes, type TravelTimeProvider } from "@/lib/scheduling/travel";
 import { createTravelProvider } from "@/lib/travel/env";
@@ -97,5 +98,24 @@ describe("Quand on peut se voir : vrai temps de trajet", () => {
     } finally {
       console.warn = original;
     }
+  });
+});
+
+describe("Je suis libre maintenant : limite d'appels par personne", () => {
+  it("chaque préparation passe la personne connectée comme clé de limite (revue 15.1)", async () => {
+    const seen: (string | undefined)[] = [];
+    const spy: TravelTimeProvider = {
+      minutes: async (from, to, mode) => estimateTravelMinutes(from, to, mode),
+      prefetch: async (_requests, options) => {
+        seen.push(options?.budgetKey);
+      },
+    };
+    const r = await searchFreeNow(
+      { ...store, myGroups: async () => ({ ok: true, value: [{ id: GROUP, name: "G" }] }) },
+      { groupId: null },
+      { userId: A, now: NOW, travel: spy },
+    );
+    expect(r.ok).toBe(true);
+    expect(seen).toEqual([A]);
   });
 });

@@ -10,6 +10,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { formatInTimeZone } from "date-fns-tz";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { type FreeNowStore, searchFreeNow, validateFreeNow } from "@/lib/meetups/freeNow";
 import {
   MAX_PROPOSALS_PER_DAY,
   type MeetupSearchInput,
@@ -548,5 +549,114 @@ describe("validateMeetupSearch", () => {
     );
     expect(bad({ groupId: "x" })).toBe(false);
     expect(validateMeetupSearch(null).ok).toBe(false);
+  });
+});
+
+// ─── « Je suis libre maintenant » (segment 18) ─────────────────────────────────────────────
+
+/** Magasin de « Je suis libre maintenant » : même lecture des groupes que l'app (RLS). */
+function pgliteFreeNowStore(uid: string): FreeNowStore {
+  return {
+    ...pgliteMeetupStore(uid),
+    async myGroups() {
+      try {
+        const value = await as(uid, () =>
+          rows<{ id: string; name: string }>("SELECT id, name FROM groups ORDER BY created_at"),
+        );
+        return { ok: true, value };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      }
+    },
+  };
+}
+
+async function freeNow(uid: string, now: Date, groupId: string | null = null) {
+  return searchFreeNow(
+    pgliteFreeNowStore(uid),
+    { groupId },
+    { userId: uid, now, travel: travel() },
+  );
+}
+
+describe("Je suis libre maintenant (BD → personnes libres d'ici 2 h)", () => {
+  it("mardi midi : Sam au cégep en personne, Maya en appel ; Zoé (aucun groupe en commun) jamais", async () => {
+    await seedPerson(ALI, ali);
+    await seedPerson(SAM, sam);
+    await seedPerson(MAYA, maya);
+    await seedPerson(ZOE, leo);
+    const g1 = await createGroupWith(ALI, [SAM]);
+    const g2 = await createGroupWith(MAYA, [ALI]);
+    await createGroupWith(SAM, [ZOE]); // Zoé partage un groupe avec Sam, pas avec ali
+
+    const r = await freeNow(ALI, at("mar", "12:00"));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.value.checked).toBe(2);
+    expect(r.value.windowLabel).toBe("12 h – 14 h");
+    expect(r.value.matches.map((m) => [m.name, m.kind, m.placeName, m.timeLabel])).toEqual([
+      ["Sam", "in-person", PLACES.cegepEM.name, "12 h – 12 h 30"],
+      ["Maya", "call", null, "12 h – 12 h 30"],
+    ]);
+    expect(r.value.matches[0]).toMatchObject({ myTravel: 0, theirTravel: 0, groups: ["Les amis"] });
+
+    // Seulement le groupe demandé.
+    const seul = await freeNow(ALI, at("mar", "12:00"), g1);
+    expect(seul.ok && seul.value.matches.map((m) => m.name)).toEqual(["Sam"]);
+    const autre = await freeNow(ALI, at("mar", "12:00"), g2);
+    expect(autre.ok && autre.value.matches.map((m) => m.name)).toEqual(["Maya"]);
+
+    // Sam ne voit que les membres de SES groupes (ali et Zoé), jamais Maya.
+    const vuParSam = await freeNow(SAM, at("mar", "12:00"));
+    if (!vuParSam.ok) throw new Error(vuParSam.error);
+    expect(vuParSam.value.checked).toBe(2);
+    expect(vuParSam.value.matches.map((m) => m.name)).not.toContain("Maya");
+  });
+
+  it("un groupe dont je ne suis pas membre : refusé, sans rien révéler", async () => {
+    await seedPerson(ALI, ali);
+    await seedPerson(SAM, sam);
+    await seedPerson(ZOE, maya);
+    const gid = await createGroupWith(SAM, [ZOE]);
+    expect(await freeNow(ALI, at("mar", "12:00"), gid)).toEqual({
+      ok: false,
+      error: "Groupe introuvable.",
+    });
+  });
+
+  it("sans lieu « maison », on le dit ; les membres sans maison sont nommés, pas calculés", async () => {
+    await seedPerson(ALI, ali);
+    await seedPerson(SAM, sam);
+    await createGroupWith(ALI, [SAM, NOA]);
+    const r = await freeNow(ALI, at("mar", "12:00"));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.value.incomplete).toEqual(["noa"]);
+    expect(r.value.checked).toBe(1);
+
+    const sansMaison = await freeNow(NOA, at("mar", "12:00"));
+    expect(sansMaison.ok).toBe(false);
+  });
+
+  it("le soir après 22 h ou en pleine semaine de cours : liste vide", async () => {
+    await seedPerson(ALI, ali);
+    await seedPerson(SAM, sam);
+    await createGroupWith(ALI, [SAM]);
+    const nuit = await freeNow(ALI, at("lun", "22:30"));
+    expect(nuit.ok && nuit.value.matches).toEqual([]);
+    const lundi = await freeNow(ALI, at("lun", "10:00"));
+    expect(lundi.ok && lundi.value.matches).toEqual([]);
+  });
+});
+
+describe("validateFreeNow", () => {
+  it("sans groupe : tous mes groupes ; groupe : identifiant valide seulement", () => {
+    expect(validateFreeNow(undefined)).toEqual({ ok: true, value: { groupId: null } });
+    expect(validateFreeNow({})).toEqual({ ok: true, value: { groupId: null } });
+    expect(validateFreeNow({ groupId: ALI.toUpperCase() })).toEqual({
+      ok: true,
+      value: { groupId: ALI },
+    });
+    expect(validateFreeNow({ groupId: "abc" }).ok).toBe(false);
+    expect(validateFreeNow({ groupId: 3 }).ok).toBe(false);
+    expect(validateFreeNow("x").ok).toBe(false);
   });
 });

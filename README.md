@@ -482,6 +482,23 @@ en plein écran, avec sa propre icône.
 - **Pas de service worker** : rien n'est mis en cache, donc aucune page connectée ni réponse
   `/api` ne peut être servie à la mauvaise personne ou périmée. L'app a besoin du réseau.
 
+### « Je suis libre maintenant »
+
+Bouton **Qui est libre ?** sur l'accueil (dès qu'un groupe compte un ami et que ma maison est
+choisie) et sur la page d'un groupe. Pour chaque membre de mes groupes (ou de ce groupe), il
+cherche la meilleure rencontre à deux qui tient dans les **2 prochaines heures** (au moins
+30 min, trajets et marge de 5 min compris) : en personne si possible (la plus tôt, puis le
+moins de trajet), sinon un appel. Sur la page du groupe, **Proposer ce moment** ouvre le
+formulaire de plan déjà rempli.
+
+- Logique pure : `src/lib/scheduling/freeNow.ts` (`findMeetupSoon`, qui réutilise
+  `findMeetupCandidates` et `findCallSlots`).
+- Service : `src/lib/meetups/freeNow.ts` (mêmes lectures RLS que « Quand on peut se voir »,
+  horaires par `group_busy_blocks`, lieux favoris d'un groupe seulement avec ses membres ;
+  au plus 10 groupes et 40 personnes).
+- Action : `chercherLibresMaintenant` (`src/app/groupes/meetup-actions.ts`) : compte dans la
+  limite des recherches de moments (20/min) et a sa propre limite (6/min par personne).
+
 ## Déploiement (Vercel) et vérification automatique (segment 17)
 
 L'app est en ligne : <https://calendrier-opal.vercel.app>. Le projet Vercel est relié au dépôt
@@ -570,7 +587,7 @@ Une PR dont les tests échouent ne peut alors plus être fusionnée.
 | 15  | Vrai temps de trajet (API)        | Fait     |
 | 16  | Import par capture d'écran / PDF  | À faire  |
 | 17  | Déploiement et CI                 | Fait     |
-| 18  | Bonus (PWA, …)                    | En cours |
+| 18  | Bonus (PWA, libre maintenant, …)  | En cours |
 
 ## Le cœur : `src/lib/scheduling/`
 

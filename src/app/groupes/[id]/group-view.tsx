@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
+import { type Flash, FlashMessage } from "@/components/flash-message";
 import { AddressSearch } from "@/components/places/address-search";
 import { type MapPoint, PlaceMapLazy } from "@/components/places/place-map-lazy";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import type { GeocodeResult } from "@/lib/geocoding/nominatim";
 import type { GroupFavorite, GroupMember } from "@/lib/groups/queries";
 import { PLACE_NAME_MAX, roundCoord } from "@/lib/places/validation";
+import { plural } from "@/lib/ux/plural";
 
 import {
   ajouterFavori,
@@ -53,7 +55,6 @@ interface Props {
   schedules: MemberSchedule[];
 }
 
-type Message = { type: "ok" | "erreur"; text: string } | null;
 type Result = { ok: true } | { ok: false; error: string };
 
 interface Draft {
@@ -68,7 +69,8 @@ export function GroupView(props: Props) {
   const { groupId, name, myId, isAdmin, members, favorites, schedules } = props;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<Message>(null);
+  const [message, setMessage] = useState<Flash>(null);
+  const clearMessage = useCallback(() => setMessage(null), []);
   const [link, setLink] = useState(props.inviteLink);
   const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -144,6 +146,72 @@ export function GroupView(props: Props) {
     setCanShare(typeof navigator.share === "function");
   }, []);
 
+  // Seul dans le groupe : inviter passe avant la recherche (impossible à deux de moins).
+  const alone = members.length < 2;
+  const invite = (
+    <Card id="inviter" className="scroll-mt-16">
+      <CardHeader>
+        <CardTitle>{alone ? "Invite tes amis pour commencer" : "Inviter des amis"}</CardTitle>
+        <CardDescription>
+          Envoie ce lien : la personne se connecte, puis confirme pour rejoindre le groupe. Sans le
+          lien, personne ne peut voir ni rejoindre le groupe.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <Label htmlFor="lien-invitation" className="sr-only">
+          Lien d&apos;invitation
+        </Label>
+        <Input
+          id="lien-invitation"
+          readOnly
+          value={link}
+          onFocus={(e) => e.currentTarget.select()}
+          className="font-mono text-xs"
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" onClick={copy}>
+            {copied ? <Check /> : <Copy />} {copied ? "Lien copié" : "Copier le lien"}
+          </Button>
+          {canShare && (
+            <Button type="button" variant="outline" onClick={share}>
+              <Share2 /> Partager
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Créer un nouveau lien ? L'ancien lien ne marchera plus (les membres actuels restent).",
+                  )
+                ) {
+                  setMessage(null);
+                  startTransition(async () => {
+                    const r = await regenererCode(groupId);
+                    if (r.ok) {
+                      setLink(link.replace(/[0-9a-f]{32}$/, r.code));
+                      setMessage({
+                        type: "ok",
+                        text: "Nouveau lien créé. L'ancien ne marche plus.",
+                      });
+                    } else {
+                      setMessage({ type: "erreur", text: r.error });
+                    }
+                  });
+                }
+              }}
+            >
+              <RefreshCw /> Nouveau lien
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
@@ -154,83 +222,22 @@ export function GroupView(props: Props) {
         </p>
       </header>
 
-      <MeetupFinder groupId={groupId} myId={myId} members={members} />
-
-      {message && (
-        <p
-          role={message.type === "erreur" ? "alert" : "status"}
-          className={
-            message.type === "erreur"
-              ? "border-destructive/40 text-destructive rounded-md border p-3 text-sm"
-              : "rounded-md border border-emerald-500/40 p-3 text-sm"
-          }
-        >
-          {message.text}
-        </p>
+      {alone ? (
+        <>
+          {invite}
+          <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
+            Dès qu&apos;un ami aura rejoint le groupe, tu pourras chercher ici les moments où vous
+            pouvez vraiment vous voir, trajets compris.
+          </p>
+        </>
+      ) : (
+        <>
+          <MeetupFinder groupId={groupId} myId={myId} members={members} />
+          {invite}
+        </>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Inviter des amis</CardTitle>
-          <CardDescription>
-            Envoie ce lien : la personne se connecte, puis confirme pour rejoindre le groupe. Sans
-            le lien, personne ne peut voir ni rejoindre le groupe.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Label htmlFor="lien-invitation" className="sr-only">
-            Lien d&apos;invitation
-          </Label>
-          <Input
-            id="lien-invitation"
-            readOnly
-            value={link}
-            onFocus={(e) => e.currentTarget.select()}
-            className="font-mono text-xs"
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={copy}>
-              {copied ? <Check /> : <Copy />} {copied ? "Lien copié" : "Copier le lien"}
-            </Button>
-            {canShare && (
-              <Button type="button" variant="outline" onClick={share}>
-                <Share2 /> Partager
-              </Button>
-            )}
-            {isAdmin && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Créer un nouveau lien ? L'ancien lien ne marchera plus (les membres actuels restent).",
-                    )
-                  ) {
-                    setMessage(null);
-                    startTransition(async () => {
-                      const r = await regenererCode(groupId);
-                      if (r.ok) {
-                        setLink(link.replace(/[0-9a-f]{32}$/, r.code));
-                        setMessage({
-                          type: "ok",
-                          text: "Nouveau lien créé. L'ancien ne marche plus.",
-                        });
-                      } else {
-                        setMessage({ type: "erreur", text: r.error });
-                      }
-                    });
-                  }
-                }}
-              >
-                <RefreshCw /> Nouveau lien
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
+      <FlashMessage message={message} onClose={clearMessage} />
       <section aria-labelledby="membres" className="flex flex-col gap-3">
         <h2 id="membres" className="text-lg font-semibold">
           Membres
@@ -413,7 +420,7 @@ export function GroupView(props: Props) {
               {s.displayName}
               {s.userId === myId ? " (toi)" : ""}{" "}
               <span className="text-muted-foreground text-sm font-normal">
-                · {s.lines.length === 0 ? "rien d'entré" : `${s.lines.length} bloc(s)`}
+                · {s.lines.length === 0 ? "rien d'entré" : plural(s.lines.length, "bloc")}
               </span>
             </summary>
             {s.lines.length > 0 && (

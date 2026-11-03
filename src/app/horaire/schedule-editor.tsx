@@ -3,8 +3,9 @@
 import { format, parseISO } from "date-fns";
 import { frCA } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, MapPin, Pencil, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
+import { type Flash, FlashMessage } from "@/components/flash-message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_GRID_RANGE, layoutDay, selectionFromDrag } from "@/lib/scheduling/weekGrid";
@@ -77,6 +78,8 @@ export function ScheduleEditor({
   const [draft, setDraft] = useState<BlockDraft | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const flash = useMemo<Flash>(() => (message ? { type: "ok", text: message } : null), [message]);
+  const clearMessage = useCallback(() => setMessage(null), []);
 
   const placeName = useMemo(() => new Map(places.map((p) => [p.id, p.name])), [places]);
   const colorOf = useMemo(() => {
@@ -179,6 +182,9 @@ export function ScheduleEditor({
   const span = RANGE.end - RANGE.start;
   const pct = (m: number) => `${((m - RANGE.start) / span) * 100}%`;
 
+  // Jours de la semaine affichée qui ont au moins un bloc (point sous l'onglet, au téléphone).
+  const busyDays = new Set(days.filter((day) => blocksOnDay(blocks, day).length > 0));
+
   const hiddenThisWeek = days.flatMap((day) =>
     layoutDay(blocksOnDay(blocks, day), RANGE).hidden.map((b) => ({ day, b })),
   );
@@ -200,11 +206,7 @@ export function ScheduleEditor({
 
   return (
     <div className="flex flex-col gap-4">
-      {message && (
-        <p role="status" className="rounded-md border border-emerald-500/40 p-3 text-sm">
-          {message}
-        </p>
-      )}
+      <FlashMessage message={flash} onClose={clearMessage} />
 
       {/* Navigation entre les semaines */}
       <div className="flex items-center gap-2">
@@ -279,6 +281,14 @@ export function ScheduleEditor({
           >
             <span>{WEEKDAY_SHORT[weekdayOf(day)].replace(".", "")}</span>
             <span className="text-sm font-semibold">{dayLabel(day, "d")}</span>
+            <span
+              aria-hidden
+              className={cn(
+                "mt-0.5 size-1.5 rounded-full",
+                busyDays.has(day) ? "bg-current" : "bg-transparent",
+              )}
+            />
+            {busyDays.has(day) && <span className="sr-only"> (occupé)</span>}
           </button>
         ))}
       </div>

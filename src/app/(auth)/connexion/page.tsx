@@ -37,8 +37,8 @@ export default async function Connexion({ searchParams }: { searchParams: Search
         <CardHeader>
           <CardTitle className="text-2xl">Connexion</CardTitle>
           <CardDescription>
-            Pas besoin de mot de passe : on t&apos;envoie un lien par courriel. Pas encore de compte
-            ? Il est créé automatiquement.
+            Le plus simple : on t&apos;envoie un lien de connexion par courriel. Pas encore de
+            compte ? Il est créé automatiquement.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">

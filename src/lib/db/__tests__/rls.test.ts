@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0012.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0013.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -127,6 +127,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0010.sql",
       "supabase/migration-0011.sql",
       "supabase/migration-0012.sql",
+      "supabase/migration-0013.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -1904,6 +1905,59 @@ describe("Disponibilités ponctuelles (segment 18) : RLS, droits, limites", () =
     await addSlot(C);
   });
 
+  it("revue 18.1 : ramener une vieille disponibilité dans l'année qui vient compte dans les 100", async () => {
+    // Avant : la limite n'était vérifiée qu'à l'ajout. En gardant ses disponibilités passées,
+    // puis en changeant leur jour, on dépassait 100 sans limite (100 de plus chaque jour).
+    await as(A, () =>
+      rows(
+        `INSERT INTO availability_slots (day, start_time, end_time)
+         SELECT current_date + (g % 300), '10:00', '11:00' FROM generate_series(1, 100) g`,
+      ),
+    );
+    // Le temps passe : 5 disponibilités de A sont maintenant dans le passé.
+    await db.exec("ALTER TABLE availability_slots DISABLE TRIGGER availability_slots_limits");
+    await db.query(
+      `INSERT INTO availability_slots (owner_id, day, start_time, end_time)
+       SELECT $1, current_date - 5 - g, '10:00', '11:00' FROM generate_series(1, 5) g`,
+      [A],
+    );
+    await db.exec("ALTER TABLE availability_slots ENABLE TRIGGER availability_slots_limits");
+    await expect(
+      as(A, () =>
+        rows("UPDATE availability_slots SET day = current_date + 2 WHERE day < current_date - 1"),
+      ),
+    ).rejects.toThrow(/100 au maximum/);
+    const [{ n }] = await as(A, () =>
+      rows<{ n: number }>(
+        "SELECT count(*)::int AS n FROM availability_slots WHERE day >= current_date - 1",
+      ),
+    );
+    expect(n).toBe(100);
+    // Ce qui marchait avant marche encore : changer le jour ou les heures d'une disponibilité
+    // à venir, même à 100, et modifier la note d'une vieille.
+    await as(A, () =>
+      rows(
+        "UPDATE availability_slots SET day = day + 1, start_time = '09:00' WHERE id = (SELECT id FROM availability_slots WHERE day >= current_date ORDER BY day LIMIT 1)",
+      ),
+    );
+    await as(A, () =>
+      rows("UPDATE availability_slots SET note = 'vieux' WHERE day < current_date - 1"),
+    );
+    // Sous la limite, ramener une vieille disponibilité est permis.
+    await as(A, () =>
+      rows(
+        "DELETE FROM availability_slots WHERE id IN (SELECT id FROM availability_slots WHERE day >= current_date ORDER BY day LIMIT 3)",
+      ),
+    );
+    expect(
+      await as(A, () =>
+        rows(
+          "UPDATE availability_slots SET day = current_date + 2 WHERE id IN (SELECT id FROM availability_slots WHERE day < current_date - 1 LIMIT 3) RETURNING id",
+        ),
+      ),
+    ).toHaveLength(3);
+  });
+
   it("les membres d'un groupe voient le jour et les heures (jamais la note) ; les autres, rien", async () => {
     await addSlot(A, 3, "13:00", "18:00", "secret");
     await addSlot(C, 3, "09:00", "10:00");
@@ -1970,6 +2024,51 @@ describe("Disponibilités ponctuelles : migration 0012 sur une base en 0011 avec
       await expect(
         ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0012.sql"), "utf8")),
       ).rejects.toThrow(/already exists/);
+    } finally {
+      await ancienne.close();
+    }
+  }, 60_000);
+});
+
+describe("Revue 18.1 : migration 0013 sur une base en 0012 avec des données", () => {
+  it("s'applique seule (supabase/migration-0013.sql), garde les données, et peut être relancée", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      for (const tag of [
+        "0000_schema",
+        "0001_rls_triggers",
+        "0002_review_hardening",
+        "0003_onboarding",
+        "0004_quiet_hours",
+        "0005_review_limits",
+        "0006_groups",
+        "0007_review_kick_new_code",
+        "0008_review_row_limits",
+        "0009_segment12_meetup_invites",
+        "0010_review_plan_privacy",
+        "0011_segment13_study_planner",
+        "0012_segment18_availability_slots",
+      ]) {
+        await ancienne.exec(drizzleSql(tag));
+      }
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      await ancienne.query(
+        `INSERT INTO availability_slots (owner_id, day, start_time, end_time, note)
+         VALUES ($1, current_date + 3, '13:00', '18:00', 'pas de shift')`,
+        [A],
+      );
+      const migration = readFileSync(join(ROOT, "supabase/migration-0013.sql"), "utf8");
+      await ancienne.exec(migration);
+      await ancienne.exec(migration);
+      const { rows: dispos } = await ancienne.query("SELECT note FROM availability_slots");
+      expect(dispos).toEqual([{ note: "pas de shift" }]);
+      const { rows: droits } = await ancienne.query<{ ok: boolean }>(
+        "SELECT has_function_privilege('authenticated', 'public.enforce_availability_limits()', 'EXECUTE') AS ok",
+      );
+      expect(droits).toEqual([{ ok: false }]);
     } finally {
       await ancienne.close();
     }

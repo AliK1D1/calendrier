@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { requiredMinutes } from "@/lib/scheduling/studyPlanner";
 import { TIME_ZONE } from "@/lib/scheduling/time";
-import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
+import { getTravelProvider } from "@/lib/travel/server";
 import { studyOverview } from "@/lib/study/service";
 import { supabaseStudyStore } from "@/lib/study/supabaseStore";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -25,7 +25,7 @@ export default async function Etude() {
 
   const overview = await studyOverview(
     supabaseStudyStore(supabase, userId),
-    { userId, now, travel: new EstimatedTravelProvider() },
+    { userId, now, travel: getTravelProvider() },
     requiredMinutes,
   );
 

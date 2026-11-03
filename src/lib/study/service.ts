@@ -35,7 +35,7 @@ import {
   rescheduleStudySessions,
 } from "@/lib/scheduling/studyPlanner";
 import { minutesBetween, TIME_ZONE } from "@/lib/scheduling/time";
-import type { TravelTimeProvider } from "@/lib/scheduling/travel";
+import { prefetchRequestsFor, type TravelTimeProvider } from "@/lib/scheduling/travel";
 import type { Deadline, Person, StudyPreferences, StudySession } from "@/lib/scheduling/types";
 import { formatClockFr, shiftDay } from "@/lib/scheduling/weeklyBlocks";
 
@@ -150,6 +150,12 @@ export async function loadStudy(
   const { people } = toPeople([profile.value], [...ownPlaces, ...others], nonStudy, range);
   const person = people[0];
   if (!person) return { ok: false, error: NO_HOME };
+  // Vrais temps de trajet entre mes lieux (segment 15), préparés avant tout calcul.
+  if (deps.travel.prefetch) {
+    await deps.travel
+      .prefetch(prefetchRequestsFor([person]))
+      .catch((e: unknown) => console.warn("Temps de trajet (préparation) :", e));
+  }
 
   const accepted = myBlocks
     .map((b) => toAcceptedSession(b, person.homePlaceId))

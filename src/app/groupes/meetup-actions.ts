@@ -12,10 +12,7 @@ import {
   searchGroupMeetups,
   validateMeetupSearch,
 } from "@/lib/meetups/search";
-import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
-
-/** Estimation partagée entre les requêtes (cache borné). */
-const travel = new EstimatedTravelProvider();
+import { getTravelProvider } from "@/lib/travel/server";
 
 /** Recherches par minute et par personne : le calcul occupe le serveur (revue de sécurité). */
 const RECHERCHES_PAR_MINUTE = 20;
@@ -92,7 +89,7 @@ export async function chercherMoments(raw: unknown): Promise<Result<MeetupSearch
     return await searchGroupMeetups(supabaseMeetupStore(ctx.supabase), input.value, {
       userId: ctx.user.id,
       now: new Date(),
-      travel,
+      travel: getTravelProvider(),
     });
   } catch (e) {
     console.error("Moments :", e);

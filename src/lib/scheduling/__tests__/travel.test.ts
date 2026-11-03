@@ -8,6 +8,7 @@ import {
   SPEED_KMH,
   estimateTravelMinutes,
   haversineKm,
+  prefetchRequestsFor,
 } from "../travel";
 import type { Place, TravelMode } from "../types";
 import { PLACES } from "./fixtures";
@@ -170,5 +171,46 @@ describe("Revue sécurité : entrées invalides et cache borné", () => {
     await provider.minutes(a, b, "car");
     await provider.minutes(c, d, "car");
     expect(provider.cacheSize).toBe(2);
+  });
+});
+
+describe("prefetchRequestsFor", () => {
+  const person = (id: string, mode: TravelMode, places: Place[]) => ({
+    id,
+    name: id,
+    homePlaceId: places[0].id,
+    travelMode: mode,
+    busyBlocks: [],
+    places,
+  });
+
+  it("par mode : maisons, puis candidats, puis autres lieux, sans doublon", () => {
+    const ali = person("ali", "walk", [PLACES.aliHome, PLACES.cegepEM]);
+    const sam = person("sam", "walk", [PLACES.samHome, PLACES.udem]);
+    const maya = person("maya", "transit", [PLACES.mayaHome]);
+    const r = prefetchRequestsFor(
+      [ali, sam, maya],
+      [PLACES.cafeLongueuil],
+      [PLACES.cafeLongueuil.id, PLACES.udem.id, "inconnu"],
+    );
+    expect(r.map((x) => x.mode)).toEqual(["walk", "transit"]);
+    expect(r[0].places.map((p) => p.id)).toEqual([
+      PLACES.aliHome.id,
+      PLACES.samHome.id,
+      PLACES.cafeLongueuil.id,
+      PLACES.udem.id,
+      PLACES.cegepEM.id,
+    ]);
+    expect(r[1].places.map((p) => p.id)).toEqual([
+      PLACES.mayaHome.id,
+      PLACES.cafeLongueuil.id,
+      PLACES.udem.id,
+    ]);
+  });
+
+  it("sans liste de candidats : tous les lieux connus", () => {
+    const ali = person("ali", "car", [PLACES.aliHome]);
+    const r = prefetchRequestsFor([ali], [PLACES.parcJeanDrapeau]);
+    expect(r[0].places.map((p) => p.id)).toEqual([PLACES.aliHome.id, PLACES.parcJeanDrapeau.id]);
   });
 });

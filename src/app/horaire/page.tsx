@@ -8,7 +8,7 @@ import { toBlockSpec } from "@/lib/db/convert";
 import { getMyBusyBlocks, getMyPlaces, getMyProfile, getMyQuietHours } from "@/lib/profile";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { TIME_ZONE } from "@/lib/scheduling/time";
-import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
+import { getTravelProvider } from "@/lib/travel/server";
 import { type ConflictView, myStudyConflicts } from "@/lib/study/service";
 import { supabaseStudyStore } from "@/lib/study/supabaseStore";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -59,7 +59,7 @@ export default async function MonHoraire({
     const r = await myStudyConflicts(supabaseStudyStore(supabase, userId), {
       userId,
       now: new Date(),
-      travel: new EstimatedTravelProvider(),
+      travel: getTravelProvider(),
     }).catch((e: unknown) => {
       console.error("Conflits d'étude :", e);
       return null;

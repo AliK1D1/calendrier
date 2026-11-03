@@ -7,7 +7,6 @@ import { fromStudyPreferences } from "@/lib/db/convert";
 import { createKeyedLimiter } from "@/lib/geocoding/rateLimiter";
 import { validateUuid } from "@/lib/groups/validation";
 import type { Result } from "@/lib/places/validation";
-import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
 import {
   checkMovedSession,
   prepareAcceptance,
@@ -18,15 +17,13 @@ import {
   type StudyPlanView,
 } from "@/lib/study/service";
 import { supabaseStudyStore } from "@/lib/study/supabaseStore";
+import { getTravelProvider } from "@/lib/travel/server";
 import {
   validateDeadlineForm,
   validateSessionInput,
   validateSessionList,
   validateStudyPreferencesForm,
 } from "@/lib/study/validation";
-
-/** Estimation partagée entre les requêtes (cache borné). */
-const travel = new EstimatedTravelProvider();
 
 /** Calculs par minute et par personne : le planificateur occupe le serveur. */
 const calculLimiter = createKeyedLimiter({ limit: 30, windowMs: 60_000 });
@@ -56,7 +53,7 @@ async function studyContext(heavy = false) {
     ok: true as const,
     ctx,
     store: supabaseStudyStore(ctx.supabase, ctx.user.id),
-    deps: { userId: ctx.user.id, now: new Date(), travel },
+    deps: { userId: ctx.user.id, now: new Date(), travel: getTravelProvider() },
   };
 }
 

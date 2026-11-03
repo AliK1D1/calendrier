@@ -34,7 +34,7 @@ import {
   periodRange,
 } from "@/lib/scheduling/period";
 import { minutesBetween, TIME_ZONE } from "@/lib/scheduling/time";
-import type { TravelTimeProvider } from "@/lib/scheduling/travel";
+import { prefetchRequestsFor, type TravelTimeProvider } from "@/lib/scheduling/travel";
 import type { DateRange, DayHours, MeetupProposal, Person, PersonId } from "@/lib/scheduling/types";
 import { formatClockFr, parseClock } from "@/lib/scheduling/weeklyBlocks";
 
@@ -301,6 +301,16 @@ export async function searchGroupMeetups(
   };
   if (people.length < 2) return { ok: true, value: base };
 
+  const favoritePlaces = favorites.value.map(toPlace);
+  const candidatePlaceIds = limitCandidatePlaces(people, favorites.value, MAX_CANDIDATE_PLACES);
+  // Vrais temps de trajet (segment 15) : préparés AVANT le calcul, en quelques appels bornés ;
+  // findMeetups n'attend jamais le réseau. Sans clé d'API, `prefetch` n'existe pas.
+  if (deps.travel.prefetch) {
+    await deps.travel
+      .prefetch(prefetchRequestsFor(people, favoritePlaces, candidatePlaceIds))
+      .catch((e: unknown) => console.warn("Temps de trajet (préparation) :", e));
+  }
+
   const clock = deps.clock ?? (() => performance.now());
   const t0 = clock();
   const proposals = await findMeetups(
@@ -310,8 +320,8 @@ export async function searchGroupMeetups(
       dates: range,
       minDurationMinutes: input.durationMinutes,
       bufferMinutes: input.bufferMinutes,
-      favoritePlaces: favorites.value.map(toPlace),
-      candidatePlaceIds: limitCandidatePlaces(people, favorites.value, MAX_CANDIDATE_PLACES),
+      favoritePlaces,
+      candidatePlaceIds,
       dayHours: deps.dayHours,
       notBefore: ceilToMinutes(deps.now, 15),
     },

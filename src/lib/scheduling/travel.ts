@@ -1,12 +1,58 @@
-import type { Place, TravelMode } from "./types";
+import type { Person, Place, PlaceId, TravelMode } from "./types";
 
 /**
- * Fournisseur de temps de trajet. Interface remplaçable : estimation maison (ici), puis une
- * vraie API (OpenRouteService, Google…) au segment 15.
+ * Fournisseur de temps de trajet. Interface remplaçable : estimation maison (ici) ou vraie API
+ * (OpenRouteService, Google : `src/lib/travel/`, segment 15).
  */
 export interface TravelTimeProvider {
   /** Temps de trajet en minutes (entier, arrondi vers le haut) de `from` vers `to`. */
   minutes(from: Place, to: Place, mode: TravelMode): Promise<number>;
+  /**
+   * Facultatif : prépare d'avance, en quelques appels groupés (« matrice »), les trajets entre
+   * ces lieux. Appelé AVANT le calcul (findMeetups, planificateur), qui n'attend ainsi jamais
+   * le réseau. Ne lève jamais d'erreur : ce qui n'a pas pu être préparé sera estimé.
+   */
+  prefetch?(requests: readonly TravelPrefetchRequest[]): Promise<void>;
+}
+
+/** Lieux entre lesquels préparer les trajets, pour un mode de transport. */
+export interface TravelPrefetchRequest {
+  mode: TravelMode;
+  /** Les plus importants d'abord (si l'API est limitée, la fin de la liste est estimée). */
+  places: Place[];
+}
+
+/**
+ * Trajets à préparer pour une recherche de groupe : par mode, les maisons des personnes de ce
+ * mode, puis les lieux candidats (`candidateIds`, ou tous les lieux connus), puis leurs autres
+ * lieux (où elles sont avant et après une fenêtre libre). Fonction pure, sans doublon.
+ */
+export function prefetchRequestsFor(
+  people: readonly Person[],
+  favoritePlaces: readonly Place[] = [],
+  candidateIds?: readonly PlaceId[],
+): TravelPrefetchRequest[] {
+  const all = new Map<PlaceId, Place>();
+  for (const person of people) for (const p of person.places) all.set(p.id, p);
+  for (const f of favoritePlaces) all.set(f.id, f);
+  const candidates = candidateIds
+    ? candidateIds.flatMap((id) => all.get(id) ?? [])
+    : [...all.values()];
+
+  const modes: TravelMode[] = [];
+  for (const person of people)
+    if (!modes.includes(person.travelMode)) modes.push(person.travelMode);
+  return modes.map((mode) => {
+    const ofMode = people.filter((p) => p.travelMode === mode);
+    const places = new Map<PlaceId, Place>();
+    const add = (p: Place | undefined) => {
+      if (p && !places.has(p.id)) places.set(p.id, p);
+    };
+    for (const person of ofMode) add(all.get(person.homePlaceId));
+    for (const c of candidates) add(c);
+    for (const person of ofMode) for (const p of person.places) add(p);
+    return { mode, places: [...places.values()] };
+  });
 }
 
 /** Rayon moyen de la Terre, en km. */

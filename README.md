@@ -419,6 +419,53 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
   ou rien, échéance/lieu/séance d'un autre refusés, déplacement revalidé, conflit avec un plan
   de groupe puis replanification, séance « Occupé » dans la recherche de groupe).
 
+## Vrai temps de trajet (segment 15, facultatif)
+
+Sans clé d'API, rien ne change : les trajets sont **estimés** (vol d'oiseau × 1,3, vitesse par
+mode, voir plus bas). Avec une clé, « Quand on peut se voir » et le planificateur d'étude
+utilisent les vrais temps de trajet.
+
+| Variable              | Modes               | Service                                                   |
+| --------------------- | ------------------- | --------------------------------------------------------- |
+| `ORS_API_KEY`         | marche, vélo, auto  | [OpenRouteService](https://openrouteservice.org), gratuit |
+| `GOOGLE_MAPS_API_KEY` | transport en commun | Google **Routes API** (Compute Route Matrix), facultatif  |
+
+**Obtenir une clé OpenRouteService (gratuite)** :
+
+1. <https://openrouteservice.org> → **Sign up** : créer un compte gratuit (courriel), le
+   confirmer, puis se connecter au tableau de bord.
+2. Section **API Keys / Tokens** → créer une clé (type « Standard » / gratuit, nom
+   « calendrier ») et la copier.
+   Quota gratuit : 500 matrices par jour, 40 par minute.
+3. En local : `ORS_API_KEY=...` dans `.env.local`. Sur Vercel : projet → **Settings →
+   Environment Variables** → `ORS_API_KEY` (Production, et Preview si voulu) → **Save**, puis
+   **Deployments → ⋯ → Redeploy** (une variable n'est lue qu'au déploiement suivant).
+
+Google (transport en commun) : Google Cloud Console → activer **Routes API** → **Credentials →
+Create credentials → API key**, restreinte à « Routes API ». Payant au-delà du crédit mensuel
+gratuit. Sans cette clé, le transport en commun reste estimé.
+
+**Jamais de préfixe `NEXT_PUBLIC_`** sur ces clés : elles ne sont lues que par le serveur
+(`src/lib/travel/server.ts`, `server-only`) et n'arrivent jamais au navigateur.
+
+Comment c'est fait (`src/lib/travel/`) :
+
+- `OpenRouteServiceProvider` et `GoogleTransitProvider` : API « matrice » (toutes les paires
+  d'une liste de lieux en un appel). `FallbackTravelProvider` les combine avec l'estimation.
+- **Préparation avant le calcul** : la recherche demande d'abord les trajets entre ses lieux
+  (`prefetch`), puis `findMeetups` (inchangé) ne lit que le cache : il n'attend **jamais** le
+  réseau. Bornes : au plus 4 appels par recherche (en parallèle), 3 s par appel, 100 lieux
+  par mode, 30 appels par minute et 450 par jour par serveur ; après une erreur, l'API est
+  mise de côté 1 min. Tout trajet non obtenu (panne, délai, quota, budget) est **estimé**.
+- **Cache en mémoire du serveur** (LRU borné, 30 jours), par coordonnées arrondies (≈ 11 m) et
+  mode. Choix plutôt qu'une table `travel_cache` : seules les réponses des API y entrent, jamais
+  une valeur envoyée par un utilisateur, donc personne ne peut fausser les trajets des autres ;
+  et aucune migration. Contrepartie : chaque instance Vercel a son propre cache, perdu au
+  redémarrage (quelques appels de plus, toujours bornés).
+- Transport en commun : départ « maintenant » (approximation ; l'horaire varie dans la journée).
+- Tests avec `fetch` simulé et les vraies formes de réponse : `src/lib/travel/__tests__/`,
+  `src/lib/meetups/__tests__/search-travel.test.ts`.
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -453,7 +500,8 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
 | 12  | Proposer un moment au groupe      | Fait    |
 | 13  | Planificateur d'étude : logique   | Fait    |
 | 14  | Planificateur d'étude : interface | Fait    |
-| 15+ | Vrai temps de trajet…             | À faire |
+| 15  | Vrai temps de trajet (API)        | Fait    |
+| 16  | Import par capture d'écran / PDF  | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 

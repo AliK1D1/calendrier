@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Temps libre commun",
   description: "Trouvez des moments et des endroits réalistes pour vous voir entre amis.",
+};
+
+/** Couleur de la barre du navigateur sur téléphone, assortie au fond (clair ou sombre). */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8f9fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1218" },
+  ],
 };
 
 export default function RootLayout({

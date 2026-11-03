@@ -71,7 +71,7 @@ export function IcsImport(props: Props) {
         ref={ref}
         aria-labelledby="ics-titre"
         onClose={() => setOpen(false)}
-        className="bg-background text-foreground m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 shadow-xl backdrop:bg-black/40 sm:m-auto sm:max-w-2xl sm:rounded-2xl"
+        className="bg-card text-card-foreground m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 shadow-xl backdrop:bg-black/40 sm:m-auto sm:max-w-2xl sm:rounded-2xl"
       >
         {open && (
           <ImportFlow
@@ -259,7 +259,7 @@ function ImportFlow({
           </p>
 
           {(preview.warnings.length > 0 || existing > 0) && (
-            <div className="flex gap-2 rounded-md border border-amber-500/50 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+            <div className="border-warning/60 bg-warning/15 flex gap-2 rounded-md border p-3 text-sm">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <ul className="flex flex-col gap-1">
                 {existing > 0 && (

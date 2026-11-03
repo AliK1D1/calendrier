@@ -1,7 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * Mode sombre : suit le réglage de l'appareil (aucun bouton à gérer). Les classes `dark:`
+ * s'appliquent donc quand le téléphone ou l'ordinateur est en mode sombre.
+ */
+@custom-variant dark (@media (prefers-color-scheme: dark));
 
 @theme inline {
   --color-background: var(--background);
@@ -21,6 +25,9 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -30,47 +37,62 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+ * Palette sobre : gris légèrement bleutés et un seul bleu calme pour les actions.
+ * Le fond de page est un peu plus foncé que les cartes, pour qu'elles se détachent sans
+ * ombre forte. `success` (vert) et `warning` (ambre) servent aux messages et à la grille.
+ */
 :root {
+  color-scheme: light;
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.982 0.003 250);
+  --foreground: oklch(0.22 0.02 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.22 0.02 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.22 0.02 260);
+  --primary: oklch(0.49 0.13 258);
+  --primary-foreground: oklch(0.985 0.002 250);
+  --secondary: oklch(0.95 0.008 255);
+  --secondary-foreground: oklch(0.28 0.03 260);
+  --muted: oklch(0.955 0.006 255);
+  --muted-foreground: oklch(0.5 0.02 260);
+  --accent: oklch(0.955 0.015 258);
+  --accent-foreground: oklch(0.28 0.05 260);
+  --destructive: oklch(0.56 0.2 27);
+  --success: oklch(0.55 0.13 155);
+  --success-foreground: oklch(0.985 0.002 250);
+  --warning: oklch(0.76 0.15 75);
+  --border: oklch(0.915 0.008 255);
+  --input: oklch(0.87 0.01 255);
+  --ring: oklch(0.49 0.13 258);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: oklch(0.165 0.012 260);
+    --foreground: oklch(0.95 0.005 255);
+    --card: oklch(0.205 0.014 260);
+    --card-foreground: oklch(0.95 0.005 255);
+    --popover: oklch(0.205 0.014 260);
+    --popover-foreground: oklch(0.95 0.005 255);
+    --primary: oklch(0.74 0.11 258);
+    --primary-foreground: oklch(0.18 0.03 260);
+    --secondary: oklch(0.26 0.014 260);
+    --secondary-foreground: oklch(0.95 0.005 255);
+    --muted: oklch(0.25 0.012 260);
+    --muted-foreground: oklch(0.72 0.015 258);
+    --accent: oklch(0.27 0.02 260);
+    --accent-foreground: oklch(0.95 0.005 255);
+    --destructive: oklch(0.69 0.18 24);
+    --success: oklch(0.72 0.14 155);
+    --success-foreground: oklch(0.18 0.03 160);
+    --warning: oklch(0.8 0.14 78);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 16%);
+    --ring: oklch(0.74 0.11 258);
+  }
 }
 
 @layer base {
@@ -79,5 +101,22 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  ::selection {
+    @apply bg-primary/20;
+  }
+  /* Tailwind 4 ne met plus la main sur les boutons : on la remet, c'est plus clair. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+  dialog::backdrop {
+    backdrop-filter: blur(2px);
   }
 }

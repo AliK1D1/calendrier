@@ -8,7 +8,7 @@ import { LOGIN_ERRORS, safeNextPath } from "@/lib/auth/paths";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentUser } from "@/lib/supabase/server";
 
-import { connexionGoogle, envoyerLienMagique } from "./actions";
+import { connexionGoogle, connexionMotDePasse, envoyerLienMagique } from "./actions";
 
 export const metadata: Metadata = { title: "Connexion · Temps libre commun" };
 
@@ -90,6 +90,44 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               Continuer avec Google
             </Button>
           </form>
+
+          <details className="text-sm">
+            <summary className="text-muted-foreground cursor-pointer">
+              Se connecter avec un mot de passe
+            </summary>
+            <form action={connexionMotDePasse} className="mt-3 flex flex-col gap-3">
+              <input type="hidden" name="next" value={next} />
+              <label htmlFor="pw-email" className="font-medium">
+                Adresse courriel
+              </label>
+              <input
+                id="pw-email"
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                inputMode="email"
+                disabled={!configured}
+                className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
+              />
+              <label htmlFor="pw-password" className="font-medium">
+                Mot de passe
+              </label>
+              <input
+                id="pw-password"
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                maxLength={200}
+                disabled={!configured}
+                className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
+              />
+              <Button type="submit" variant="outline" disabled={!configured}>
+                Se connecter
+              </Button>
+            </form>
+          </details>
         </CardContent>
       </Card>
     </main>

@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 
 import { getSiteOrigin } from "@/lib/auth/origin";
-import { isPlausibleEmail, otpErrorCode, safeNextPath } from "@/lib/auth/paths";
+import { afterLoginPath, isPlausibleEmail, otpErrorCode, safeNextPath } from "@/lib/auth/paths";
+import { getOnboardingStatus } from "@/lib/profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function loginUrl(params: Record<string, string>): string {
@@ -50,4 +51,29 @@ export async function connexionGoogle(formData: FormData): Promise<void> {
     redirect(loginUrl({ erreur: "google", next }));
   }
   redirect(data.url);
+}
+
+/**
+ * Connexion par courriel + mot de passe. Sert surtout aux comptes créés à la main dans
+ * Supabase (Authentication → Users → Add user, « Auto Confirm »), sans envoyer de courriel.
+ */
+export async function connexionMotDePasse(formData: FormData): Promise<void> {
+  const next = safeNextPath(formData.get("next")?.toString());
+  const email = (formData.get("email")?.toString() ?? "").trim().toLowerCase();
+  const password = formData.get("password")?.toString() ?? "";
+  if (!isPlausibleEmail(email) || password.length === 0 || password.length > 200) {
+    redirect(loginUrl({ erreur: "motdepasse", next }));
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) redirect(loginUrl({ erreur: "config", next }));
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    console.error("Mot de passe :", error.status, error.code, error.message);
+    const code = error.status === 429 ? "limite" : "motdepasse";
+    redirect(loginUrl({ erreur: code, next }));
+  }
+  const onboarded = await getOnboardingStatus(supabase);
+  redirect(afterLoginPath(next, onboarded));
 }

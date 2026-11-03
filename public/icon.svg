@@ -1,10 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <rect width="512" height="512" rx="112" fill="#2c5fa9"/>
-  <g transform="translate(106 106) scale(12.5)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12.127 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v5.125"/>
-    <path d="M14.62 17.8A2.25 2.25 0 1118 14.836a2.25 2.25 0 113.38 2.966l-2.626 2.856a.998.998 0 01-1.507 0z"/>
-    <path d="M16 2v3"/>
-    <path d="M3 9h18"/>
-    <path d="M8 2v3"/>
+  <g>
+    <defs>
+      <clipPath id="a"><circle cx="218" cy="306" r="62"/></clipPath>
+    </defs>
+    <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="104" y="124" width="304" height="284" rx="44" stroke-width="28"/>
+      <path d="M104 200h304" stroke-width="28"/>
+      <path d="M190 92v64M322 92v64" stroke-width="28"/>
+    </g>
+    <circle cx="294" cy="306" r="62" clip-path="url(#a)" fill="#ffffff"/>
+    <g fill="none" stroke="#ffffff" stroke-width="18">
+      <circle cx="218" cy="306" r="62"/>
+      <circle cx="294" cy="306" r="62"/>
+    </g>
   </g>
 </svg>

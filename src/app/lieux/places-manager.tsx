@@ -1,8 +1,9 @@
 "use client";
 
 import { Home, MapPin, Pencil, Trash2 } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 
+import { type Flash, FlashMessage } from "@/components/flash-message";
 import { AddressSearch } from "@/components/places/address-search";
 import { type MapPoint, PlaceMapLazy } from "@/components/places/place-map-lazy";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import type { GeocodeResult } from "@/lib/geocoding/nominatim";
 import { PLACE_NAME_MAX, roundCoord } from "@/lib/places/validation";
 import type { MyPlace } from "@/lib/profile";
+import { plural } from "@/lib/ux/plural";
 
 import { ajouterLieu, definirMaison, renommerLieu, supprimerLieu } from "./actions";
 
@@ -32,7 +34,8 @@ interface Draft {
 
 export function PlacesManager({ places, homeId }: Props) {
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<{ type: "ok" | "erreur"; text: string } | null>(null);
+  const [message, setMessage] = useState<Flash>(null);
+  const clearMessage = useCallback(() => setMessage(null), []);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [asHome, setAsHome] = useState(homeId === null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -78,18 +81,7 @@ export function PlacesManager({ places, homeId }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      {message && (
-        <p
-          role={message.type === "erreur" ? "alert" : "status"}
-          className={
-            message.type === "erreur"
-              ? "border-destructive/40 text-destructive rounded-md border p-3 text-sm"
-              : "rounded-md border border-emerald-500/40 p-3 text-sm"
-          }
-        >
-          {message.text}
-        </p>
-      )}
+      <FlashMessage message={message} onClose={clearMessage} />
 
       <PlaceMapLazy
         points={points}
@@ -102,7 +94,9 @@ export function PlacesManager({ places, homeId }: Props) {
 
       <section aria-labelledby="liste-lieux" className="flex flex-col gap-3">
         <h2 id="liste-lieux" className="text-lg font-semibold">
-          {places.length === 0 ? "Aucun lieu pour l'instant" : `${places.length} lieu(x)`}
+          {places.length === 0
+            ? "Aucun lieu pour l'instant"
+            : plural(places.length, "lieu", "lieux")}
         </h2>
         <ul className="flex flex-col gap-2">
           {places.map((p) => (

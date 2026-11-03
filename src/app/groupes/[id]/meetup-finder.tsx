@@ -16,6 +16,7 @@ import {
 } from "@/lib/meetups/search";
 import type { Result } from "@/lib/places/validation";
 import { MEETUP_PERIOD_LABELS, MEETUP_PERIODS, type MeetupPeriod } from "@/lib/scheduling/period";
+import { plural } from "@/lib/ux/plural";
 
 import { chercherMoments } from "../meetup-actions";
 
@@ -87,7 +88,7 @@ export function MeetupFinder({ groupId, myId, members, search = chercherMoments 
 
   return (
     <section aria-labelledby="se-voir" className="flex flex-col gap-4">
-      <h2 id="se-voir" className="text-lg font-semibold">
+      <h2 id="se-voir" className="scroll-mt-16 text-lg font-semibold">
         Quand on peut se voir
       </h2>
       <form
@@ -167,10 +168,14 @@ export function MeetupFinder({ groupId, myId, members, search = chercherMoments 
               step={1}
               value={buffer}
               onChange={(e) => setBuffer(e.target.value)}
+              aria-describedby={`${formId}-marge`}
               className="border-input bg-background h-11 rounded-md border px-3 text-base font-normal"
             />
           </label>
         </div>
+        <p id={`${formId}-marge`} className="text-muted-foreground -mt-2 text-xs">
+          Minutes ajoutées à chaque trajet pour les imprévus (attendre le bus, trouver où se garer).
+        </p>
 
         <Button type="submit" size="lg" disabled={pending || selected.length < 2}>
           <CalendarSearch /> {pending ? "Calcul en cours…" : "Trouver des moments"}
@@ -218,8 +223,8 @@ function MeetupResults({
       {view.hiddenPlaceBlocks.length > 0 && (
         <p className="text-muted-foreground text-sm">
           Certains lieux ne te sont pas visibles (
-          {view.hiddenPlaceBlocks.map((h) => `${h.name} : ${h.count} bloc(s)`).join(", ")}) : on
-          compte ces moments comme occupés, à la maison de la personne.
+          {view.hiddenPlaceBlocks.map((h) => `${h.name} : ${plural(h.count, "bloc")}`).join(", ")})
+          : on compte ces moments comme occupés, à la maison de la personne.
         </p>
       )}
 
@@ -231,8 +236,8 @@ function MeetupResults({
         <>
           <div className="flex items-center justify-between gap-2">
             <p className="text-muted-foreground text-sm">
-              {view.inPerson.length} moment(s) en personne
-              {view.calls.length > 0 ? ` · ${view.calls.length} appel(s)` : ""}
+              {plural(view.inPerson.length, "moment en personne", "moments en personne")}
+              {view.calls.length > 0 ? ` · ${plural(view.calls.length, "appel")}` : ""}
             </p>
             <div className="flex gap-1" role="group" aria-label="Affichage">
               <Button
@@ -343,35 +348,72 @@ function AvailabilityGridView({ view }: { view: MeetupSearchView }) {
   const shades = ["bg-muted", "bg-emerald-100", "bg-emerald-300", "bg-emerald-600"];
   const shade = (n: number) =>
     n === 0 ? shades[0] : n === total ? shades[3] : n / total >= 0.5 ? shades[2] : shades[1];
+  // Case touchée : on affiche qui est libre (le « title » ne s'affiche pas au doigt).
+  const [picked, setPicked] = useState<{ day: string; start: string } | null>(null);
   return (
     <div className="flex flex-col gap-3">
       <p className="text-muted-foreground text-sm">
-        Qui est libre, par demi-heure (sans compter les trajets). Vert foncé : tout le monde.
+        Qui est libre, par demi-heure (sans compter les trajets). Touche une case pour voir qui.
       </p>
-      {view.grid.map((d) => (
-        <div key={d.day} className="flex flex-col gap-1">
-          <p className="text-sm font-medium first-letter:uppercase">{d.dayLabel}</p>
-          <div
-            className="grid gap-px"
-            style={{ gridTemplateColumns: `repeat(${d.slots.length}, minmax(0, 1fr))` }}
-            role="list"
-          >
-            {d.slots.map((s) => (
-              <div
-                key={s.start}
-                role="listitem"
-                title={`${s.label} : ${s.free.length ? s.free.join(", ") : "personne"}`}
-                aria-label={`${s.label} : ${s.free.length} sur ${total} libres`}
-                className={`h-5 rounded-sm ${shade(s.free.length)}`}
-              />
-            ))}
+      <ul
+        className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs"
+        aria-label="Légende"
+      >
+        {[
+          [shades[3], "Tout le monde"],
+          [shades[2], "La moitié ou plus"],
+          [shades[1], "Moins de la moitié"],
+          [shades[0], "Personne"],
+        ].map(([cls, label]) => (
+          <li key={label} className="flex items-center gap-1.5">
+            <span className={`size-3 rounded-sm border ${cls}`} aria-hidden />
+            {label}
+          </li>
+        ))}
+      </ul>
+      {view.grid.map((d) => {
+        const slot =
+          picked?.day === d.day ? d.slots.find((s) => s.start === picked.start) : undefined;
+        return (
+          <div key={d.day} className="flex flex-col gap-1">
+            <p className="text-sm font-medium first-letter:uppercase">{d.dayLabel}</p>
+            <div
+              className="grid gap-px"
+              style={{ gridTemplateColumns: `repeat(${d.slots.length}, minmax(0, 1fr))` }}
+              role="group"
+              aria-label={d.dayLabel}
+            >
+              {d.slots.map((s) => (
+                <button
+                  key={s.start}
+                  type="button"
+                  title={`${s.label} : ${s.free.length ? s.free.join(", ") : "personne"}`}
+                  aria-label={`${s.label} : ${s.free.length} sur ${total} libres`}
+                  aria-pressed={slot?.start === s.start}
+                  onClick={() =>
+                    setPicked(slot?.start === s.start ? null : { day: d.day, start: s.start })
+                  }
+                  className={`h-6 rounded-sm ${shade(s.free.length)} aria-pressed:ring-foreground aria-pressed:ring-2`}
+                />
+              ))}
+            </div>
+            <div className="text-muted-foreground flex justify-between text-xs tabular-nums">
+              <span>{d.slots[0]?.label.split(" – ")[0]}</span>
+              <span>{d.slots.at(-1)?.label.split(" – ")[1]}</span>
+            </div>
+            {slot && (
+              <p className="text-sm" role="status">
+                <span className="tabular-nums">{slot.label}</span> :{" "}
+                {slot.free.length === 0
+                  ? "personne n'est libre."
+                  : slot.free.length === total
+                    ? "tout le monde est libre."
+                    : `libres : ${slot.free.join(", ")}.`}
+              </p>
+            )}
           </div>
-          <div className="text-muted-foreground flex justify-between text-xs tabular-nums">
-            <span>{d.slots[0]?.label.split(" – ")[0]}</span>
-            <span>{d.slots.at(-1)?.label.split(" – ")[1]}</span>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

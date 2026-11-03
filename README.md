@@ -466,6 +466,22 @@ Comment c'est fait (`src/lib/travel/`) :
 - Tests avec `fetch` simulé et les vraies formes de réponse : `src/lib/travel/__tests__/`,
   `src/lib/meetups/__tests__/search-travel.test.ts`.
 
+## Bonus (segment 18)
+
+### App installable (PWA)
+
+Sur le téléphone, ouvrir l'app dans le navigateur puis **Ajouter à l'écran d'accueil**
+(Safari : bouton Partager ; Chrome : menu ⋮ → **Installer l'application**). Elle s'ouvre alors
+en plein écran, avec sa propre icône.
+
+- Manifeste : `src/app/manifest.ts` (servi à `/manifest.webmanifest`, public : exclu du
+  middleware, sinon le navigateur, qui le charge sans cookie, serait renvoyé à `/connexion`).
+- Icônes : `public/icon.svg`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`,
+  `apple-touch-icon.png`, produites par `node scripts/generate-icons.mjs` (à relancer seulement
+  si le dessin change).
+- **Pas de service worker** : rien n'est mis en cache, donc aucune page connectée ni réponse
+  `/api` ne peut être servie à la mauvaise personne ou périmée. L'app a besoin du réseau.
+
 ## Déploiement (Vercel) et vérification automatique (segment 17)
 
 L'app est en ligne : <https://calendrier-opal.vercel.app>. Le projet Vercel est relié au dépôt
@@ -534,26 +550,27 @@ Une PR dont les tests échouent ne peut alors plus être fusionnée.
 
 ## État des segments
 
-| #   | Segment                           | État    |
-| --- | --------------------------------- | ------- |
-| 0   | Mise en place du projet           | Fait    |
-| 1   | Types et données de test          | Fait    |
-| 2   | Fenêtres libres                   | Fait    |
-| 3   | Temps de trajet (estimation)      | Fait    |
-| 4   | Recherche de rencontres           | Fait    |
-| 5   | Classement des propositions       | Fait    |
-| 6   | Base de données et comptes        | Fait    |
-| 7   | Mes lieux                         | Fait    |
-| 8   | Mon horaire (saisie manuelle)     | Fait    |
-| 9   | Import d'horaire .ics             | Fait    |
-| 10  | Groupes et amis                   | Fait    |
-| 11  | Vue « quand on peut se voir »     | Fait    |
-| 12  | Proposer un moment au groupe      | Fait    |
-| 13  | Planificateur d'étude : logique   | Fait    |
-| 14  | Planificateur d'étude : interface | Fait    |
-| 15  | Vrai temps de trajet (API)        | Fait    |
-| 16  | Import par capture d'écran / PDF  | À faire |
-| 17  | Déploiement et CI                 | Fait    |
+| #   | Segment                           | État     |
+| --- | --------------------------------- | -------- |
+| 0   | Mise en place du projet           | Fait     |
+| 1   | Types et données de test          | Fait     |
+| 2   | Fenêtres libres                   | Fait     |
+| 3   | Temps de trajet (estimation)      | Fait     |
+| 4   | Recherche de rencontres           | Fait     |
+| 5   | Classement des propositions       | Fait     |
+| 6   | Base de données et comptes        | Fait     |
+| 7   | Mes lieux                         | Fait     |
+| 8   | Mon horaire (saisie manuelle)     | Fait     |
+| 9   | Import d'horaire .ics             | Fait     |
+| 10  | Groupes et amis                   | Fait     |
+| 11  | Vue « quand on peut se voir »     | Fait     |
+| 12  | Proposer un moment au groupe      | Fait     |
+| 13  | Planificateur d'étude : logique   | Fait     |
+| 14  | Planificateur d'étude : interface | Fait     |
+| 15  | Vrai temps de trajet (API)        | Fait     |
+| 16  | Import par capture d'écran / PDF  | À faire  |
+| 17  | Déploiement et CI                 | Fait     |
+| 18  | Bonus (PWA, …)                    | En cours |
 
 ## Le cœur : `src/lib/scheduling/`
 

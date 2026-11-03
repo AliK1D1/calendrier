@@ -1,11 +1,21 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import {
+  allowLoginAttempt,
+  clientIp,
+  createMagicLinkLimiters,
+  createPasswordLimiters,
+} from "@/lib/auth/loginLimits";
 import { getSiteOrigin } from "@/lib/auth/origin";
 import { afterLoginPath, isPlausibleEmail, otpErrorCode, safeNextPath } from "@/lib/auth/paths";
 import { getOnboardingStatus } from "@/lib/profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const magicLinkLimiters = createMagicLinkLimiters();
+const passwordLimiters = createPasswordLimiters();
 
 function loginUrl(params: Record<string, string>): string {
   return `/connexion?${new URLSearchParams(params).toString()}`;
@@ -21,6 +31,9 @@ export async function envoyerLienMagique(formData: FormData): Promise<void> {
   const next = safeNextPath(formData.get("next")?.toString());
   const email = (formData.get("email")?.toString() ?? "").trim().toLowerCase();
   if (!isPlausibleEmail(email)) redirect(loginUrl({ erreur: "courriel", next }));
+  if (!allowLoginAttempt(magicLinkLimiters, clientIp(await headers()), email)) {
+    redirect(loginUrl({ erreur: "limite", next }));
+  }
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) redirect(loginUrl({ erreur: "config", next }));
@@ -63,6 +76,9 @@ export async function connexionMotDePasse(formData: FormData): Promise<void> {
   const password = formData.get("password")?.toString() ?? "";
   if (!isPlausibleEmail(email) || password.length === 0 || password.length > 200) {
     redirect(loginUrl({ erreur: "motdepasse", next }));
+  }
+  if (!allowLoginAttempt(passwordLimiters, clientIp(await headers()), email)) {
+    redirect(loginUrl({ erreur: "essais", next }));
   }
 
   const supabase = await createSupabaseServerClient();

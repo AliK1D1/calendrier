@@ -50,6 +50,7 @@ export const LOGIN_ERRORS: Record<string, string> = {
   limite:
     "Trop de liens envoyés récemment (limite du service de courriel). Réessaie dans une heure, ou utilise le dernier lien reçu.",
   motdepasse: "Courriel ou mot de passe incorrect.",
+  essais: "Trop d'essais de mot de passe. Attends 15 minutes, ou utilise le lien par courriel.",
   echec: "La connexion n'a pas abouti. Réessaie.",
   google: "La connexion avec Google n'a pas fonctionné. Réessaie ou utilise ton courriel.",
 };

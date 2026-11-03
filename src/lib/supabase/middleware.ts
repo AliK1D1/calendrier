@@ -12,7 +12,16 @@ import { getSupabaseEnv } from "./env";
  * Les routes /api/* répondent 401 (JSON) au lieu d'être redirigées.
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
-  const { pathname, search } = request.nextUrl;
+  const { pathname, search, searchParams } = request.nextUrl;
+
+  // Si Supabase renvoie vers la Site URL seule (adresse de retour non autorisée dans
+  // « Redirect URLs »), le code de connexion arrive sur l'accueil : on le passe au callback.
+  if (pathname === "/" && (searchParams.has("code") || searchParams.has("token_hash"))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
   const env = getSupabaseEnv();
 
   if (!env) {

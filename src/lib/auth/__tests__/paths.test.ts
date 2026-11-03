@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { afterLoginPath, isApiPath, isPlausibleEmail, isPublicPath, safeNextPath } from "../paths";
+import {
+  afterLoginPath,
+  isApiPath,
+  isPlausibleEmail,
+  isPublicPath,
+  otpErrorCode,
+  safeNextPath,
+} from "../paths";
 
 describe("isPublicPath", () => {
   it("laisse passer l'accueil, /connexion et /auth/*", () => {
@@ -80,5 +87,16 @@ describe("afterLoginPath", () => {
     expect(afterLoginPath("/bienvenue", false)).toBe("/bienvenue");
     expect(afterLoginPath("https://mechant.com", false)).toBe("/bienvenue?next=%2F");
     expect(afterLoginPath("/.//mechant.com", true)).toBe("/");
+  });
+});
+
+describe("otpErrorCode", () => {
+  it("reconnaît la limite d'envoi de courriels de Supabase", () => {
+    expect(otpErrorCode({ status: 429, message: "email rate limit exceeded" })).toBe("limite");
+    expect(otpErrorCode({ code: "over_email_send_rate_limit" })).toBe("limite");
+  });
+
+  it("renvoie l'erreur générique sinon", () => {
+    expect(otpErrorCode({ status: 500, message: "Error sending magic link email" })).toBe("envoi");
   });
 });

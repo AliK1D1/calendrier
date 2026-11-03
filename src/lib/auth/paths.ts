@@ -47,9 +47,23 @@ export const LOGIN_ERRORS: Record<string, string> = {
   lien: "Ce lien de connexion est invalide ou expiré. Demande un nouveau lien.",
   courriel: "Adresse courriel invalide.",
   envoi: "Impossible d'envoyer le lien pour l'instant. Réessaie dans une minute.",
+  limite:
+    "Trop de liens envoyés récemment (limite du service de courriel). Réessaie dans une heure, ou utilise le dernier lien reçu.",
   echec: "La connexion n'a pas abouti. Réessaie.",
   google: "La connexion avec Google n'a pas fonctionné. Réessaie ou utilise ton courriel.",
 };
+
+/**
+ * Code d'erreur de /connexion pour un échec d'envoi du lien magique. Supabase limite les
+ * courriels de son service intégré (quelques-uns par heure) : on le dit clairement.
+ */
+export function otpErrorCode(error: { code?: string; status?: number; message?: string }): string {
+  const text = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
+  if (error.status === 429 || text.includes("rate limit") || text.includes("rate_limit")) {
+    return "limite";
+  }
+  return "envoi";
+}
 
 /** Validation simple d'une adresse courriel (le vrai contrôle est fait par Supabase). */
 export function isPlausibleEmail(email: string): boolean {

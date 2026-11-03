@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { getSiteOrigin } from "@/lib/auth/origin";
-import { isPlausibleEmail, safeNextPath } from "@/lib/auth/paths";
+import { isPlausibleEmail, otpErrorCode, safeNextPath } from "@/lib/auth/paths";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function loginUrl(params: Record<string, string>): string {
@@ -29,8 +29,8 @@ export async function envoyerLienMagique(formData: FormData): Promise<void> {
     options: { emailRedirectTo: await callbackUrl(next), shouldCreateUser: true },
   });
   if (error) {
-    console.error("Lien magique :", error.message);
-    redirect(loginUrl({ erreur: "envoi", next }));
+    console.error("Lien magique :", error.status, error.code, error.message);
+    redirect(loginUrl({ erreur: otpErrorCode(error), next }));
   }
   redirect(loginUrl({ envoye: "1", next }));
 }

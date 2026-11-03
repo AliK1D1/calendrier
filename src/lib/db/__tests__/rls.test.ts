@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0008.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0009.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -123,6 +123,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0006.sql",
       "supabase/migration-0007.sql",
       "supabase/migration-0008.sql",
+      "supabase/migration-0009.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -278,13 +279,13 @@ describe("migrations (supabase/setup.sql)", () => {
       const { rows: policies } = await vide.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public'",
       );
-      expect(policies[0].n).toBe(25);
+      expect(policies[0].n).toBe(20);
     } finally {
       await vide.close();
     }
   }, 60_000);
 
-  it("s'applique sur une base vide et crée les 7 tables avec RLS activé", async () => {
+  it("s'applique sur une base vide et crée les 8 tables avec RLS activé", async () => {
     const tables = await rows<{ relname: string; relrowsecurity: boolean }>(
       `SELECT c.relname, c.relrowsecurity FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -296,6 +297,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "groups",
       "meetup_plans",
       "places",
+      "plan_invitees",
       "plan_votes",
       "profiles",
     ]);
@@ -414,10 +416,11 @@ describe("RLS : l'horaire (busy_blocks)", () => {
       ),
     ).rejects.toThrow(/row-level security/);
 
-    // A ne peut pas non plus se donner l'horaire (changer owner_id) de B.
+    // A ne peut pas non plus se donner l'horaire (changer owner_id) de B : depuis la
+    // migration 0009, owner_id ne se modifie plus du tout (droits par colonne).
     await expect(
       as(A, () => rows("UPDATE busy_blocks SET owner_id = $1 WHERE owner_id = $2", [B, A])),
-    ).rejects.toThrow(/row-level security/);
+    ).rejects.toThrow(/permission denied/);
 
     const [{ title }] = await rows<{ title: string }>(
       "SELECT title FROM busy_blocks WHERE owner_id = $1",
@@ -525,51 +528,42 @@ describe("RLS : groupes, profils, plans et votes", () => {
     expect(ok).toBe(1);
   });
 
-  it("plans et votes : visibles par le groupe, chacun ne vote que pour soi", async () => {
+  it("plans et votes : visibles par le groupe, pas d'écriture directe (segment 12 : fonctions)", async () => {
     const lieuDeA = await seedSchedule(A, "Chimie");
     const g = await createGroup(A, "Le cégep");
     await join_(B, g.code);
 
     const [plan] = await as(A, () =>
       rows<{ id: string }>(
-        `INSERT INTO meetup_plans (group_id, place_id, starts_at, ends_at)
-         VALUES ($1, $2, '2025-09-15 16:00-04', '2025-09-15 17:00-04') RETURNING id`,
+        `SELECT public.propose_meetup($1, now() + interval '1 day',
+           now() + interval '1 day 1 hour', 'Étude', $2) AS id`,
         [g.id, lieuDeA],
       ),
     );
-    // C (hors groupe) ne peut pas proposer de plan dans ce groupe ni le voir.
-    await expect(
-      as(C, () =>
-        rows(
-          `INSERT INTO meetup_plans (group_id, starts_at, ends_at)
-           VALUES ($1, '2025-09-15 16:00-04', '2025-09-15 17:00-04')`,
-          [g.id],
-        ),
-      ),
-    ).rejects.toThrow(/row-level security/);
+    // Écrire directement dans les tables des plans est refusé à tous (même membres).
+    for (const sql of [
+      `INSERT INTO meetup_plans (group_id, starts_at, ends_at)
+       VALUES ('${g.id}', '2030-09-15 16:00-04', '2030-09-15 17:00-04')`,
+      `INSERT INTO plan_votes (plan_id, vote) VALUES ('${plan.id}', 'yes')`,
+      `INSERT INTO plan_invitees (plan_id, user_id) VALUES ('${plan.id}', '${C}')`,
+      `UPDATE meetup_plans SET status = 'confirmed'`,
+      `DELETE FROM plan_votes`,
+    ]) {
+      await expect(as(B, () => rows(sql))).rejects.toThrow(/permission denied/);
+    }
+    // C (hors groupe) ne voit pas le plan.
     expect(await as(C, () => rows("SELECT * FROM meetup_plans"))).toEqual([]);
 
-    await as(B, () => rows("INSERT INTO plan_votes (plan_id, vote) VALUES ($1, 'yes')", [plan.id]));
-    await expect(
-      as(B, () =>
-        rows("INSERT INTO plan_votes (plan_id, user_id, vote) VALUES ($1, $2, 'no')", [plan.id, A]),
-      ),
-    ).rejects.toThrow(/row-level security/);
-    await expect(
-      as(C, () => rows("INSERT INTO plan_votes (plan_id, vote) VALUES ($1, 'yes')", [plan.id])),
-    ).rejects.toThrow(/row-level security/);
-
+    await as(B, () => rows("SELECT public.respond_to_meetup($1, true)", [plan.id]));
     const votes = await as(A, () =>
-      rows<{ user_id: string; vote: string }>("SELECT user_id, vote FROM plan_votes"),
+      rows<{ user_id: string; vote: string }>(
+        "SELECT user_id, vote FROM plan_votes ORDER BY user_id",
+      ),
     );
-    expect(votes).toEqual([{ user_id: B, vote: "yes" }]);
-
-    // B ne peut pas confirmer le plan de A (seul le créateur le modifie).
-    const parB = await as(
-      B,
-      async () => (await db.query("UPDATE meetup_plans SET status = 'confirmed'")).affectedRows,
-    );
-    expect(parB).toBe(0);
+    expect(votes).toEqual([
+      { user_id: A, vote: "yes" },
+      { user_id: B, vote: "yes" },
+    ]);
   });
 });
 
@@ -1676,28 +1670,31 @@ describe("Groupes (segment 10) : lieux favoris du groupe", () => {
   it("un plan ne peut pas utiliser le lieu favori d'un autre groupe", async () => {
     const g = await createGroup(A, "G");
     const h = await createGroup(A, "H");
+    await join_(B, g.code);
+    await join_(
+      B,
+      (
+        await as(A, () =>
+          rows<{ c: string }>("SELECT invite_code AS c FROM groups WHERE id = $1", [h.id]),
+        )
+      )[0].c,
+    );
     const [cafe] = await as(A, () =>
       rows<{ id: string }>(
         "INSERT INTO places (name, lat, lng, group_id, is_group_favorite) VALUES ('Café', 45.5, -73.5, $1, true) RETURNING id",
         [g.id],
       ),
     );
-    await expect(
+    const propose = (gid: string) =>
       as(A, () =>
         rows(
-          `INSERT INTO meetup_plans (group_id, place_id, starts_at, ends_at)
-           VALUES ($1, $2, '2027-01-04 16:00-05', '2027-01-04 17:00-05')`,
-          [h.id, cafe.id],
+          `SELECT public.propose_meetup($1, now() + interval '2 days',
+             now() + interval '2 days 1 hour', 'Café', $2)`,
+          [gid, cafe.id],
         ),
-      ),
-    ).rejects.toThrow(/row-level security/);
-    await as(A, () =>
-      rows(
-        `INSERT INTO meetup_plans (group_id, place_id, starts_at, ends_at)
-         VALUES ($1, $2, '2027-01-04 16:00-05', '2027-01-04 17:00-05')`,
-        [g.id, cafe.id],
-      ),
-    );
+      );
+    await expect(propose(h.id)).rejects.toThrow(/Lieu introuvable/);
+    await propose(g.id);
   });
 
   it("anon ne peut exécuter aucune des nouvelles fonctions", async () => {

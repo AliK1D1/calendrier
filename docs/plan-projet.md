@@ -532,6 +532,11 @@ calcul et optimise si > 2 s pour 5 personnes.
 
 **Objectif** : transformer une proposition en vrai plan que le groupe accepte.
 
+> **Réalisé, adapté à la demande d'ali** (voir README, « Proposer un moment au groupe ») : on
+> propose à tout le groupe ou à des membres choisis ; chaque invité accepte ou refuse pour
+> lui-même (pas de « peut-être » ni de confirmation globale) ; accepter ajoute le moment à son
+> horaire, même s'il chevauche. La revalidation « à revoir » n'est pas faite.
+
 **Livrables**
 - Bouton « Proposer ce moment » sur une proposition : crée un `meetup_plan` (statut `proposed`).
 - Chaque membre vote oui / non / peut-être.

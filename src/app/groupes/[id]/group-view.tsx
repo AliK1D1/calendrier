@@ -6,6 +6,7 @@ import {
   EyeOff,
   LogOut,
   MapPin,
+  Plus,
   RefreshCw,
   Share2,
   Trash2,
@@ -18,6 +19,12 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { type Flash, FlashMessage } from "@/components/flash-message";
 import { AddressSearch } from "@/components/places/address-search";
 import { type MapPoint, PlaceMapLazy } from "@/components/places/place-map-lazy";
+import { type PlanActions, PlanList } from "@/components/plans/plan-list";
+import {
+  type ProposeAction,
+  ProposeDialog,
+  type ProposeDraft,
+} from "@/components/plans/propose-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +32,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { GeocodeResult } from "@/lib/geocoding/nominatim";
 import type { GroupFavorite, GroupMember } from "@/lib/groups/queries";
+import type { ProposalView } from "@/lib/meetups/search";
+import { defaultFreeSlot, draftFromSlot, PLAN_DEFAULT_TITLE } from "@/lib/plans/validation";
+import type { PlanView } from "@/lib/plans/view";
 import { PLACE_NAME_MAX, roundCoord } from "@/lib/places/validation";
 import { plural } from "@/lib/ux/plural";
 
@@ -35,6 +45,7 @@ import {
   retirerMembre,
   supprimerFavori,
 } from "../actions";
+import { annulerPlan, proposerMoment, repondrePlan } from "../../plans/actions";
 import { MeetupFinder } from "./meetup-finder";
 import type { ScheduleLine } from "./schedule-lines";
 
@@ -53,7 +64,16 @@ interface Props {
   members: GroupMember[];
   favorites: GroupFavorite[];
   schedules: MemberSchedule[];
+  /** Plans à venir du groupe (`null` : illisibles, voir `plansError`). */
+  plans: PlanView[] | null;
+  plansError?: string | null;
+  /** Actions des plans (remplaçables pour une page de démonstration). */
+  planActions?: PlanActions;
+  propose?: ProposeAction;
+  search?: Parameters<typeof MeetupFinder>[0]["search"];
 }
+
+const DEFAULT_PLAN_ACTIONS: PlanActions = { repondre: repondrePlan, annuler: annulerPlan };
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -75,6 +95,41 @@ export function GroupView(props: Props) {
   const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [proposeDraft, setProposeDraft] = useState<ProposeDraft | null>(null);
+  const [extraPlace, setExtraPlace] = useState<{ id: string; name: string } | null>(null);
+  const planActions = props.planActions ?? DEFAULT_PLAN_ACTIONS;
+
+  const placeOptions = useMemo(() => {
+    const list = favorites.map((f) => ({ id: f.id, name: f.name }));
+    if (extraPlace && !list.some((p) => p.id === extraPlace.id)) list.unshift(extraPlace);
+    return list;
+  }, [favorites, extraPlace]);
+
+  function proposeFromSlot(p: ProposalView, participantIds: string[]) {
+    const call = p.kind === "call";
+    setExtraPlace(p.placeId && p.placeName ? { id: p.placeId, name: p.placeName } : null);
+    const everyone = members.every((m) => participantIds.includes(m.userId));
+    setProposeDraft({
+      title: call ? "Appel" : PLAN_DEFAULT_TITLE,
+      ...draftFromSlot(p.start, p.durationMinutes),
+      placeId: call ? null : p.placeId,
+      location: call ? "Appel ou visio" : "",
+      inviteeIds: everyone ? null : participantIds,
+      fromSlot: `${p.dayLabel}, ${p.timeLabel}${call ? " (appel)" : p.placeName ? ` · ${p.placeName}` : ""}`,
+    });
+  }
+
+  function proposeFree() {
+    setExtraPlace(null);
+    setProposeDraft({
+      title: PLAN_DEFAULT_TITLE,
+      ...defaultFreeSlot(new Date()),
+      durationMinutes: 120,
+      placeId: favorites[0]?.id ?? null,
+      location: "",
+      inviteeIds: null,
+    });
+  }
 
   function run(action: () => Promise<Result>, ok: string, after?: () => void) {
     setMessage(null);
@@ -232,8 +287,56 @@ export function GroupView(props: Props) {
         </>
       ) : (
         <>
-          <MeetupFinder groupId={groupId} myId={myId} members={members} />
+          <section aria-labelledby="propositions" className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="propositions" className="scroll-mt-16 text-lg font-semibold">
+                Propositions
+              </h2>
+              <Button type="button" variant="outline" size="sm" onClick={proposeFree}>
+                <Plus /> Proposer un moment
+              </Button>
+            </div>
+            {props.plansError ? (
+              <p
+                role="alert"
+                className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+              >
+                {props.plansError}
+              </p>
+            ) : !props.plans || props.plans.length === 0 ? (
+              <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
+                Aucune proposition à venir. Trouve un moment ci-dessous et touche « Proposer ce
+                moment », ou propose ton propre moment.
+              </p>
+            ) : (
+              <PlanList plans={props.plans} actions={planActions} />
+            )}
+            <Link href="/plans" className="text-sm underline underline-offset-2 sm:self-start">
+              Tous mes plans
+            </Link>
+          </section>
+          <MeetupFinder
+            groupId={groupId}
+            myId={myId}
+            members={members}
+            onPropose={proposeFromSlot}
+            {...(props.search ? { search: props.search } : {})}
+          />
           {invite}
+          <ProposeDialog
+            draft={proposeDraft}
+            groupId={groupId}
+            myId={myId}
+            members={members}
+            places={placeOptions}
+            propose={props.propose ?? proposerMoment}
+            onClose={() => setProposeDraft(null)}
+            onDone={(text) => {
+              setProposeDraft(null);
+              setMessage({ type: "ok", text });
+              document.getElementById("propositions")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          />
         </>
       )}
 

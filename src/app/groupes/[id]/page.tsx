@@ -8,6 +8,7 @@ import { getSiteOrigin } from "@/lib/auth/origin";
 import { toBlockSpec } from "@/lib/db/convert";
 import { getGroupDetail } from "@/lib/groups/queries";
 import { inviteUrl, validateUuid } from "@/lib/groups/validation";
+import { loadPlans } from "@/lib/plans/queries";
 import { TIME_ZONE } from "@/lib/scheduling/time";
 import { shiftDay } from "@/lib/scheduling/weeklyBlocks";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -37,7 +38,9 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
   const group = await getGroupDetail(supabase, gid.value, userId);
   if (!group) notFound();
 
-  const today = formatInTimeZone(new Date(), TIME_ZONE, "yyyy-MM-dd");
+  const now = new Date();
+  const plans = await loadPlans(supabase, userId, now, { groupId: group.id });
+  const today = formatInTimeZone(now, TIME_ZONE, "yyyy-MM-dd");
   const schedules: MemberSchedule[] = group.members.map((m) => ({
     userId: m.userId,
     displayName: m.displayName,
@@ -71,6 +74,8 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
           members={group.members}
           favorites={group.favorites}
           schedules={schedules}
+          plans={plans.ok ? plans.views.filter((p) => p.state !== "cancelled") : null}
+          plansError={plans.ok ? null : plans.error}
         />
       </main>
     </>

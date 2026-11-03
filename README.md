@@ -50,8 +50,9 @@ Méthode simple, sans mot de passe de BD :
 
 1. Supabase → **SQL Editor** → **New query**.
 2. Coller **tout** le contenu de [`supabase/setup.sql`](supabase/setup.sql) → **Run**.
-3. Vérifier dans **Table Editor** : 7 tables (`profiles`, `places`, `busy_blocks`, `groups`,
-   `group_members`, `meetup_plans`, `plan_votes`), chacune marquée « RLS enabled ».
+3. Vérifier dans **Table Editor** : 8 tables (`profiles`, `places`, `busy_blocks`, `groups`,
+   `group_members`, `meetup_plans`, `plan_invitees`, `plan_votes`), chacune marquée « RLS
+   enabled ».
 
 Le script tourne dans une transaction : en cas d'erreur, rien n'est appliqué. Il est fait
 pour une base **vide** (le relancer échoue sur « type already exists »).
@@ -67,6 +68,9 @@ manquent, chacune dans une nouvelle requête du SQL Editor :
 | `supabase/migration-0004.sql` | Segment 8 : `profiles.unavailable_before` / `unavailable_after` (heures où je ne sors pas)        |
 | `supabase/migration-0005.sql` | Revue du segment 8 : limites des formulaires appliquées aussi par la BD                           |
 | `supabase/migration-0006.sql` | Segment 10 : groupes (confidentialité de l'horaire, lieux du groupe, code d'invitation, départs)  |
+| `supabase/migration-0007.sql` | Revue du segment 10 : nouveau lien d'invitation quand un admin retire un membre                   |
+| `supabase/migration-0008.sql` | Revue du segment 11 : nombre maximal de lieux et de blocs                                         |
+| `supabase/migration-0009.sql` | Segment 12 : proposer un moment au groupe (invités, réponses, blocs « plan » dans l'horaire)      |
 
 Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
 (« already exists »).
@@ -125,8 +129,8 @@ que ces fichiers sont à jour et qu'ils s'appliquent sur une base qui a l'ancien
 Règles d'accès (RLS) : chacun voit son profil, ses lieux et son horaire, et ceux des membres
 de ses groupes ; il ne modifie que les siens. On entre dans un groupe en le créant (on en
 devient admin) ou avec son code d'invitation (fonction `join_group_by_code`) ; l'admin peut
-retirer un membre. Les plans sont visibles par le groupe et modifiés par leur créateur ; chacun
-gère son propre vote. Les visiteurs non connectés (`anon`) n'ont accès à aucune table.
+retirer un membre. Les plans sont visibles par le groupe ; on ne les écrit que par les fonctions
+`propose_meetup`, `respond_to_meetup` et `cancel_meetup` (segment 12). Les visiteurs non connectés (`anon`) n'ont accès à aucune table.
 
 Horaire en BD : `busy_blocks` stocke des **heures locales** (`start_time`, `end_time`) et des
 jours. Bloc hebdomadaire : `weekday` (1 = lundi … 7 = dimanche) + période `valid_from` →
@@ -293,6 +297,50 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
   de 1 h au cégep, ami à 40 min » ; non-membre refusé ; lieu non visible ; temps de calcul
   pour 5 personnes sur une semaine, environ 40 ms lecture comprise).
 
+## Proposer un moment au groupe (segment 12)
+
+**Migration à appliquer : `supabase/migration-0009.sql`** (SQL Editor, une seule fois).
+
+- **Proposer** : dans `/groupes/[id]`, bouton **« Proposer ce moment »** sur chaque carte de
+  « Quand on peut se voir » (jour, heures, lieu et participants repris de la carte), ou
+  **« Proposer un moment »** (jour, heure, durée de 15 min à 12 h, lieu favori du groupe ou lieu
+  écrit à la main). On invite **tout le groupe** ou **certaines personnes**. Le proposant est
+  inscrit d'office (le moment s'ajoute à son horaire).
+- **Notification dans l'app** (pas de courriel : le service de Supabase est limité à quelques
+  courriels par heure ; pas de notification poussée pour l'instant) : tous les membres voient la
+  proposition dans la section **Propositions** du groupe et dans **`/plans`** ; le lien
+  **Plans** de l'en-tête porte une pastille avec le nombre de plans qui attendent ma réponse.
+- **Répondre** : les invités **acceptent** ou **refusent**, et peuvent changer d'avis tant que
+  le plan n'est pas fini. Les membres non invités voient le plan pour info, sans boutons. Le
+  proposant peut **annuler** (le plan reste visible, barré, dans « Passés et annulés »).
+- **Horaire** : accepter ajoute un bloc ponctuel `source = 'meetup'` (colonne
+  `busy_blocks.meetup_plan_id`) à **mon** horaire, même s'il chevauche autre chose ; refuser,
+  annuler ou quitter le groupe le retire. Il apparaît dans `/horaire` (couleur du thème, badge
+  « plan de groupe », en lecture seule : « Voir le plan »), compte comme occupé dans « Quand on
+  peut se voir » et reste « Occupé » pour les autres membres (confidentialité de la 0006).
+- **`/plans`** : en attente de ma réponse, à venir (acceptés ou proposés par moi), autres plans de
+  mes groupes (refusés ou sans invitation), passés et annulés (60 derniers jours).
+  **« Ajouter à mon agenda »** télécharge un `.ics` (`/plans/[id]/ics`, seulement pour un plan
+  accepté ou proposé par moi).
+- **Sécurité (BD)** : plus aucune écriture directe dans `meetup_plans`, `plan_votes` et
+  `plan_invitees` (droits retirés, politiques d'écriture supprimées) ; tout passe par
+  `propose_meetup`, `respond_to_meetup` et `cancel_meetup` (SECURITY DEFINER, `search_path`
+  vide, EXECUTE retiré à `anon`), qui vérifient : membre du groupe, invités tous membres, seul un
+  invité répond et pour lui-même, seul le créateur annule, lieu d'un membre ou favori de ce
+  groupe. Le bloc est créé par la fonction interne `add_meetup_block` (non appelable). Sur
+  `busy_blocks`, `meetup_plan_id` n'est pas modifiable (droits par colonne) et un bloc de plan ne
+  se modifie ni ne se supprime directement. Limites : titre ≤ 80 caractères, lieu écrit
+  ≤ 100, durée 15 min à 12 h, dans l'année qui vient, fin au plus tard à minuit, 10 propositions
+  par personne et par groupe en 24 h, 30 par groupe en 24 h, 50 plans à venir par groupe. La
+  limite de 1000 blocs (0008) s'applique : accepter avec un horaire plein donne un message clair.
+- **Pas fait** : la revalidation « à revoir » (plan devenu impossible après un changement
+  d'horaire) ; le statut `confirmed` n'est pas utilisé (chaque invité répond pour lui-même) ;
+  une personne qui rejoint le groupe après une proposition « tout le groupe » la voit mais n'est
+  pas invitée.
+- Tests : `src/lib/db/__tests__/plans.test.ts` (PGlite, requêtes directes comme par l'API REST,
+  y compris la migration 0009 sur une base en 0008 avec des données) et
+  `src/lib/plans/__tests__/` (validation, mise en forme, `.ics`).
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -324,7 +372,8 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
 | 9   | Import d'horaire .ics         | Fait    |
 | 10  | Groupes et amis               | Fait    |
 | 11  | Vue « quand on peut se voir » | Fait    |
-| 12+ | Plan d'action…                | À faire |
+| 12  | Proposer un moment au groupe  | Fait    |
+| 13+ | Planificateur d'étude…        | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 

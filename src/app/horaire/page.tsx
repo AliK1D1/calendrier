@@ -36,6 +36,24 @@ export default async function MonHoraire() {
     id: r.id,
     source: r.source,
   }));
+  // Lieux des plans acceptés qui ne sont pas à moi (favori du groupe, lieu d'un ami).
+  const mine = new Set(places.map((p) => p.id));
+  const otherPlaceIds = [
+    ...new Set(
+      rows
+        .filter((r) => r.source === "meetup" && r.place_id && !mine.has(r.place_id))
+        .map((r) => r.place_id as string),
+    ),
+  ];
+  const extraPlaceNames: Record<string, string> = {};
+  if (otherPlaceIds.length > 0) {
+    const { data: others } = await supabase
+      .from("places")
+      .select("id, name")
+      .in("id", otherPlaceIds)
+      .returns<{ id: string; name: string }[]>();
+    for (const p of others ?? []) extraPlaceNames[p.id] = p.name;
+  }
   const quiet = quietRow
     ? quietHoursFromDb(quietRow.unavailable_before, quietRow.unavailable_after)
     : null;
@@ -72,6 +90,7 @@ export default async function MonHoraire() {
           today={formatInTimeZone(new Date(), TIME_ZONE, "yyyy-MM-dd")}
           actions={{ ajouterBlocs, modifierBloc, supprimerBloc }}
           icsActions={{ apercuIcs, confirmerIcs }}
+          extraPlaceNames={extraPlaceNames}
         />
       </main>
     </>

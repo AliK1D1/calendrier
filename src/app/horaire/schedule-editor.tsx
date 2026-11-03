@@ -2,7 +2,9 @@
 
 import { format, parseISO } from "date-fns";
 import { frCA } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, MapPin, Pencil, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Pencil, Plus, Users } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import { type Flash, FlashMessage } from "@/components/flash-message";
@@ -44,6 +46,9 @@ const COLORS = [
   "bg-teal-100 border-teal-400 text-teal-950 dark:bg-teal-950 dark:text-teal-50",
 ];
 
+/** Couleur des plans de groupe acceptés (lecture seule). */
+const MEETUP_COLOR = "bg-primary/15 border-primary text-foreground";
+
 const dayLabel = (day: string, pattern: string) => format(parseISO(day), pattern, { locale: frCA });
 
 /** Position d'un pointeur dans une colonne : fraction de la hauteur (0 = 7 h, 1 = 23 h). */
@@ -70,7 +75,9 @@ export function ScheduleEditor({
   today,
   actions,
   icsActions,
+  extraPlaceNames,
 }: ScheduleEditorProps) {
+  const router = useRouter();
   const [monday, setMonday] = useState(() => weekStart(today));
   const days = useMemo(() => weekDays(monday), [monday]);
   const [selectedDay, setSelectedDay] = useState(today);
@@ -81,7 +88,14 @@ export function ScheduleEditor({
   const flash = useMemo<Flash>(() => (message ? { type: "ok", text: message } : null), [message]);
   const clearMessage = useCallback(() => setMessage(null), []);
 
-  const placeName = useMemo(() => new Map(places.map((p) => [p.id, p.name])), [places]);
+  const placeName = useMemo(
+    () =>
+      new Map([
+        ...Object.entries(extraPlaceNames ?? {}),
+        ...places.map((p) => [p.id, p.name] as const),
+      ]),
+    [places, extraPlaceNames],
+  );
   const colorOf = useMemo(() => {
     const ids = [homeId ?? "", ...places.map((p) => p.id).filter((id) => id !== homeId)];
     return (placeId: string | null) =>
@@ -363,11 +377,13 @@ export function ScheduleEditor({
                       type="button"
                       onClick={() => {
                         setMessage(null);
-                        setDraft(editDraft(p.item, day));
+                        // Plan de groupe : on le gère (refuser) dans « Mes plans ».
+                        if (p.item.source === "meetup") router.push("/plans");
+                        else setDraft(editDraft(p.item, day));
                       }}
                       className={cn(
                         "absolute overflow-hidden rounded-md border-l-4 px-1.5 py-0.5 text-left text-xs leading-tight shadow-sm hover:brightness-95 focus-visible:ring-2 focus-visible:outline-none",
-                        colorOf(p.item.placeId),
+                        p.item.source === "meetup" ? MEETUP_COLOR : colorOf(p.item.placeId),
                         p.cutTop && "rounded-t-none",
                         p.cutBottom && "rounded-b-none",
                       )}
@@ -519,30 +535,51 @@ function BlockRow({
 }) {
   return (
     <li className="bg-card flex items-start gap-3 rounded-lg border p-3">
-      <span className={cn("mt-1 size-3 shrink-0 rounded-full border-2", color)} aria-hidden />
+      <span
+        className={cn(
+          "mt-1 size-3 shrink-0 rounded-full border-2",
+          block.source === "meetup" ? MEETUP_COLOR : color,
+        )}
+        aria-hidden
+      />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
         <span className="font-medium break-words">
           {block.title}{" "}
-          {block.source !== "manual" && (
+          {block.source === "meetup" ? (
             <Badge variant="secondary" className="ml-1">
-              importé
+              <Users /> plan de groupe
             </Badge>
+          ) : (
+            block.source !== "manual" && (
+              <Badge variant="secondary" className="ml-1">
+                importé
+              </Badge>
+            )
           )}
         </span>
         <span>{when}</span>
         <span className="text-muted-foreground flex items-center gap-1 text-xs">
-          <MapPin className="size-3" /> {place}
+          <MapPin className="size-3" />{" "}
+          {block.source === "meetup" && !block.placeId ? "Lieu indiqué dans le plan" : place}
           {period && <> · {period}</>}
         </span>
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={onEdit}
-        aria-label={`Modifier « ${block.title} »`}
-      >
-        <Pencil /> Modifier
-      </Button>
+      {block.source === "meetup" ? (
+        <Button asChild size="sm" variant="outline">
+          <Link href="/plans" aria-label={`Voir le plan « ${block.title} »`}>
+            Voir le plan
+          </Link>
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onEdit}
+          aria-label={`Modifier « ${block.title} »`}
+        >
+          <Pencil /> Modifier
+        </Button>
+      )}
     </li>
   );
 }

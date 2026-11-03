@@ -36,8 +36,18 @@ import { authUsers } from "drizzle-orm/supabase";
 /** Mode de transport (même valeurs que `TravelMode` dans src/lib/scheduling/types.ts). */
 export const travelModeEnum = pgEnum("travel_mode", ["walk", "bike", "transit", "car"]);
 
-/** Origine d'un bloc occupé. `study` : séance d'étude acceptée (plan, section 3 bis). */
-export const blockSourceEnum = pgEnum("block_source", ["manual", "ics", "image", "study"]);
+/**
+ * Origine d'un bloc occupé. `study` : séance d'étude acceptée (plan, section 3 bis).
+ * `meetup` : plan de groupe accepté (segment 12) ; le bloc est créé et retiré par la BD
+ * (`respond_to_meetup`, `propose_meetup`, `cancel_meetup`), lié au plan par `meetup_plan_id`.
+ */
+export const blockSourceEnum = pgEnum("block_source", [
+  "manual",
+  "ics",
+  "image",
+  "study",
+  "meetup",
+]);
 
 /** Rôle dans un groupe. */
 export const groupRoleEnum = pgEnum("group_role", ["admin", "member"]);
@@ -145,10 +155,20 @@ export const busyBlocks = pgTable(
     valid_from: date("valid_from", { mode: "string" }),
     valid_until: date("valid_until", { mode: "string" }),
     source: blockSourceEnum("source").notNull().default("manual"),
+    /** Plan accepté qui a créé ce bloc (`source = 'meetup'`), sinon nul. */
+    meetup_plan_id: uuid("meetup_plan_id").references((): AnyPgColumn => meetupPlans.id, {
+      onDelete: "cascade",
+    }),
     created_at: createdAt(),
   },
   (t) => [
     index("busy_blocks_owner_idx").on(t.owner_id),
+    uniqueIndex("busy_blocks_meetup_plan_owner_key").on(t.meetup_plan_id, t.owner_id),
+    // Comparaison en texte : la valeur 'meetup' est ajoutée dans la même transaction.
+    check(
+      "busy_blocks_meetup_link",
+      sql`(${t.source}::text = 'meetup') = (${t.meetup_plan_id} is not null)`,
+    ),
     check("busy_blocks_time_order", sql`${t.end_time} > ${t.start_time}`),
     check("busy_blocks_weekday_range", sql`${t.weekday} is null or ${t.weekday} between 1 and 7`),
     check(
@@ -217,7 +237,12 @@ export const groupMembers = pgTable(
   ],
 );
 
-/** Plan de rencontre proposé à un groupe (instants absolus). */
+/**
+ * Plan de rencontre proposé à un groupe (instants absolus). Segment 12 : créé par
+ * `propose_meetup`, annulé par son créateur (`cancel_meetup`, statut `cancelled`) ; pas
+ * d'écriture directe. `location` : lieu écrit à la main quand aucun lieu enregistré n'est choisi.
+ * `confirmed` n'est pas utilisé : chaque invité accepte ou refuse pour lui-même.
+ */
 export const meetupPlans = pgTable(
   "meetup_plans",
   {
@@ -226,6 +251,8 @@ export const meetupPlans = pgTable(
       .notNull()
       .references(() => groups.id, { onDelete: "cascade" }),
     place_id: uuid("place_id").references(() => places.id, { onDelete: "set null" }),
+    title: text("title").notNull().default(""),
+    location: text("location").notNull().default(""),
     starts_at: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull(),
     ends_at: timestamp("ends_at", { withTimezone: true, mode: "string" }).notNull(),
     status: planStatusEnum("status").notNull().default("proposed"),
@@ -237,11 +264,35 @@ export const meetupPlans = pgTable(
   },
   (t) => [
     index("meetup_plans_group_idx").on(t.group_id),
+    index("meetup_plans_created_by_idx").on(t.created_by),
     check("meetup_plans_time_order", sql`${t.ends_at} > ${t.starts_at}`),
+    check("meetup_plans_title_length", sql`length(${t.title}) <= 80`),
+    check("meetup_plans_location_length", sql`length(${t.location}) <= 100`),
+    check("meetup_plans_max_duration", sql`${t.ends_at} - ${t.starts_at} <= interval '12 hours'`),
   ],
 );
 
-/** Vote d'un membre sur un plan. */
+/**
+ * Personnes invitées à un plan (segment 12) : tout le groupe ou des membres choisis, toujours
+ * avec le créateur. Seuls les invités répondent ; les autres membres voient le plan.
+ */
+export const planInvitees = pgTable(
+  "plan_invitees",
+  {
+    plan_id: uuid("plan_id")
+      .notNull()
+      .references(() => meetupPlans.id, { onDelete: "cascade" }),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.plan_id, t.user_id] }),
+    index("plan_invitees_user_idx").on(t.user_id),
+  ],
+);
+
+/** Réponse d'un invité à un plan : `yes` = accepté, `no` = refusé (`maybe` n'est plus permis). */
 export const planVotes = pgTable(
   "plan_votes",
   {
@@ -257,7 +308,10 @@ export const planVotes = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.plan_id, t.user_id] })],
+  (t) => [
+    primaryKey({ columns: [t.plan_id, t.user_id] }),
+    check("plan_votes_yes_no", sql`${t.vote} <> 'maybe'`),
+  ],
 );
 
 export type ProfileRow = typeof profiles.$inferSelect;
@@ -267,3 +321,4 @@ export type GroupRow = typeof groups.$inferSelect;
 export type GroupMemberRow = typeof groupMembers.$inferSelect;
 export type MeetupPlanRow = typeof meetupPlans.$inferSelect;
 export type PlanVoteRow = typeof planVotes.$inferSelect;
+export type PlanInviteeRow = typeof planInvitees.$inferSelect;

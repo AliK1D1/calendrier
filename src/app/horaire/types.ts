@@ -3,10 +3,13 @@ import type { ConfirmResult, PreviewResult } from "@/lib/import/icsImport";
 import type { QuietHours } from "@/lib/scheduling/quietHours";
 import type { BlockSpec } from "@/lib/scheduling/weeklyBlocks";
 
-/** Bloc affiché par /horaire : `BlockSpec` enregistré + son origine. */
+/**
+ * Bloc affiché par /horaire : `BlockSpec` enregistré + son origine. `meetup` : plan de groupe
+ * accepté (segment 12), en lecture seule ici (on le refuse dans « Mes plans »).
+ */
 export type ScheduleBlock = BlockSpec & {
   id: string;
-  source: "manual" | "ics" | "image" | "study";
+  source: "manual" | "ics" | "image" | "study" | "meetup";
 };
 
 export interface SchedulePlace {
@@ -37,4 +40,6 @@ export interface ScheduleEditorProps {
   today: string;
   actions: ScheduleActions;
   icsActions: IcsActions;
+  /** Noms des lieux des plans acceptés qui ne sont pas à moi (favori du groupe, lieu d'un ami). */
+  extraPlaceNames?: Record<string, string>;
 }

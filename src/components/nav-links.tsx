@@ -1,19 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
 const LIENS = [
   { href: "/groupes", label: "Groupes" },
+  { href: "/plans", label: "Plans" },
   { href: "/horaire", label: "Horaire" },
   { href: "/lieux", label: "Lieux" },
   { href: "/profil", label: "Profil" },
 ];
 
 /** Liens du menu ; la page où l'on est est mise en évidence (et annoncée au lecteur d'écran). */
-export function NavLinks() {
+export function NavLinks({ plansBadge }: { plansBadge?: ReactNode }) {
   const pathname = usePathname();
   return (
     <>
@@ -30,6 +32,7 @@ export function NavLinks() {
             )}
           >
             {l.label}
+            {l.href === "/plans" && plansBadge}
           </Link>
         );
       })}

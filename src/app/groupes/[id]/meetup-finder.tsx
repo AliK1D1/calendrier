@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarSearch, Clock, LayoutGrid, List, MapPin, Phone } from "lucide-react";
+import { CalendarSearch, Clock, LayoutGrid, List, MapPin, Phone, Send } from "lucide-react";
 import { useId, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,8 @@ interface Props {
   members: Pick<GroupMember, "userId" | "displayName">[];
   /** Action serveur de recherche (remplaçable pour une page de démonstration). */
   search?: Search;
+  /** « Proposer ce moment » sur une carte (avec les participants de la recherche). */
+  onPropose?: (p: ProposalView, participantIds: string[]) => void;
 }
 
 /** Propositions montrées avant « Voir les N propositions ». */
@@ -49,7 +51,13 @@ function formatDuration(minutes: number): string {
   return m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, "0")}`;
 }
 
-export function MeetupFinder({ groupId, myId, members, search = chercherMoments }: Props) {
+export function MeetupFinder({
+  groupId,
+  myId,
+  members,
+  search = chercherMoments,
+  onPropose,
+}: Props) {
   const formId = useId();
   const [selected, setSelected] = useState<string[]>(members.map((m) => m.userId));
   const [period, setPeriod] = useState<MeetupPeriod>("this-week");
@@ -194,7 +202,23 @@ export function MeetupFinder({ groupId, myId, members, search = chercherMoments 
         </p>
       )}
 
-      {view && <MeetupResults key={resultKey} view={view} mode={mode} onMode={setMode} />}
+      {view && (
+        <MeetupResults
+          key={resultKey}
+          view={view}
+          mode={mode}
+          onMode={setMode}
+          onPropose={
+            onPropose
+              ? (p) =>
+                  onPropose(
+                    p,
+                    view.participants.map((x) => x.id),
+                  )
+              : undefined
+          }
+        />
+      )}
     </section>
   );
 }
@@ -203,10 +227,12 @@ function MeetupResults({
   view,
   mode,
   onMode,
+  onPropose,
 }: {
   view: MeetupSearchView;
   mode: "liste" | "grille";
   onMode: (m: "liste" | "grille") => void;
+  onPropose?: (p: ProposalView) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const enough = view.participants.length >= 2;
@@ -275,7 +301,7 @@ function MeetupResults({
               )}
               <ol className="flex flex-col gap-3">
                 {(showAll ? view.inPerson : view.inPerson.slice(0, FIRST_CARDS)).map((p) => (
-                  <ProposalCard key={p.key} p={p} />
+                  <ProposalCard key={p.key} p={p} onPropose={onPropose} />
                 ))}
               </ol>
               {!showAll && view.inPerson.length > FIRST_CARDS && (
@@ -290,7 +316,7 @@ function MeetupResults({
                   </h3>
                   <ol className="flex flex-col gap-3">
                     {view.calls.map((p) => (
-                      <ProposalCard key={p.key} p={p} />
+                      <ProposalCard key={p.key} p={p} onPropose={onPropose} />
                     ))}
                   </ol>
                 </>
@@ -303,7 +329,13 @@ function MeetupResults({
   );
 }
 
-function ProposalCard({ p }: { p: ProposalView }) {
+function ProposalCard({
+  p,
+  onPropose,
+}: {
+  p: ProposalView;
+  onPropose?: (p: ProposalView) => void;
+}) {
   const call = p.kind === "call";
   return (
     <li className="bg-card flex flex-col gap-2 rounded-lg border p-4">
@@ -338,6 +370,16 @@ function ProposalCard({ p }: { p: ProposalView }) {
             </span>
           ))}
         </p>
+      )}
+      {onPropose && (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-1 sm:self-start"
+          onClick={() => onPropose(p)}
+        >
+          <Send /> Proposer ce moment
+        </Button>
       )}
     </li>
   );

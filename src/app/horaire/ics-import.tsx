@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import type { IcsActions, SchedulePlace } from "./types";
 
 const SELECT =
-  "border-input focus-visible:ring-ring/50 h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
+  "border-input focus-visible:ring-ring/50 h-11 sm:h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
 
 const day = (d: string, pattern: string) => format(parseISO(d), pattern, { locale: frCA });
 
@@ -65,7 +65,10 @@ export function IcsImport(props: Props) {
           setOpen(true);
         }}
       >
-        <FileUp /> Importer un fichier .ics
+        <FileUp />
+        <span>
+          Importer<span className="max-sm:hidden"> un fichier</span> .ics
+        </span>
       </Button>
       <dialog
         ref={ref}

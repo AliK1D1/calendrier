@@ -11,7 +11,7 @@ export default function Chargement() {
       <div
         role="status"
         aria-live="polite"
-        className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6"
+        className="grille-4 mx-auto max-w-3xl content-start gap-y-4 px-4 py-6"
       >
         <span className="sr-only">Chargement…</span>
         <div className="bg-muted h-8 w-1/2 animate-pulse rounded-md" />

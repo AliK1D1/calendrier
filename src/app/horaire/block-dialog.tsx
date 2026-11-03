@@ -28,7 +28,7 @@ export interface BlockDraft extends BlockFormInput {
 }
 
 const SELECT =
-  "border-input focus-visible:ring-ring/50 h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
+  "border-input focus-visible:ring-ring/50 h-11 sm:h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
 
 const START_OPTIONS = clockOptions().slice(0, -1);
 const END_OPTIONS = clockOptions().slice(1);
@@ -185,7 +185,7 @@ function BlockForm({
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grille-4-demi">
         <div className="flex flex-col gap-2">
           <Label htmlFor="bloc-debut">Début</Label>
           <select
@@ -220,7 +220,7 @@ function BlockForm({
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-sm font-medium">Répétition</legend>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grille-4-demi">
           {(
             [
               ["weekly", "Chaque semaine"],
@@ -288,7 +288,7 @@ function BlockForm({
               })}
             </div>
           </fieldset>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grille-4-demi">
             <div className="flex flex-col gap-2">
               <Label htmlFor="bloc-session-debut">Début de session</Label>
               <Input

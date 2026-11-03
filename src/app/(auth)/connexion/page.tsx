@@ -29,7 +29,7 @@ export default async function Connexion({ searchParams }: { searchParams: Search
   if (configured && (await getCurrentUser())) redirect(next);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-4 py-12">
+    <main className="grille-4 mx-auto min-h-dvh max-w-md content-center gap-y-6 px-4 py-12">
       <Link href="/" className="text-muted-foreground text-sm hover:underline">
         ← Temps libre commun
       </Link>

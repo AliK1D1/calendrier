@@ -97,7 +97,7 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
       </ul>
 
       {live && p.invited && !p.isMine && (
-        <div className="grid grid-cols-2 gap-2 pt-1" role="group" aria-label="Ma réponse">
+        <div className="grille-4-demi pt-1" role="group" aria-label="Ma réponse">
           <Button
             type="button"
             variant={p.myResponse === "yes" ? "default" : "outline"}

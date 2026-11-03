@@ -28,7 +28,7 @@ export default async function Bienvenue({ searchParams }: { searchParams: Search
   const profile = await getMyProfile(supabase, data.user.id);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 px-4 py-8">
+    <main className="grille-4 mx-auto min-h-dvh max-w-xl content-start gap-y-6 px-4 py-8">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">Bienvenue !</h1>
         <p className="text-muted-foreground">

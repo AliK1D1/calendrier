@@ -17,7 +17,7 @@ import {
 import { enregistrerPreferencesEtude } from "../etude/actions";
 
 const SELECT =
-  "border-input focus-visible:ring-ring/50 dark:bg-input/30 h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
+  "border-input focus-visible:ring-ring/50 dark:bg-input/30 h-11 w-full sm:h-10 rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
 
 /** Liste triée qui contient toujours la valeur actuelle. */
 const withCurrent = (list: readonly number[], current: number) =>

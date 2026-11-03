@@ -37,7 +37,7 @@ const DEFAULT_ACTIONS: StudyViewActions = {
 };
 
 const SELECT =
-  "border-input focus-visible:ring-ring/50 dark:bg-input/30 h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
+  "border-input focus-visible:ring-ring/50 dark:bg-input/30 h-11 w-full sm:h-10 rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
 
 export function StudyView({
   overview,
@@ -313,7 +313,7 @@ function DeadlineForm({
     >
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-sm font-medium">Type</legend>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grille-4-demi">
           {(["exam", "assignment"] as const).map((k) => (
             <label
               key={k}
@@ -346,7 +346,7 @@ function DeadlineForm({
           required
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grille-4-demi">
         <div className="flex flex-col gap-2">
           <Label htmlFor="date">{v.kind === "exam" ? "Date de l'examen" : "Date de remise"}</Label>
           <Input

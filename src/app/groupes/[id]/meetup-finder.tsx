@@ -131,7 +131,7 @@ export function MeetupFinder({
 
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-sm font-medium">Période</legend>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grille-4-demi">
             {MEETUP_PERIODS.map((p) => (
               <label
                 key={p}
@@ -151,7 +151,7 @@ export function MeetupFinder({
           </div>
         </fieldset>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grille-4-demi">
           <label className="flex flex-col gap-1 text-sm font-medium">
             Au moins
             <select

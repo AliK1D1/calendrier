@@ -387,11 +387,13 @@ export function ScheduleEditor({
           <ChevronRight />
         </Button>
       </div>
-      <div className="flex flex-wrap gap-2">
+      {/* Téléphone : deux boutons d'égale largeur (2 colonnes chacun de la grille à 4). */}
+      <div className="grille-4-demi sm:flex sm:flex-wrap sm:justify-end sm:gap-2">
         {monday !== weekStart(today) && (
           <Button
             variant="ghost"
             size="sm"
+            className="col-span-full sm:mr-auto"
             onClick={() => {
               setMonday(weekStart(today));
               setSelectedDay(today);
@@ -400,25 +402,23 @@ export function ScheduleEditor({
             Revenir à cette semaine
           </Button>
         )}
-        <div className="ml-auto flex flex-wrap justify-end gap-2">
-          <IcsImport
-            places={places}
-            homeId={homeId}
-            defaultPlaceId={defaultPlace}
-            actions={icsActions}
-            onOpen={() => setMessage(null)}
-            onImported={(text) => setMessage(text)}
-          />
-          <Button
-            size="sm"
-            onClick={() => {
-              setMessage(null);
-              setDraft(newDraft(activeDay, 9 * 60, 10 * 60));
-            }}
-          >
-            <Plus /> Ajouter un bloc
-          </Button>
-        </div>
+        <IcsImport
+          places={places}
+          homeId={homeId}
+          defaultPlaceId={defaultPlace}
+          actions={icsActions}
+          onOpen={() => setMessage(null)}
+          onImported={(text) => setMessage(text)}
+        />
+        <Button
+          size="sm"
+          onClick={() => {
+            setMessage(null);
+            setDraft(newDraft(activeDay, 9 * 60, 10 * 60));
+          }}
+        >
+          <Plus /> Ajouter un bloc
+        </Button>
       </div>
 
       {/* Onglets des jours (téléphone seulement : un jour à la fois) */}
@@ -468,7 +468,7 @@ export function ScheduleEditor({
             {HOURS.map((m) => (
               <span
                 key={m}
-                className="text-muted-foreground absolute right-1.5 -translate-y-1/2 text-[11px]"
+                className="text-muted-foreground absolute right-1.5 -translate-y-1/2 text-xs"
                 style={{ top: pct(m) }}
               >
                 {formatClockFr(m)}

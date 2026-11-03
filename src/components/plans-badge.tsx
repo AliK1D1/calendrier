@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { countAwaitingPlans } from "@/lib/plans/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -7,11 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
  * Rien si on n'est pas connecté, s'il n'y a rien, ou si la lecture échoue.
  */
 export async function PlansBadge() {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return null;
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return null;
-  const n = await countAwaitingPlans(supabase, data.user.id, new Date());
+  const n = await awaitingCount();
   if (n === 0) return null;
   return (
     <span
@@ -22,3 +20,15 @@ export async function PlansBadge() {
     </span>
   );
 }
+
+/**
+ * Lu une seule fois par requête : la pastille est affichée deux fois (menu du haut à
+ * l'ordinateur, barre d'onglets du bas au téléphone).
+ */
+const awaitingCount = cache(async (): Promise<number> => {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return 0;
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return 0;
+  return countAwaitingPlans(supabase, data.user.id, new Date());
+});

@@ -8,7 +8,7 @@ export default function PageIntrouvable() {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-12">
+      <main className="grille-4 mx-auto max-w-xl content-start gap-y-4 px-4 py-12">
         <h1 className="text-2xl font-bold tracking-tight">Page introuvable</h1>
         <p className="text-muted-foreground">
           Cette page n&apos;existe pas, ou tu n&apos;y as pas accès (par exemple un groupe dont tu

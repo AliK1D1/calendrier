@@ -59,7 +59,7 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
+      <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <nav aria-label="Fil d'Ariane" className="text-muted-foreground text-sm">
           <Link href="/groupes" className="underline underline-offset-2">
             Mes groupes

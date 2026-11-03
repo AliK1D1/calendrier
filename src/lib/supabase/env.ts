@@ -9,8 +9,10 @@ export interface SupabaseEnv {
 }
 
 export function getSupabaseEnv(): SupabaseEnv | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  // Une clé collée sur plusieurs lignes (retours à la ligne au milieu) rendrait l'en-tête HTTP
+  // invalide et aucune requête ne partirait : on enlève tout espace, la clé n'en contient pas.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/+$/, "");
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.replace(/\s+/g, "");
   if (!url || !anonKey) return null;
   // Une URL mal saisie (ex. sans « https:// ») ferait planter le middleware sur chaque page :
   // on la traite comme une configuration absente, et /connexion l'explique.

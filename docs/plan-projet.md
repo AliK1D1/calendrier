@@ -603,6 +603,11 @@ avec migration et politiques RLS (seul le propriétaire voit ses échéances).
 
 **Objectif** : entrer un examen et voir les séances proposées apparaître dans son horaire.
 
+> **Réalisé** (voir README, « Planificateur d'étude : l'interface ») : pas de statut
+> « confirmé » pour un plan de groupe ; dès qu'un bloc (plan de groupe accepté, cours, trajet)
+> tombe sur une séance acceptée et déplaçable, `/etude` et `/horaire` affichent « Séance en
+> conflit : replanifier ? » et proposent de nouvelles places, écrites seulement à l'acceptation.
+
 **Livrables**
 - Page `/etude` : ajouter un examen ou un travail (cours, date et heure, heures estimées ou difficulté).
 - Bouton « Planifier mon étude » : affiche les séances proposées dans la grille de `/horaire`, en couleur distincte et en pointillé.

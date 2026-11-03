@@ -2,7 +2,7 @@
 
 import { format, parseISO } from "date-fns";
 import { frCA } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, MapPin, Pencil, Plus, Users } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, MapPin, Pencil, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -11,6 +11,7 @@ import { type Flash, FlashMessage } from "@/components/flash-message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_GRID_RANGE, layoutDay, selectionFromDrag } from "@/lib/scheduling/weekGrid";
+import type { SessionView } from "@/lib/study/service";
 import {
   blocksOnDay,
   formatClock,
@@ -28,7 +29,14 @@ import { cn } from "@/lib/utils";
 
 import { BlockDialog, type BlockDraft } from "./block-dialog";
 import { IcsImport } from "./ics-import";
+import {
+  ACCEPTED_STUDY_COLOR,
+  ConflictNotice,
+  PROPOSED_STUDY_COLOR,
+  StudyPanel,
+} from "./study-panel";
 import type { ScheduleBlock, ScheduleEditorProps } from "./types";
+import { useStudyPlan } from "./use-study-plan";
 
 const RANGE = DEFAULT_GRID_RANGE;
 const HOURS = Array.from(
@@ -57,6 +65,30 @@ function fractionIn(el: HTMLElement, clientY: number): number {
   return (clientY - r.top) / r.height;
 }
 
+/** Un élément de la grille : un bloc enregistré, ou une séance d'étude proposée. */
+interface GridItem {
+  id: string;
+  startMinute: number;
+  endMinute: number;
+  block?: ScheduleBlock;
+  proposal?: SessionView;
+}
+
+/** Séance proposée en train d'être glissée. */
+interface Moving {
+  key: string;
+  x0: number;
+  y0: number;
+  /** Hauteur de la colonne en pixels (pour convertir le déplacement en minutes). */
+  px: number;
+  dayFrom: string;
+  startFrom: number;
+  duration: number;
+  day: string;
+  startMinute: number;
+  moved: boolean;
+}
+
 interface Drag {
   day: string;
   from: number;
@@ -76,6 +108,7 @@ export function ScheduleEditor({
   actions,
   icsActions,
   extraPlaceNames,
+  study,
 }: ScheduleEditorProps) {
   const router = useRouter();
   const [monday, setMonday] = useState(() => weekStart(today));
@@ -85,8 +118,40 @@ export function ScheduleEditor({
   const [draft, setDraft] = useState<BlockDraft | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const flash = useMemo<Flash>(() => (message ? { type: "ok", text: message } : null), [message]);
-  const clearMessage = useCallback(() => setMessage(null), []);
+  const [studyFlash, setStudyFlash] = useState<Flash>(null);
+  const flash = useMemo<Flash>(
+    () => studyFlash ?? (message ? { type: "ok", text: message } : null),
+    [message, studyFlash],
+  );
+  const clearMessage = useCallback(() => {
+    setMessage(null);
+    setStudyFlash(null);
+  }, []);
+  const showSession = useCallback((s: SessionView) => {
+    setMonday(weekStart(s.day));
+    setSelectedDay(s.day);
+    document
+      .getElementById("grille-horaire")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+  const studyPlan = useStudyPlan(study, { onFlash: setStudyFlash, onShow: showSession });
+  const [moving, setMoving] = useState<Moving | null>(null);
+  const conflictIds = useMemo(() => new Set(study?.conflicts.map((c) => c.id)), [study]);
+  // Séances proposées affichées (celle qu'on glisse, à sa position du moment).
+  const proposals = useMemo<SessionView[]>(
+    () =>
+      (studyPlan.plan?.sessions ?? []).map((s) =>
+        moving && s.key === moving.key
+          ? {
+              ...s,
+              day: moving.day,
+              startMinute: moving.startMinute,
+              endMinute: moving.startMinute + moving.duration,
+            }
+          : s,
+      ),
+    [studyPlan.plan, moving],
+  );
 
   const placeName = useMemo(
     () =>
@@ -187,6 +252,57 @@ export function ScheduleEditor({
     if (drag && drag.pointerType !== "mouse") openFromDrag(drag);
   }
 
+  // ─── Glisser une séance proposée (souris ou doigt) ─────────────────────────────────────
+  function onProposalPointerDown(e: React.PointerEvent<HTMLButtonElement>, s: SessionView) {
+    if (e.button !== 0 || studyPlan.busy) return;
+    e.stopPropagation();
+    const column = e.currentTarget.parentElement;
+    if (!column) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setMoving({
+      key: s.key,
+      x0: e.clientX,
+      y0: e.clientY,
+      px: column.getBoundingClientRect().height,
+      dayFrom: s.day,
+      startFrom: s.startMinute,
+      duration: s.endMinute - s.startMinute,
+      day: s.day,
+      startMinute: s.startMinute,
+      moved: false,
+    });
+  }
+
+  function onProposalPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    if (!moving) return;
+    const moved = moving.moved || Math.hypot(e.clientX - moving.x0, e.clientY - moving.y0) > 6;
+    const delta = Math.round((((e.clientY - moving.y0) / moving.px) * span) / 15) * 15;
+    const startMinute = Math.min(
+      Math.max(moving.startFrom + delta, RANGE.start),
+      RANGE.end - moving.duration,
+    );
+    // Ordinateur : on peut changer de jour (colonne sous le pointeur).
+    const column = document
+      .elementsFromPoint(e.clientX, e.clientY)
+      .find((el): el is HTMLElement => el instanceof HTMLElement && !!el.dataset.day);
+    setMoving({ ...moving, startMinute, day: column?.dataset.day ?? moving.day, moved });
+  }
+
+  function onProposalPointerUp() {
+    if (!moving) return;
+    const m = moving;
+    setMoving(null);
+    if (!m.moved) {
+      document
+        .getElementById(`proposition-${m.key}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (m.day !== m.dayFrom || m.startMinute !== m.startFrom) {
+      void studyPlan.move(m.key, m.day, m.startMinute);
+    }
+  }
+
   const preview =
     drag && drag.pointerType === "mouse" && drag.moved
       ? selectionFromDrag(drag.from, drag.to, RANGE)
@@ -221,6 +337,33 @@ export function ScheduleEditor({
   return (
     <div className="flex flex-col gap-4">
       <FlashMessage message={flash} onClose={clearMessage} />
+
+      {study && studyPlan.loading && (
+        <p role="status" className="text-muted-foreground flex items-center gap-2 text-sm">
+          <BookOpen className="text-study size-4" aria-hidden />
+          {studyPlan.loading === "planifier"
+            ? "Calcul de tes séances d'étude…"
+            : "Recherche de nouvelles places…"}
+        </p>
+      )}
+      {study && !studyPlan.plan && !studyPlan.loading && (
+        <ConflictNotice
+          conflicts={study.conflicts}
+          onReplan={() => void studyPlan.run("replanifier")}
+          pending={studyPlan.busy}
+        />
+      )}
+      {studyPlan.plan && (
+        <StudyPanel
+          plan={studyPlan.plan}
+          busy={studyPlan.busy || moving !== null}
+          errorKey={studyPlan.errorKey}
+          onAccept={(keys) => void studyPlan.accept(keys)}
+          onRefuse={studyPlan.refuse}
+          onNudge={studyPlan.nudge}
+          onShow={showSession}
+        />
+      )}
 
       {/* Navigation entre les semaines */}
       <div className="flex items-center gap-2">
@@ -314,7 +457,12 @@ export function ScheduleEditor({
       </p>
 
       {/* Grille */}
-      <div className="flex select-none" role="region" aria-label="Grille de la semaine">
+      <div
+        id="grille-horaire"
+        className="flex scroll-mt-16 select-none"
+        role="region"
+        aria-label="Grille de la semaine"
+      >
         <div className="w-11 shrink-0 pt-8 md:pt-10" aria-hidden>
           <div className="relative h-[56rem]">
             {HOURS.map((m) => (
@@ -330,7 +478,23 @@ export function ScheduleEditor({
         </div>
         <div className="grid flex-1 grid-cols-1 md:grid-cols-7">
           {days.map((day) => {
-            const { placed } = layoutDay(blocksOnDay(blocks, day), RANGE);
+            const items: GridItem[] = [
+              ...blocksOnDay(blocks, day).map((b) => ({
+                id: b.id,
+                startMinute: b.startMinute,
+                endMinute: b.endMinute,
+                block: b,
+              })),
+              ...proposals
+                .filter((s) => s.day === day)
+                .map((s) => ({
+                  id: `proposition:${s.key}`,
+                  startMinute: s.startMinute,
+                  endMinute: s.endMinute,
+                  proposal: s,
+                })),
+            ];
+            const { placed } = layoutDay(items, RANGE);
             const isToday = day === today;
             return (
               <div
@@ -371,39 +535,80 @@ export function ScheduleEditor({
                   {quiet?.after != null && quiet.after < RANGE.end && (
                     <QuietZone top={pct(Math.max(quiet.after, RANGE.start))} bottom="100%" />
                   )}
-                  {placed.map((p) => (
-                    <button
-                      key={p.item.id}
-                      type="button"
-                      onClick={() => {
-                        setMessage(null);
-                        // Plan de groupe : on le gère (refuser) dans « Mes plans ».
-                        if (p.item.source === "meetup") router.push("/plans");
-                        else setDraft(editDraft(p.item, day));
-                      }}
-                      className={cn(
-                        "absolute overflow-hidden rounded-md border-l-4 px-1.5 py-0.5 text-left text-xs leading-tight shadow-sm hover:brightness-95 focus-visible:ring-2 focus-visible:outline-none",
-                        p.item.source === "meetup" ? MEETUP_COLOR : colorOf(p.item.placeId),
-                        p.cutTop && "rounded-t-none",
-                        p.cutBottom && "rounded-b-none",
-                      )}
-                      style={{
-                        top: `calc(${p.top * 100}% + 1px)`,
-                        height: `calc(${p.height * 100}% - 2px)`,
-                        left: `calc(${(p.lane / p.lanes) * 100}% + 2px)`,
-                        width: `calc(${100 / p.lanes}% - 4px)`,
-                      }}
-                      title={`${p.item.title} · ${formatClockFr(p.item.startMinute)} à ${formatClockFr(p.item.endMinute)} · ${placeLabel(p.item.placeId)}`}
-                    >
-                      <span className="block truncate font-semibold">{p.item.title}</span>
-                      <span className="block truncate">
-                        {formatClockFr(p.item.startMinute)}–{formatClockFr(p.item.endMinute)}
-                      </span>
-                      <span className="block truncate opacity-80">
-                        {placeLabel(p.item.placeId)}
-                      </span>
-                    </button>
-                  ))}
+                  {placed.map((p) => {
+                    const style = {
+                      top: `calc(${p.top * 100}% + 1px)`,
+                      height: `calc(${p.height * 100}% - 2px)`,
+                      left: `calc(${(p.lane / p.lanes) * 100}% + 2px)`,
+                      width: `calc(${100 / p.lanes}% - 4px)`,
+                    };
+                    const s = p.item.proposal;
+                    if (s) {
+                      const isMoving = moving?.key === s.key;
+                      return (
+                        <button
+                          key={p.item.id}
+                          type="button"
+                          aria-label={`Séance proposée : ${s.title}, ${s.label}, ${s.placeName}. Glisse pour la déplacer.`}
+                          onPointerDown={(e) => onProposalPointerDown(e, s)}
+                          onPointerMove={onProposalPointerMove}
+                          onPointerUp={onProposalPointerUp}
+                          onPointerCancel={() => setMoving(null)}
+                          className={cn(
+                            "absolute cursor-grab touch-none overflow-hidden rounded-md px-1.5 py-0.5 text-left text-xs leading-tight focus-visible:ring-2 focus-visible:outline-none",
+                            PROPOSED_STUDY_COLOR,
+                            isMoving && "z-10 cursor-grabbing opacity-80 shadow-lg",
+                            studyPlan.errorKey === s.key && "border-destructive",
+                          )}
+                          style={style}
+                          title={`${s.title} (proposée) · ${s.label} · ${s.placeName}`}
+                        >
+                          <span className="text-study block truncate text-[10px] font-semibold tracking-wide uppercase">
+                            Proposée
+                          </span>
+                          <span className="block truncate font-semibold">{s.title}</span>
+                          <span className="block truncate">
+                            {formatClockFr(s.startMinute)}–{formatClockFr(s.endMinute)}
+                          </span>
+                          <span className="block truncate opacity-80">{s.placeName}</span>
+                        </button>
+                      );
+                    }
+                    const b = p.item.block as ScheduleBlock;
+                    return (
+                      <button
+                        key={p.item.id}
+                        type="button"
+                        onClick={() => {
+                          setMessage(null);
+                          // Plan de groupe : on le gère (refuser) dans « Mes plans ».
+                          if (b.source === "meetup") router.push("/plans");
+                          // Séance d'étude : on la gère (retirer, déplaçable) dans « Étude ».
+                          else if (b.source === "study") router.push("/etude");
+                          else setDraft(editDraft(b, day));
+                        }}
+                        className={cn(
+                          "absolute overflow-hidden rounded-md border-l-4 px-1.5 py-0.5 text-left text-xs leading-tight shadow-sm hover:brightness-95 focus-visible:ring-2 focus-visible:outline-none",
+                          b.source === "meetup"
+                            ? MEETUP_COLOR
+                            : b.source === "study"
+                              ? ACCEPTED_STUDY_COLOR
+                              : colorOf(b.placeId),
+                          conflictIds.has(b.id) && "ring-destructive ring-2",
+                          p.cutTop && "rounded-t-none",
+                          p.cutBottom && "rounded-b-none",
+                        )}
+                        style={style}
+                        title={`${b.title} · ${formatClockFr(b.startMinute)} à ${formatClockFr(b.endMinute)} · ${placeLabel(b.placeId)}${conflictIds.has(b.id) ? " · en conflit" : ""}`}
+                      >
+                        <span className="block truncate font-semibold">{b.title}</span>
+                        <span className="block truncate">
+                          {formatClockFr(b.startMinute)}–{formatClockFr(b.endMinute)}
+                        </span>
+                        <span className="block truncate opacity-80">{placeLabel(b.placeId)}</span>
+                      </button>
+                    );
+                  })}
                   {preview && drag?.day === day && (
                     <div
                       className="border-primary bg-primary/20 pointer-events-none absolute inset-x-0.5 rounded-md border-2 border-dashed text-[11px]"
@@ -538,7 +743,11 @@ function BlockRow({
       <span
         className={cn(
           "mt-1 size-3 shrink-0 rounded-full border-2",
-          block.source === "meetup" ? MEETUP_COLOR : color,
+          block.source === "meetup"
+            ? MEETUP_COLOR
+            : block.source === "study"
+              ? ACCEPTED_STUDY_COLOR
+              : color,
         )}
         aria-hidden
       />
@@ -548,6 +757,10 @@ function BlockRow({
           {block.source === "meetup" ? (
             <Badge variant="secondary" className="ml-1">
               <Users /> plan de groupe
+            </Badge>
+          ) : block.source === "study" ? (
+            <Badge variant="secondary" className="ml-1">
+              <BookOpen /> étude
             </Badge>
           ) : (
             block.source !== "manual" && (
@@ -568,6 +781,12 @@ function BlockRow({
         <Button asChild size="sm" variant="outline">
           <Link href="/plans" aria-label={`Voir le plan « ${block.title} »`}>
             Voir le plan
+          </Link>
+        </Button>
+      ) : block.source === "study" ? (
+        <Button asChild size="sm" variant="outline">
+          <Link href="/etude" aria-label={`Gérer la séance « ${block.title} »`}>
+            Gérer
           </Link>
         </Button>
       ) : (

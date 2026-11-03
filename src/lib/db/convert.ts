@@ -8,15 +8,25 @@
  * qui n'existent pas ou existent deux fois.
  */
 import { getISODay, parseISO } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 
 import { quietHoursBlocks, quietHoursFromDb } from "@/lib/scheduling/quietHours";
+import {
+  type AcceptedStudySession,
+  assertStudyPreferences,
+  DEFAULT_STUDY_PREFERENCES,
+} from "@/lib/scheduling/studyPlanner";
 import { eachDay, TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
 import type {
   BusyBlock,
   DateRange,
+  Deadline,
+  Difficulty,
   Person,
   PersonId,
   Place,
+  StudyPreferences,
+  StudySession,
   TravelMode,
 } from "@/lib/scheduling/types";
 import {
@@ -26,7 +36,13 @@ import {
   type Weekday,
 } from "@/lib/scheduling/weeklyBlocks";
 
-import type { BusyBlockRow, PlaceRow, ProfileRow } from "./schema";
+import type {
+  BusyBlockRow,
+  DeadlineRow,
+  PlaceRow,
+  ProfileRow,
+  StudyPreferencesRow,
+} from "./schema";
 
 /**
  * Colonnes utiles d'un profil. Les « heures où je ne sors pas » sont facultatives (absentes
@@ -246,4 +262,160 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
     else map.set(k, [item]);
   }
   return map;
+}
+
+// ─── Planificateur d'étude (segments 13 et 14) ───────────────────────────────────────────
+
+/** Colonnes utiles d'une échéance. */
+export type DeadlineInput = Pick<
+  DeadlineRow,
+  "id" | "kind" | "course" | "due_at" | "estimated_hours" | "difficulty"
+>;
+
+/** Ligne `deadlines` → `Deadline` (difficulté hors bornes : moyenne). */
+export function toDeadline(row: DeadlineInput): Deadline {
+  const dueAt = new Date(row.due_at);
+  if (!Number.isFinite(dueAt.getTime())) {
+    throw new Error(`Date d'échéance invalide venant de la BD : ${row.due_at}`);
+  }
+  const difficulty = [1, 2, 3].includes(row.difficulty) ? (row.difficulty as Difficulty) : 2;
+  return {
+    id: row.id,
+    kind: row.kind,
+    course: row.course,
+    dueAt,
+    estimatedHours: row.estimated_hours,
+    difficulty,
+  };
+}
+
+/** Colonnes utiles des préférences d'étude. */
+export type StudyPreferencesInput = Pick<
+  StudyPreferencesRow,
+  | "min_session_minutes"
+  | "max_session_minutes"
+  | "max_minutes_per_day"
+  | "break_minutes"
+  | "study_start"
+  | "study_end"
+  | "eve_cutoff"
+  | "keep_free_percent"
+>;
+
+/**
+ * Ligne `study_preferences` → `StudyPreferences`. Pas de ligne (jamais réglées) ou valeurs
+ * incohérentes : préférences par défaut. Début de soirée, marge et fenêtre : valeurs par défaut.
+ */
+export function toStudyPreferences(row: StudyPreferencesInput | null): StudyPreferences {
+  if (!row) return DEFAULT_STUDY_PREFERENCES;
+  const prefs: StudyPreferences = {
+    ...DEFAULT_STUDY_PREFERENCES,
+    minSessionMinutes: row.min_session_minutes,
+    maxSessionMinutes: row.max_session_minutes,
+    maxStudyMinutesPerDay: row.max_minutes_per_day,
+    breakMinutes: row.break_minutes,
+    studyHours: { start: toHHmm(row.study_start), end: toHHmm(row.study_end) },
+    eveCutoff: row.eve_cutoff ? toHHmm(row.eve_cutoff) : null,
+    keepFreeRatio: row.keep_free_percent / 100,
+  };
+  try {
+    assertStudyPreferences(prefs);
+    return prefs;
+  } catch {
+    return DEFAULT_STUDY_PREFERENCES;
+  }
+}
+
+/** `StudyPreferences` → colonnes de `study_preferences` (sans `owner_id`). */
+export function fromStudyPreferences(p: StudyPreferences): StudyPreferencesInput {
+  return {
+    min_session_minutes: p.minSessionMinutes,
+    max_session_minutes: p.maxSessionMinutes,
+    max_minutes_per_day: p.maxStudyMinutesPerDay,
+    break_minutes: p.breakMinutes,
+    study_start: p.studyHours.start,
+    study_end: p.studyHours.end,
+    eve_cutoff: p.eveCutoff,
+    keep_free_percent: Math.round(p.keepFreeRatio * 100),
+  };
+}
+
+/** Colonnes utiles d'un bloc pour l'étude : bloc + origine, échéance et « déplaçable ». */
+export type StudyBlockInput = BusyBlockInput &
+  Pick<BusyBlockRow, "source"> &
+  Partial<Pick<BusyBlockRow, "deadline_id" | "movable">>;
+
+/** Préfixes des titres des séances (le reste : nom du cours). */
+export const STUDY_TITLE_PREFIX = { study: "Étude : ", review: "Révision : " } as const;
+
+/** Titre d'une séance enregistrée : « Étude : Chimie », « Révision : Chimie » (≤ 100). */
+export function studySessionTitle(kind: StudySession["kind"], course: string): string {
+  return `${STUDY_TITLE_PREFIX[kind]}${course}`.slice(0, 100);
+}
+
+/**
+ * Bloc `source = 'study'` → séance acceptée (instants absolus). `null` si ce n'est pas une
+ * séance valable (pas d'échéance, bloc hebdomadaire, heures impossibles). Lieu nul : maison.
+ */
+export function toAcceptedSession(
+  row: StudyBlockInput,
+  homePlaceId: string,
+  timeZone: string = TIME_ZONE,
+): AcceptedStudySession | null {
+  if (row.source !== "study" || !row.deadline_id || row.weekday != null || !row.valid_from) {
+    return null;
+  }
+  const start = zonedTime(row.valid_from, toHHmm(row.start_time), timeZone);
+  const end = zonedTime(row.valid_from, toHHmm(row.end_time), timeZone);
+  if (end <= start) return null;
+  return {
+    id: row.id,
+    deadlineId: row.deadline_id,
+    start,
+    end,
+    placeId: row.place_id ?? homePlaceId,
+    kind: row.title.startsWith(STUDY_TITLE_PREFIX.review) ? "review" : "study",
+    movable: row.movable ?? false,
+  };
+}
+
+/** Colonnes d'une séance à écrire dans `busy_blocks` (heures locales, bloc ponctuel). */
+export interface StudyBlockRow {
+  title: string;
+  place_id: string;
+  start_time: string;
+  end_time: string;
+  weekday: null;
+  valid_from: string;
+  valid_until: string;
+}
+
+/**
+ * Séance → colonnes de `busy_blocks` (jour et heures locales). Une séance qui finit pile à
+ * minuit finit à « 24:00 ». Lève une erreur si elle traverse minuit.
+ */
+export function studySessionToRow(
+  session: Pick<StudySession, "start" | "end" | "placeId">,
+  title: string,
+  timeZone: string = TIME_ZONE,
+): StudyBlockRow {
+  const day = formatInTimeZone(session.start, timeZone, "yyyy-MM-dd");
+  const start = formatInTimeZone(session.start, timeZone, "HH:mm");
+  const endDay = formatInTimeZone(session.end, timeZone, "yyyy-MM-dd");
+  let end = formatInTimeZone(session.end, timeZone, "HH:mm");
+  if (endDay !== day) {
+    if (end !== "00:00" || zonedTime(day, "24:00", timeZone).getTime() !== session.end.getTime()) {
+      throw new Error("Une séance ne traverse pas minuit.");
+    }
+    end = "24:00";
+  }
+  return {
+    title,
+    place_id: session.placeId,
+    start_time: start,
+    end_time: end,
+    weekday: null,
+    valid_from: day,
+    valid_until: day,
+  };
 }

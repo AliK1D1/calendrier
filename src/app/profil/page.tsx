@@ -5,13 +5,20 @@ import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getMyPlaces, getMyPrivacy, getMyProfile, getMyQuietHours } from "@/lib/profile";
+import {
+  getMyPlaces,
+  getMyPrivacy,
+  getMyProfile,
+  getMyQuietHours,
+  getMyStudyPreferences,
+} from "@/lib/profile";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { PrivacyForm } from "./privacy-form";
 import { ProfileForm } from "./profile-form";
 import { QuietHoursForm } from "./quiet-hours-form";
+import { StudyPrefsForm } from "./study-prefs-form";
 
 export const metadata: Metadata = { title: "Profil · Temps libre commun" };
 export const dynamic = "force-dynamic";
@@ -22,11 +29,12 @@ export default async function Profil() {
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/connexion?next=/profil");
 
-  const [profile, places, quietRow, hideTitles] = await Promise.all([
+  const [profile, places, quietRow, hideTitles, studyPrefs] = await Promise.all([
     getMyProfile(supabase, data.user.id),
     getMyPlaces(supabase, data.user.id),
     getMyQuietHours(supabase, data.user.id),
     getMyPrivacy(supabase, data.user.id),
+    getMyStudyPreferences(supabase, data.user.id),
   ]);
   const quiet = quietRow
     ? quietHoursFromDb(quietRow.unavailable_before, quietRow.unavailable_after)
@@ -88,6 +96,25 @@ export default async function Profil() {
               </p>
             ) : (
               <PrivacyForm hideTitles={hideTitles} />
+            )}
+          </CardContent>
+        </Card>
+        <Card id="etude" className="scroll-mt-16">
+          <CardHeader>
+            <CardTitle>Préférences d&apos;étude</CardTitle>
+            <CardDescription>
+              Pour les séances que l&apos;app te propose avant un examen ou un travail (page Étude).
+              Les séances ont lieu dans ces heures, et jamais pendant tes heures où tu ne sors pas.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {studyPrefs ? (
+              <StudyPrefsForm prefs={studyPrefs} />
+            ) : (
+              <p role="alert" className="text-destructive text-sm">
+                La base de données n&apos;est pas à jour : applique supabase/migration-0011.sql
+                (voir README).
+              </p>
             )}
           </CardContent>
         </Card>

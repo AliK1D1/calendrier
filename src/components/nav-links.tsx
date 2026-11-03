@@ -10,6 +10,7 @@ const LIENS = [
   { href: "/groupes", label: "Groupes" },
   { href: "/plans", label: "Plans" },
   { href: "/horaire", label: "Horaire" },
+  { href: "/etude", label: "Étude" },
   { href: "/lieux", label: "Lieux" },
   { href: "/profil", label: "Profil" },
 ];

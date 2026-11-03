@@ -8,7 +8,17 @@ import { toBlockSpec } from "@/lib/db/convert";
 import { getMyBusyBlocks, getMyPlaces, getMyProfile, getMyQuietHours } from "@/lib/profile";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { TIME_ZONE } from "@/lib/scheduling/time";
+import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
+import { type ConflictView, myStudyConflicts } from "@/lib/study/service";
+import { supabaseStudyStore } from "@/lib/study/supabaseStore";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+import {
+  accepterSeances,
+  planifierEtude,
+  replanifierConflits,
+  verifierSeance,
+} from "../etude/actions";
 
 import { ajouterBlocs, modifierBloc, supprimerBloc } from "./actions";
 import { apercuIcs, confirmerIcs } from "./import-actions";
@@ -18,7 +28,13 @@ import type { ScheduleBlock } from "./types";
 export const metadata: Metadata = { title: "Mon horaire · Temps libre commun" };
 export const dynamic = "force-dynamic";
 
-export default async function MonHoraire() {
+export default async function MonHoraire({
+  searchParams,
+}: {
+  searchParams: Promise<{ etude?: string | string[] }>;
+}) {
+  const { etude } = await searchParams;
+  const start = etude === "planifier" || etude === "replanifier" ? etude : null;
   const supabase = await createSupabaseServerClient();
   if (!supabase) redirect("/connexion?erreur=config&next=/horaire");
   const { data } = await supabase.auth.getUser();
@@ -35,7 +51,21 @@ export default async function MonHoraire() {
     ...toBlockSpec(r),
     id: r.id,
     source: r.source,
+    movable: r.movable,
   }));
+  // Séances d'étude acceptées et déplaçables sur lesquelles tombe autre chose (segment 14).
+  let conflicts: ConflictView[] = [];
+  if (rows.some((r) => r.source === "study" && r.movable)) {
+    const r = await myStudyConflicts(supabaseStudyStore(supabase, userId), {
+      userId,
+      now: new Date(),
+      travel: new EstimatedTravelProvider(),
+    }).catch((e: unknown) => {
+      console.error("Conflits d'étude :", e);
+      return null;
+    });
+    if (r?.ok) conflicts = r.value;
+  }
   // Lieux des plans acceptés qui ne sont pas à moi (favori du groupe, lieu d'un ami).
   const mine = new Set(places.map((p) => p.id));
   const otherPlaceIds = [
@@ -66,7 +96,11 @@ export default async function MonHoraire() {
           <h1 className="text-2xl font-bold tracking-tight">Mon horaire</h1>
           <p className="text-muted-foreground text-sm">
             Tes cours, ton travail et tes autres engagements. Les membres de tes groupes voient
-            quand tu es occupé et où. Les zones hachurées sont tes{" "}
+            quand tu es occupé et où. Tes séances d&apos;étude se planifient dans{" "}
+            <Link href="/etude" className="underline underline-offset-2">
+              Étude
+            </Link>
+            . Les zones hachurées sont tes{" "}
             <Link href="/profil" className="underline underline-offset-2">
               heures où tu ne sors pas
             </Link>
@@ -91,6 +125,11 @@ export default async function MonHoraire() {
           actions={{ ajouterBlocs, modifierBloc, supprimerBloc }}
           icsActions={{ apercuIcs, confirmerIcs }}
           extraPlaceNames={extraPlaceNames}
+          study={{
+            start,
+            conflicts,
+            actions: { planifierEtude, replanifierConflits, verifierSeance, accepterSeances },
+          }}
         />
       </main>
     </>

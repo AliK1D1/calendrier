@@ -392,6 +392,33 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
   limites, échéance d'un autre refusée, confidentialité, migration 0011 sur une base en 0010 avec
   des blocs « plan » et un plan).
 
+## Planificateur d'étude : l'interface (segment 14)
+
+- Page **`/etude`** (lien « Étude » dans le menu) : ajouter un examen ou un travail (type, cours,
+  date et heure, heures estimées ou difficulté), liste « À venir » et « Passés », suppression
+  (retire ses séances), séances acceptées de chaque échéance (case « Déplaçable », « Retirer »).
+- **« Planifier mon étude »** ouvre `/horaire?etude=planifier` : le serveur
+  (`src/app/etude/actions.ts` → `src/lib/study/service.ts`) lit les données au nom de la
+  personne (RLS), appelle `planStudySessions` et renvoie les séances **sans rien écrire**. Elles
+  s'affichent dans la grille en **pointillé**, couleur « étude » (`--study`, clair et sombre),
+  avec les avertissements (« Il te manque 30 min avant l'examen de chimie. »).
+- Tout accepter, accepter ou refuser une séance, la décaler de 15 min (flèches) ou la **glisser**
+  dans la grille : chaque déplacement est **revalidé par le serveur** (`verifierSeance`), et
+  l'acceptation revalide tout de nouveau (`prepareAcceptance`, tout ou rien : échéance et lieu à
+  moi, quart d'heure, durée, pas passée, avant l'échéance, aucun bloc ni trajet dessus). Les
+  séances acceptées deviennent des blocs `source = 'study'`, `movable = true`, `deadline_id`.
+- **Conflits** : si un plan de groupe (bloc `meetup`), un cours ou un trajet tombe sur une séance
+  acceptée et déplaçable, `/etude` et `/horaire` affichent « Séance en conflit : replanifier ? ».
+  « Replanifier » propose de nouvelles places (rien n'est écrit avant « Déplacer »).
+- **Préférences d'étude** dans `/profil` (section « Préférences d'étude ») : durée min et max,
+  maximum par jour, pause, heures d'étude, limite de la veille, part des soirées et fins de
+  semaine gardée libre.
+- Limite : 30 calculs par minute et par personne ; au plus 100 séances par envoi.
+- Tests : `src/lib/study/__tests__/validation.test.ts` (formulaires, séances, conversions) et
+  `src/lib/db/__tests__/study-service.test.ts` (PGlite : planifier n'écrit rien, accepter, tout
+  ou rien, échéance/lieu/séance d'un autre refusés, déplacement revalidé, conflit avec un plan
+  de groupe puis replanification, séance « Occupé » dans la recherche de groupe).
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -409,23 +436,24 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
 
 ## État des segments
 
-| #   | Segment                            | État    |
-| --- | ---------------------------------- | ------- |
-| 0   | Mise en place du projet            | Fait    |
-| 1   | Types et données de test           | Fait    |
-| 2   | Fenêtres libres                    | Fait    |
-| 3   | Temps de trajet (estimation)       | Fait    |
-| 4   | Recherche de rencontres            | Fait    |
-| 5   | Classement des propositions        | Fait    |
-| 6   | Base de données et comptes         | Fait    |
-| 7   | Mes lieux                          | Fait    |
-| 8   | Mon horaire (saisie manuelle)      | Fait    |
-| 9   | Import d'horaire .ics              | Fait    |
-| 10  | Groupes et amis                    | Fait    |
-| 11  | Vue « quand on peut se voir »      | Fait    |
-| 12  | Proposer un moment au groupe       | Fait    |
-| 13  | Planificateur d'étude : logique    | Fait    |
-| 14+ | Planificateur d'étude : interface… | À faire |
+| #   | Segment                           | État    |
+| --- | --------------------------------- | ------- |
+| 0   | Mise en place du projet           | Fait    |
+| 1   | Types et données de test          | Fait    |
+| 2   | Fenêtres libres                   | Fait    |
+| 3   | Temps de trajet (estimation)      | Fait    |
+| 4   | Recherche de rencontres           | Fait    |
+| 5   | Classement des propositions       | Fait    |
+| 6   | Base de données et comptes        | Fait    |
+| 7   | Mes lieux                         | Fait    |
+| 8   | Mon horaire (saisie manuelle)     | Fait    |
+| 9   | Import d'horaire .ics             | Fait    |
+| 10  | Groupes et amis                   | Fait    |
+| 11  | Vue « quand on peut se voir »     | Fait    |
+| 12  | Proposer un moment au groupe      | Fait    |
+| 13  | Planificateur d'étude : logique   | Fait    |
+| 14  | Planificateur d'étude : interface | Fait    |
+| 15+ | Vrai temps de trajet…             | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 

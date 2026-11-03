@@ -2,7 +2,9 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { type StudyPreferencesInput, toStudyPreferences } from "@/lib/db/convert";
 import type { BusyBlockRow, PlaceRow, ProfileRow } from "@/lib/db/schema";
+import type { StudyPreferences } from "@/lib/scheduling/types";
 
 export type MyProfile = Pick<ProfileRow, "id" | "display_name" | "travel_mode" | "home_place_id">;
 export type MyPlace = Pick<PlaceRow, "id" | "name" | "lat" | "lng">;
@@ -70,22 +72,31 @@ export type MyBusyBlock = Pick<
   | "valid_from"
   | "valid_until"
   | "source"
->;
+> &
+  Partial<Pick<BusyBlockRow, "deadline_id" | "movable">>;
 
-/** Mon horaire (tous mes blocs ; la RLS laisse aussi voir ceux de mes groupes : filtre). */
+const BLOCK_COLUMNS =
+  "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, source";
+
+/**
+ * Mon horaire (tous mes blocs ; la RLS laisse aussi voir ceux de mes groupes : filtre). Avec
+ * l'échéance et « déplaçable » des séances d'étude (migration 0011) ; sans elles si la
+ * migration n'est pas encore appliquée (l'horaire reste utilisable).
+ */
 export async function getMyBusyBlocks(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<MyBusyBlock[]> {
-  const { data, error } = await supabase
-    .from("busy_blocks")
-    .select(
-      "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, source",
-    )
-    .eq("owner_id", userId)
-    .order("weekday", { ascending: true, nullsFirst: false })
-    .order("start_time", { ascending: true })
-    .returns<MyBusyBlock[]>();
+  const read = (columns: string) =>
+    supabase
+      .from("busy_blocks")
+      .select(columns)
+      .eq("owner_id", userId)
+      .order("weekday", { ascending: true, nullsFirst: false })
+      .order("start_time", { ascending: true })
+      .returns<MyBusyBlock[]>();
+  let { data, error } = await read(`${BLOCK_COLUMNS}, deadline_id, movable`);
+  if (error?.code === "42703") ({ data, error } = await read(BLOCK_COLUMNS));
   if (error) throw new Error(`Lecture de l'horaire : ${error.message}`);
   return data ?? [];
 }
@@ -129,4 +140,26 @@ export async function getMyPrivacy(
     return null;
   }
   return data?.hide_block_titles ?? true;
+}
+
+/**
+ * Mes préférences d'étude (table de la migration 0011). Jamais réglées : préférences par
+ * défaut. `null` si on ne peut pas les lire (migration 0011 pas encore appliquée).
+ */
+export async function getMyStudyPreferences(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<StudyPreferences | null> {
+  const { data, error } = await supabase
+    .from("study_preferences")
+    .select(
+      "min_session_minutes, max_session_minutes, max_minutes_per_day, break_minutes, study_start, study_end, eve_cutoff, keep_free_percent",
+    )
+    .eq("owner_id", userId)
+    .maybeSingle<StudyPreferencesInput>();
+  if (error) {
+    console.error("Profil (préférences d'étude) :", error.code, error.message);
+    return null;
+  }
+  return toStudyPreferences(data);
 }

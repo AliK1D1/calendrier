@@ -8,7 +8,7 @@
  * `group_busy_blocks`, lieux favoris d'un groupe utilisés seulement avec les membres de ce
  * groupe, nombre de lieux, de personnes et de blocs borné.
  */
-import type { BusyBlockInput, PlaceInput } from "@/lib/db/convert";
+import type { AvailabilitySlotInput, BusyBlockInput, PlaceInput } from "@/lib/db/convert";
 import { toPeople, toPlace } from "@/lib/db/convert";
 import type { Result } from "@/lib/places/validation";
 import {
@@ -28,6 +28,7 @@ import {
   limitCandidatePlaces,
   MAX_CANDIDATE_PLACES,
   type MeetupStore,
+  readGroupAvailabilities,
   type SearchDeps,
   type StoreResult,
 } from "./search";
@@ -128,12 +129,13 @@ export async function searchFreeNow(
 
   const perGroup = await Promise.all(
     groups.map(async (g) => {
-      const [members, favorites, blocks] = await Promise.all([
+      const [members, favorites, blocks, availabilities] = await Promise.all([
         store.memberIds(g.id),
         store.groupPlaces(g.id),
         store.groupBlocks(g.id),
+        readGroupAvailabilities(store, g.id),
       ]);
-      return { group: g, members, favorites, blocks };
+      return { group: g, members, favorites, blocks, availabilities };
     }),
   );
 
@@ -141,11 +143,13 @@ export async function searchFreeNow(
   const groupsOf = new Map<string, string[]>();
   const favoritesOf = new Map<string, PlaceInput[]>();
   const blockById = new Map<string, BusyBlockInput>();
+  const availabilityById = new Map<string, AvailabilitySlotInput>();
   const memberGroups: { id: string; members: string[]; favorites: PlaceInput[] }[] = [];
-  for (const { group, members, favorites, blocks } of perGroup) {
+  for (const { group, members, favorites, blocks, availabilities } of perGroup) {
     if (!members.ok) return members;
     if (!favorites.ok) return favorites;
     if (!blocks.ok) return blocks;
+    if (!availabilities.ok) return availabilities;
     if (!members.value.includes(deps.userId)) continue;
     const memberSet = new Set(members.value);
     memberGroups.push({ id: group.id, members: members.value, favorites: favorites.value });
@@ -155,6 +159,9 @@ export async function searchFreeNow(
       favoritesOf.set(id, [...(favoritesOf.get(id) ?? []), ...favorites.value]);
     }
     for (const b of blocks.value) if (memberSet.has(b.owner_id)) blockById.set(b.id, b);
+    for (const a of availabilities.value) {
+      if (memberSet.has(a.owner_id)) availabilityById.set(a.id, a);
+    }
   }
 
   let others = [...groupsOf.keys()];
@@ -189,7 +196,9 @@ export async function searchFreeNow(
     ...allFavorites,
   ]);
   const profileRows = profiles.value.filter((p) => idSet.has(p.id));
-  const converted = toPeople(profileRows, placeRows, blockRows, range);
+  const converted = toPeople(profileRows, placeRows, blockRows, range, {
+    availabilities: [...availabilityById.values()].filter((a) => idSet.has(a.owner_id)),
+  });
   const byId = new Map(converted.people.map((p) => [p.id, p]));
 
   const me = byId.get(deps.userId);

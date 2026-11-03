@@ -24,7 +24,7 @@ import { ceilToMinutes } from "@/lib/scheduling/period";
 import { TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
 import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
 import type { MeetupProposal, Person } from "@/lib/scheduling/types";
-import { weekdayOf } from "@/lib/scheduling/weeklyBlocks";
+import { shiftDay, weekdayOf } from "@/lib/scheduling/weeklyBlocks";
 
 import {
   PLACES,
@@ -36,7 +36,7 @@ import {
   maya,
   sam,
 } from "../../scheduling/__tests__/fixtures";
-import type { BusyBlockInput, PlaceInput, ProfileInput } from "../convert";
+import type { AvailabilitySlotInput, BusyBlockInput, PlaceInput, ProfileInput } from "../convert";
 import { FAKE_SUPABASE, asUser } from "./pgliteHarness";
 
 const ROOT = join(__dirname, "../../../..");
@@ -101,6 +101,12 @@ function pgliteMeetupStore(uid: string): MeetupStore {
         `SELECT id, owner_id, title, place_id, start_time::text, end_time::text, weekday,
                 valid_from::text, valid_until::text
          FROM public.group_busy_blocks($1)`,
+        [gid],
+      ),
+    groupAvailabilities: (gid) =>
+      read<AvailabilitySlotInput>(
+        `SELECT id, owner_id, day::text, start_time::text, end_time::text
+         FROM public.group_availability_slots($1)`,
         [gid],
       ),
   };
@@ -658,5 +664,85 @@ describe("validateFreeNow", () => {
     expect(validateFreeNow({ groupId: "abc" }).ok).toBe(false);
     expect(validateFreeNow({ groupId: 3 }).ok).toBe(false);
     expect(validateFreeNow("x").ok).toBe(false);
+  });
+});
+
+// ─── Disponibilités ponctuelles (segment 18) ───────────────────────────────────────────────
+
+describe("Disponibilités ponctuelles : la recherche et « libre maintenant » en tiennent compte", () => {
+  // group_availability_slots ne renvoie que les jours à partir d'hier (date de la BD) : ces
+  // tests utilisent donc le prochain samedi réel, pas la semaine des fixtures.
+  const today = formatInTimeZone(new Date(), TIME_ZONE, "yyyy-MM-dd");
+  let samedi = shiftDay(today, 2);
+  while (weekdayOf(samedi) !== 6) samedi = shiftDay(samedi, 1);
+  const [h13, h18] = [zonedTime(samedi, "13:00").getTime(), zonedTime(samedi, "18:00").getTime()];
+  const leSamedi = (p: { start: string }) =>
+    formatInTimeZone(new Date(p.start), TIME_ZONE, "yyyy-MM-dd") === samedi;
+
+  /** ali (sans cours la fin de semaine) et Léo, qui travaille chaque samedi de 10 h à 18 h. */
+  async function seedAliEtLeo() {
+    await seedPerson(ALI, ali);
+    const leoIds = await seedPerson(LEO, { ...leo, busyBlocks: [] });
+    await as(LEO, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, place_id, start_time, end_time, weekday)
+         VALUES ('Travail', $1, '10:00', '18:00', 6)`,
+        [leoIds.get(PLACES.carrefourLaval.id)],
+      ),
+    );
+    return createGroupWith(ALI, [LEO]);
+  }
+  async function addSlot(uid: string, day: string, start: string, end: string) {
+    await as(uid, () =>
+      rows("INSERT INTO availability_slots (day, start_time, end_time) VALUES ($1, $2, $3)", [
+        day,
+        start,
+        end,
+      ]),
+    );
+  }
+  const searchAt = async (gid: string) => {
+    const r = await searchGroupMeetups(
+      pgliteMeetupStore(ALI),
+      input(gid, [ALI, LEO], { durationMinutes: 60 }),
+      { userId: ALI, now: zonedTime(samedi, "07:00"), travel: travel() },
+    );
+    if (!r.ok) throw new Error(r.error);
+    return r.value;
+  };
+
+  it("Léo libre de 13 h à 18 h ce samedi (shift levé) : proposé seulement à ces heures-là", async () => {
+    const gid = await seedAliEtLeo();
+    const avant = [...(await searchAt(gid)).inPerson].filter(leSamedi);
+    expect(avant.filter((p) => Date.parse(p.start) < h18 && Date.parse(p.end) > h13)).toEqual([]);
+    expect(avant.length).toBeGreaterThan(0); // le matin ou le soir
+
+    await addSlot(LEO, samedi, "13:00", "18:00");
+    const apres = await searchAt(gid);
+    const apresSamedi = [...apres.inPerson, ...apres.calls].filter(leSamedi);
+    expect(apresSamedi.length).toBeGreaterThan(0);
+    for (const p of apresSamedi) {
+      expect(Date.parse(p.start)).toBeGreaterThanOrEqual(h13);
+      expect(Date.parse(p.end)).toBeLessThanOrEqual(h18);
+    }
+    // La grille aussi : Léo n'est libre ce samedi qu'entre 13 h et 18 h.
+    const grille = apres.grid.find((d) => d.day === samedi);
+    const libreLeo = (grille?.slots ?? []).filter((s) => s.free.includes("Léo"));
+    expect(libreLeo.length).toBeGreaterThan(0);
+    for (const s of libreLeo) {
+      expect(Date.parse(s.start)).toBeGreaterThanOrEqual(h13);
+      expect(Date.parse(s.start)).toBeLessThan(h18);
+    }
+  });
+
+  it("« Je suis libre maintenant » samedi 14 h : Léo apparaît grâce à sa disponibilité", async () => {
+    await seedAliEtLeo();
+    const avant = await freeNow(ALI, zonedTime(samedi, "14:00"));
+    expect(avant.ok && avant.value.matches).toEqual([]);
+
+    await addSlot(LEO, samedi, "13:00", "18:00");
+    const apres = await freeNow(ALI, zonedTime(samedi, "14:00"));
+    if (!apres.ok) throw new Error(apres.error);
+    expect(apres.value.matches.map((m) => m.name)).toEqual(["Léo"]);
   });
 });

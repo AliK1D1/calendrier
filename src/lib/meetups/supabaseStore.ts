@@ -3,7 +3,12 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { dbErrorMessage } from "@/lib/actions";
-import type { BusyBlockInput, PlaceInput, ProfileInput } from "@/lib/db/convert";
+import type {
+  AvailabilitySlotInput,
+  BusyBlockInput,
+  PlaceInput,
+  ProfileInput,
+} from "@/lib/db/convert";
 
 import type { FreeNowStore } from "./freeNow";
 import type { MeetupStore } from "./search";
@@ -62,6 +67,18 @@ export function supabaseMeetupStore(supabase: SupabaseClient): MeetupStore {
       if (error) return fail("Moments (horaires)", error);
       // supabase-js sans types générés ne connaît pas la forme d'une fonction : on la précise.
       return { ok: true, value: (data ?? []) as unknown as BusyBlockInput[] };
+    },
+    async groupAvailabilities(groupId) {
+      const { data, error } = await supabase.rpc("group_availability_slots", { gid: groupId });
+      if (error) {
+        // Base pas encore migrée (supabase/migration-0012.sql) : le calcul marche sans.
+        if (error.code === "PGRST202" || error.code === "42883") {
+          console.warn("Disponibilités ponctuelles : migration 0012 manquante.");
+          return { ok: true, value: [] };
+        }
+        return fail("Moments (disponibilités)", error);
+      }
+      return { ok: true, value: (data ?? []) as unknown as AvailabilitySlotInput[] };
     },
   };
 }

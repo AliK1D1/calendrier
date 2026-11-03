@@ -50,9 +50,9 @@ Méthode simple, sans mot de passe de BD :
 
 1. Supabase → **SQL Editor** → **New query**.
 2. Coller **tout** le contenu de [`supabase/setup.sql`](supabase/setup.sql) → **Run**.
-3. Vérifier dans **Table Editor** : 10 tables (`profiles`, `places`, `busy_blocks`, `groups`,
+3. Vérifier dans **Table Editor** : 11 tables (`profiles`, `places`, `busy_blocks`, `groups`,
    `group_members`, `meetup_plans`, `plan_invitees`, `plan_votes`, `deadlines`,
-   `study_preferences`), chacune marquée « RLS enabled ».
+   `study_preferences`, `availability_slots`), chacune marquée « RLS enabled ».
 
 Le script tourne dans une transaction : en cas d'erreur, rien n'est appliqué. Il est fait
 pour une base **vide** (le relancer échoue sur « type already exists »).
@@ -73,6 +73,7 @@ manquent, chacune dans une nouvelle requête du SQL Editor :
 | `supabase/migration-0009.sql` | Segment 12 : proposer un moment au groupe (invités, réponses, blocs « plan » dans l'horaire)      |
 | `supabase/migration-0010.sql` | Revue du segment 12 : caractères de contrôle refusés, titre d'un plan gardé dans son groupe       |
 | `supabase/migration-0011.sql` | Segments 13-14 : examens et travaux, séances d'étude dans l'horaire, préférences d'étude          |
+| `supabase/migration-0012.sql` | Segment 18 : disponibilités ponctuelles (table `availability_slots`, `group_availability_slots`)  |
 
 Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
 (« already exists »).
@@ -499,6 +500,32 @@ formulaire de plan déjà rempli.
 - Action : `chercherLibresMaintenant` (`src/app/groupes/meetup-actions.ts`) : compte dans la
   limite des recherches de moments (20/min) et a sa propre limite (6/min par personne).
 
+### Disponibilités ponctuelles
+
+« Ce samedi, je suis libre de 13 h à 18 h » : dans **Mon horaire**, section **Disponibilités
+ponctuelles** (jour, de, à, note privée facultative).
+
+Le modèle existant ne suffisait pas : il ne connaît que des blocs **occupés**, et tout le reste
+est déjà libre. Une disponibilité dit autre chose, d'où la table `availability_slots`
+(migration 0012, **à appliquer** : `supabase/migration-0012.sql`). Règle, ce jour-là
+seulement (`applyOneOffAvailability`, `src/lib/scheduling/oneOffAvailability.ts`) :
+
+- je ne suis disponible **que** pendant mes disponibilités : le reste de la journée compte comme
+  occupé, à la maison ;
+- pendant mes disponibilités, mes blocs **hebdomadaires** (cours, travail) et mes heures « je
+  ne sors pas » sont levés (ex. le shift du samedi est annulé cette fois-ci) ;
+- mes blocs **ponctuels** (plan accepté, séance d'étude, rendez-vous de ce jour-là) comptent
+  toujours.
+
+Pris en compte par « Quand on peut se voir » (propositions et grille) et « Je suis libre
+maintenant ». Pas par le planificateur d'étude (une disponibilité sert à voir des amis).
+
+Sécurité (comme les migrations précédentes) : RLS (seulement la personne), droits par colonne,
+CHECK (au moins 15 min, note d'une ligne de 60 caractères au plus, sans caractère de contrôle),
+trigger (jour entre hier et dans un an, 100 disponibilités à venir au plus). Les membres de mes
+groupes lisent jour et heures par `group_availability_slots(gid)`, jamais la note. Sans la
+migration, l'app marche comme avant (la section dit qu'il manque la migration).
+
 ## Déploiement (Vercel) et vérification automatique (segment 17)
 
 L'app est en ligne : <https://calendrier-opal.vercel.app>. Le projet Vercel est relié au dépôt
@@ -567,27 +594,27 @@ Une PR dont les tests échouent ne peut alors plus être fusionnée.
 
 ## État des segments
 
-| #   | Segment                           | État     |
-| --- | --------------------------------- | -------- |
-| 0   | Mise en place du projet           | Fait     |
-| 1   | Types et données de test          | Fait     |
-| 2   | Fenêtres libres                   | Fait     |
-| 3   | Temps de trajet (estimation)      | Fait     |
-| 4   | Recherche de rencontres           | Fait     |
-| 5   | Classement des propositions       | Fait     |
-| 6   | Base de données et comptes        | Fait     |
-| 7   | Mes lieux                         | Fait     |
-| 8   | Mon horaire (saisie manuelle)     | Fait     |
-| 9   | Import d'horaire .ics             | Fait     |
-| 10  | Groupes et amis                   | Fait     |
-| 11  | Vue « quand on peut se voir »     | Fait     |
-| 12  | Proposer un moment au groupe      | Fait     |
-| 13  | Planificateur d'étude : logique   | Fait     |
-| 14  | Planificateur d'étude : interface | Fait     |
-| 15  | Vrai temps de trajet (API)        | Fait     |
-| 16  | Import par capture d'écran / PDF  | À faire  |
-| 17  | Déploiement et CI                 | Fait     |
-| 18  | Bonus (PWA, libre maintenant, …)  | En cours |
+| #   | Segment                           | État    |
+| --- | --------------------------------- | ------- |
+| 0   | Mise en place du projet           | Fait    |
+| 1   | Types et données de test          | Fait    |
+| 2   | Fenêtres libres                   | Fait    |
+| 3   | Temps de trajet (estimation)      | Fait    |
+| 4   | Recherche de rencontres           | Fait    |
+| 5   | Classement des propositions       | Fait    |
+| 6   | Base de données et comptes        | Fait    |
+| 7   | Mes lieux                         | Fait    |
+| 8   | Mon horaire (saisie manuelle)     | Fait    |
+| 9   | Import d'horaire .ics             | Fait    |
+| 10  | Groupes et amis                   | Fait    |
+| 11  | Vue « quand on peut se voir »     | Fait    |
+| 12  | Proposer un moment au groupe      | Fait    |
+| 13  | Planificateur d'étude : logique   | Fait    |
+| 14  | Planificateur d'étude : interface | Fait    |
+| 15  | Vrai temps de trajet (API)        | Fait    |
+| 16  | Import par capture d'écran / PDF  | À faire |
+| 17  | Déploiement et CI                 | Fait    |
+| 18  | Bonus (sans courriel/push)        | Fait    |
 
 ## Le cœur : `src/lib/scheduling/`
 

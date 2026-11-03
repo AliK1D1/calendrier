@@ -1,6 +1,8 @@
+import { formatInTimeZone } from "date-fns-tz";
 import { describe, expect, it } from "vitest";
 
 import { findMeetups } from "@/lib/scheduling/findMeetups";
+import { TIME_ZONE } from "@/lib/scheduling/time";
 import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
 import { validateBlockForm } from "@/lib/scheduling/weeklyBlocks";
 
@@ -266,6 +268,52 @@ describe("horaire saisi (/horaire) ↔ busy_blocks", () => {
       ["job@2025-11-09", "2025-11-09T15:00:00.000Z", "2025-11-09T19:00:00.000Z"],
     ]);
     expect(blocs.every((b) => b.placeId === "maison-ali")).toBe(true);
+  });
+
+  it("toPeople applique les disponibilités ponctuelles à leur propriétaire seulement (segment 18)", () => {
+    // Lundi 15 : cours hebdomadaire 10 h → 12 h ; plan ponctuel 14 h → 15 h ; dispo 11 h → 16 h.
+    const rows = [
+      block({}),
+      block({
+        id: "plan",
+        weekday: null,
+        valid_from: "2025-09-15",
+        valid_until: null,
+        start_time: "14:00:00",
+        end_time: "15:00:00",
+      }),
+      block({ id: "sam", owner_id: SAM, place_id: "cegep-sam" }),
+    ];
+    const dispo = {
+      id: "d1",
+      owner_id: ALI,
+      day: "2025-09-15",
+      start_time: "11:00:00",
+      end_time: "16:00:00",
+    };
+    const { people } = toPeople(
+      [
+        { id: ALI, display_name: "Ali", travel_mode: "transit", home_place_id: "maison-ali" },
+        { id: SAM, display_name: "Sam", travel_mode: "walk", home_place_id: "maison-sam" },
+      ],
+      places,
+      rows,
+      {
+        from: "2025-09-15",
+        to: "2025-09-16",
+      },
+      { availabilities: [dispo, { ...dispo, id: "hors-plage", day: "2025-09-30" }] },
+    );
+    const fmt = (b: { id: string; start: Date; end: Date }) =>
+      `${b.id} ${formatInTimeZone(b.start, TIME_ZONE, "dd HH:mm")}-${formatInTimeZone(b.end, TIME_ZONE, "dd HH:mm")}`;
+    expect(people[0].busyBlocks.map(fmt)).toEqual([
+      "indispo@2025-09-15#1 15 00:00-15 11:00",
+      "b1@2025-09-15 15 10:00-15 11:00",
+      "plan 15 14:00-15 15:00",
+      "indispo@2025-09-15#2 15 16:00-16 00:00",
+    ]);
+    // Le mardi et l'horaire de Sam ne changent pas.
+    expect(people[1].busyBlocks.map((b) => b.id)).toEqual(["sam@2025-09-15"]);
   });
 
   it("toPeople ajoute les heures où je ne sors pas comme blocs à la maison", () => {

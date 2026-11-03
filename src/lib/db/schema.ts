@@ -426,6 +426,48 @@ export const studyPreferences = pgTable(
   ],
 );
 
+/**
+ * Disponibilité ponctuelle (segment 18) : « ce samedi, je suis libre de 13 h à 18 h ». Heures
+ * **locales** d'un jour, comme les blocs ponctuels. Ce jour-là, pour les rencontres, la
+ * personne n'est disponible que pendant ses disponibilités : le reste de la journée compte
+ * comme occupé, et ses blocs **hebdomadaires** (et heures « je ne sors pas ») sont levés
+ * pendant ces heures-là ; ses blocs ponctuels (plans acceptés, séances…) comptent toujours
+ * (`applyOneOffAvailability`). Modifiable seulement par la personne ; les membres de ses
+ * groupes voient le jour et les heures par `group_availability_slots`, jamais la note.
+ * Limites : 100 à venir par personne, jour entre hier et dans un an (trigger, migration 0012).
+ */
+export const availabilitySlots = pgTable(
+  "availability_slots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    owner_id: uuid("owner_id")
+      .notNull()
+      .default(sql`auth.uid()`)
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    start_time: time("start_time").notNull(),
+    end_time: time("end_time").notNull(),
+    /** Note privée (ex. « pas de shift »), jamais montrée aux autres. */
+    note: text("note").notNull().default(""),
+    created_at: createdAt(),
+  },
+  (t) => [
+    index("availability_slots_owner_day_idx").on(t.owner_id, t.day),
+    // Au moins 15 min ; « 24:00 » = minuit suivant (une disponibilité ne traverse pas minuit).
+    check(
+      "availability_slots_time_order",
+      sql`${t.end_time} - ${t.start_time} >= interval '15 minutes'`,
+    ),
+    check(
+      "availability_slots_day_range",
+      sql`${t.day} >= '2020-01-01' and ${t.day} < '2100-01-01'`,
+    ),
+    check("availability_slots_note_length", sql`length(${t.note}) <= 60`),
+    // Une seule ligne : aucun caractère de contrôle (ni tabulation ni retour à la ligne).
+    check("availability_slots_note_chars", sql`${t.note} !~ '[\\x01-\\x1f\\x7f-\\x9f]'`),
+  ],
+);
+
 export type ProfileRow = typeof profiles.$inferSelect;
 export type PlaceRow = typeof places.$inferSelect;
 export type BusyBlockRow = typeof busyBlocks.$inferSelect;
@@ -436,3 +478,4 @@ export type PlanVoteRow = typeof planVotes.$inferSelect;
 export type PlanInviteeRow = typeof planInvitees.$inferSelect;
 export type DeadlineRow = typeof deadlines.$inferSelect;
 export type StudyPreferencesRow = typeof studyPreferences.$inferSelect;
+export type AvailabilitySlotRow = typeof availabilitySlots.$inferSelect;

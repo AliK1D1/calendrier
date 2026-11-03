@@ -10,6 +10,10 @@
 import { getISODay, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 
+import {
+  applyOneOffAvailability,
+  type OneOffAvailability,
+} from "@/lib/scheduling/oneOffAvailability";
 import { quietHoursBlocks, quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import {
   type AcceptedStudySession,
@@ -37,6 +41,7 @@ import {
 } from "@/lib/scheduling/weeklyBlocks";
 
 import type {
+  AvailabilitySlotRow,
   BusyBlockRow,
   DeadlineRow,
   PlaceRow,
@@ -198,21 +203,50 @@ export interface PeopleResult {
   incomplete: { id: PersonId; name: string; reason: IncompleteReason }[];
 }
 
+/** Colonnes utiles d'une disponibilité ponctuelle (`group_availability_slots` : sans note). */
+export type AvailabilitySlotInput = Pick<
+  AvailabilitySlotRow,
+  "id" | "owner_id" | "day" | "start_time" | "end_time"
+>;
+
+/** Ligne `availability_slots` → `OneOffAvailability` (heures locales « HH:mm »). */
+export function toOneOffAvailability(row: AvailabilitySlotInput): OneOffAvailability {
+  return { id: row.id, day: row.day, start: toHHmm(row.start_time), end: toHHmm(row.end_time) };
+}
+
+/** Options de `toPeople`. */
+export interface ToPeopleOptions {
+  /** Fuseau (défaut : America/Toronto). */
+  timeZone?: string;
+  /**
+   * Disponibilités ponctuelles (segment 18), de toutes les personnes : appliquées à leur
+   * propriétaire sur les jours de la plage (`applyOneOffAvailability`).
+   */
+  availabilities?: AvailabilitySlotInput[];
+}
+
 /**
  * Construit les `Person` de la logique d'horaire à partir des profils, lieux et blocs lus en
  * BD. Les lieux et blocs sont rattachés à leur propriétaire (`owner_id`). Un profil sans lieu
  * maison (ou dont la maison n'est pas dans ses lieux) est mis dans `incomplete`. Les « heures
  * où je ne sors pas » du profil deviennent des blocs occupés à la maison (`quietHoursBlocks`).
+ * Les disponibilités ponctuelles lèvent, pendant leurs heures, les blocs hebdomadaires et les
+ * heures « je ne sors pas », et rendent occupé le reste de leur journée.
  */
 export function toPeople(
   profiles: ProfileInput[],
   places: PlaceInput[],
   blocks: BusyBlockInput[],
   range: DateRange,
-  timeZone: string = TIME_ZONE,
+  options: ToPeopleOptions = {},
 ): PeopleResult {
+  const { timeZone = TIME_ZONE, availabilities = [] } = options;
   const placesByOwner = groupBy(places, (p) => p.owner_id);
   const blocksByOwner = groupBy(blocks, (b) => b.owner_id);
+  const availabilitiesByOwner = groupBy(
+    availabilities.filter((a) => a.day >= range.from && a.day <= range.to),
+    (a) => a.owner_id,
+  );
   const knownPlaceIds = new Set(places.map((p) => p.id));
   const result: PeopleResult = { people: [], incomplete: [] };
 
@@ -231,10 +265,25 @@ export function toPeople(
       profile.unavailable_before ?? null,
       profile.unavailable_after ?? null,
     );
-    const busyBlocks = [
-      ...expandBusyBlocks(ownBlocks, range, home, timeZone),
-      ...quietHoursBlocks(quiet, range, home, timeZone),
-    ].sort((a, b) => a.start.getTime() - b.start.getTime() || a.id.localeCompare(b.id));
+    const weekly = expandBusyBlocks(
+      ownBlocks.filter((b) => b.weekday != null),
+      range,
+      home,
+      timeZone,
+    );
+    const oneOff = expandBusyBlocks(
+      ownBlocks.filter((b) => b.weekday == null),
+      range,
+      home,
+      timeZone,
+    );
+    const busyBlocks = applyOneOffAvailability(
+      [...weekly, ...quietHoursBlocks(quiet, range, home, timeZone)],
+      oneOff,
+      (availabilitiesByOwner.get(profile.id) ?? []).map(toOneOffAvailability),
+      home,
+      timeZone,
+    );
     // La logique exige que les lieux des blocs soient dans `places` : on ajoute ceux qui
     // viendraient d'un autre propriétaire (ex. lieu favori du groupe) s'ils sont fournis.
     const ownIds = new Set(own.map((p) => p.id));

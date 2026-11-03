@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0011.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0012.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -126,6 +126,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0009.sql",
       "supabase/migration-0010.sql",
       "supabase/migration-0011.sql",
+      "supabase/migration-0012.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -281,19 +282,20 @@ describe("migrations (supabase/setup.sql)", () => {
       const { rows: policies } = await vide.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public'",
       );
-      expect(policies[0].n).toBe(28);
+      expect(policies[0].n).toBe(32);
     } finally {
       await vide.close();
     }
   }, 60_000);
 
-  it("s'applique sur une base vide et crée les 10 tables avec RLS activé", async () => {
+  it("s'applique sur une base vide et crée les 11 tables avec RLS activé", async () => {
     const tables = await rows<{ relname: string; relrowsecurity: boolean }>(
       `SELECT c.relname, c.relrowsecurity FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
        WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname`,
     );
     expect(tables.map((t) => t.relname)).toEqual([
+      "availability_slots",
       "busy_blocks",
       "deadlines",
       "group_members",
@@ -1795,6 +1797,179 @@ describe("Groupes (segment 10) : migration 0006 sur une base en 0005 avec des do
         ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0006.sql"), "utf8")),
       ).rejects.toThrow(/already exists/);
       await ancienne.exec("ROLLBACK");
+    } finally {
+      await ancienne.close();
+    }
+  }, 60_000);
+});
+
+describe("Disponibilités ponctuelles (segment 18) : RLS, droits, limites", () => {
+  /** Ajoute une disponibilité au nom de `uid`, `offset` jours après aujourd'hui (UTC de la BD). */
+  async function addSlot(uid: string, offset = 3, start = "13:00", end = "18:00", note = "") {
+    return as(uid, async () => {
+      const [r] = await rows<{ id: string }>(
+        `INSERT INTO availability_slots (day, start_time, end_time, note)
+         VALUES (current_date + $1::int, $2, $3, $4) RETURNING id`,
+        [offset, start, end, note],
+      );
+      return r.id;
+    });
+  }
+
+  it("seule la personne voit, modifie et supprime ses disponibilités ; personne n'écrit pour elle", async () => {
+    const id = await addSlot(A, 3, "13:00", "18:00", "pas de shift");
+    expect(await as(A, () => rows("SELECT note FROM availability_slots"))).toEqual([
+      { note: "pas de shift" },
+    ]);
+    expect(await as(B, () => rows("SELECT * FROM availability_slots"))).toEqual([]);
+    expect(
+      await as(B, () =>
+        rows("UPDATE availability_slots SET note = 'x' WHERE id = $1 RETURNING id", [id]),
+      ),
+    ).toEqual([]);
+    expect(
+      await as(B, () => rows("DELETE FROM availability_slots WHERE id = $1 RETURNING id", [id])),
+    ).toEqual([]);
+    await expect(
+      as(B, () =>
+        rows(
+          "INSERT INTO availability_slots (owner_id, day, start_time, end_time) VALUES ($1, current_date + 2, '10:00', '11:00')",
+          [A],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    // A modifie les heures et la note, mais ni le propriétaire ni l'identifiant.
+    await as(A, () =>
+      rows("UPDATE availability_slots SET end_time = '24:00', note = 'ok' WHERE id = $1", [id]),
+    );
+    await expect(
+      as(A, () => rows("UPDATE availability_slots SET owner_id = $1 WHERE id = $2", [B, id])),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      as(A, () => rows("UPDATE availability_slots SET created_at = now() WHERE id = $1", [id])),
+    ).rejects.toThrow(/permission denied/);
+    expect(
+      await as(A, () => rows("DELETE FROM availability_slots WHERE id = $1 RETURNING id", [id])),
+    ).toEqual([{ id }]);
+  });
+
+  it("anon ne lit rien et n'exécute pas group_availability_slots", async () => {
+    await addSlot(A);
+    await expect(as(null, () => rows("SELECT * FROM availability_slots"))).rejects.toThrow(
+      /permission denied/,
+    );
+    await expect(
+      as(null, () =>
+        rows("SELECT * FROM public.group_availability_slots($1)", [
+          "00000000-0000-4000-8000-000000000099",
+        ]),
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("CHECK : au moins 15 min, note d'une ligne de 60 caractères au plus", async () => {
+    await expect(addSlot(A, 3, "13:00", "13:10")).rejects.toThrow(/availability_slots_time_order/);
+    await expect(addSlot(A, 3, "18:00", "13:00")).rejects.toThrow(/availability_slots_time_order/);
+    await expect(addSlot(A, 3, "13:00", "18:00", "x".repeat(61))).rejects.toThrow(
+      /availability_slots_note_length/,
+    );
+    for (const bad of ["a\nb", "a\rb", "a\tb", "a\u0085b", "a\u001bb"]) {
+      await expect(addSlot(A, 3, "13:00", "18:00", bad)).rejects.toThrow(
+        /availability_slots_note_chars/,
+      );
+    }
+    await addSlot(A, 3, "20:00", "24:00", "é".repeat(60));
+  });
+
+  it("jour entre hier et dans un an ; 100 disponibilités par personne au plus", async () => {
+    await expect(addSlot(A, -3)).rejects.toThrow(/année qui vient/);
+    await expect(addSlot(A, 400)).rejects.toThrow(/année qui vient/);
+    await as(A, () =>
+      rows(
+        `INSERT INTO availability_slots (day, start_time, end_time)
+         SELECT current_date + (g % 300), '10:00', '11:00' FROM generate_series(1, 100) g`,
+      ),
+    );
+    await expect(addSlot(A)).rejects.toThrow(/100 au maximum/);
+    // Les autres ne sont pas touchés.
+    await addSlot(B);
+    // Les disponibilités passées ne comptent pas (sinon on serait bloqué au bout d'un an).
+    await db.exec("ALTER TABLE availability_slots DISABLE TRIGGER availability_slots_limits");
+    await db.query(
+      `INSERT INTO availability_slots (owner_id, day, start_time, end_time)
+       SELECT $1, current_date - 5 - g, '10:00', '11:00' FROM generate_series(1, 150) g`,
+      [C],
+    );
+    await db.exec("ALTER TABLE availability_slots ENABLE TRIGGER availability_slots_limits");
+    await addSlot(C);
+  });
+
+  it("les membres d'un groupe voient le jour et les heures (jamais la note) ; les autres, rien", async () => {
+    await addSlot(A, 3, "13:00", "18:00", "secret");
+    await addSlot(C, 3, "09:00", "10:00");
+    // Une vieille disponibilité (écrite avant la limite) n'est plus renvoyée.
+    await db.exec("ALTER TABLE availability_slots DISABLE TRIGGER availability_slots_limits");
+    await db.query(
+      "INSERT INTO availability_slots (owner_id, day, start_time, end_time) VALUES ($1, current_date - 10, '10:00', '11:00')",
+      [A],
+    );
+    await db.exec("ALTER TABLE availability_slots ENABLE TRIGGER availability_slots_limits");
+
+    const g = await createGroup(A, "Gang");
+    await join_(B, g.code);
+    const vu = await as(B, () =>
+      rows<Record<string, unknown>>("SELECT * FROM public.group_availability_slots($1)", [g.id]),
+    );
+    expect(vu).toHaveLength(1);
+    expect(Object.keys(vu[0]).sort()).toEqual(["day", "end_time", "id", "owner_id", "start_time"]);
+    expect(vu[0]).toMatchObject({ owner_id: A, start_time: "13:00:00", end_time: "18:00:00" });
+    // C n'est pas membre : rien, même en connaissant l'identifiant du groupe.
+    expect(
+      await as(C, () => rows("SELECT * FROM public.group_availability_slots($1)", [g.id])),
+    ).toEqual([]);
+  });
+});
+
+describe("Disponibilités ponctuelles : migration 0012 sur une base en 0011 avec des données", () => {
+  it("s'applique seule (supabase/migration-0012.sql) et garde les données", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      for (const tag of [
+        "0000_schema",
+        "0001_rls_triggers",
+        "0002_review_hardening",
+        "0003_onboarding",
+        "0004_quiet_hours",
+        "0005_review_limits",
+        "0006_groups",
+        "0007_review_kick_new_code",
+        "0008_review_row_limits",
+        "0009_segment12_meetup_invites",
+        "0010_review_plan_privacy",
+        "0011_segment13_study_planner",
+      ]) {
+        await ancienne.exec(drizzleSql(tag));
+      }
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      await ancienne.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday)
+         VALUES ($1, 'Chimie', '10:00', '12:00', 1)`,
+        [A],
+      );
+      await ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0012.sql"), "utf8"));
+      const { rows: blocs } = await ancienne.query("SELECT title FROM busy_blocks");
+      expect(blocs).toEqual([{ title: "Chimie" }]);
+      const { rows: rls } = await ancienne.query<{ relrowsecurity: boolean }>(
+        "SELECT relrowsecurity FROM pg_class WHERE relname = 'availability_slots'",
+      );
+      expect(rls).toEqual([{ relrowsecurity: true }]);
+      // Deuxième passage : échoue sans rien changer (« already exists »).
+      await expect(
+        ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0012.sql"), "utf8")),
+      ).rejects.toThrow(/already exists/);
     } finally {
       await ancienne.close();
     }

@@ -6,8 +6,12 @@ import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { toBlockSpec } from "@/lib/db/convert";
 import { getMyBusyBlocks, getMyPlaces, getMyProfile, getMyQuietHours } from "@/lib/profile";
+import { toHHmm } from "@/lib/db/convert";
+import { dayLabel } from "@/lib/meetups/search";
+import { availabilityLabel } from "@/lib/scheduling/oneOffAvailability";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
-import { TIME_ZONE } from "@/lib/scheduling/time";
+import { TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
+import { parseClock, shiftDay } from "@/lib/scheduling/weeklyBlocks";
 import { getTravelProvider } from "@/lib/travel/server";
 import { type ConflictView, myStudyConflicts } from "@/lib/study/service";
 import { supabaseStudyStore } from "@/lib/study/supabaseStore";
@@ -21,6 +25,8 @@ import {
 } from "../etude/actions";
 
 import { ajouterBlocs, modifierBloc, supprimerBloc } from "./actions";
+import { ajouterDisponibilite, supprimerDisponibilite } from "./availability-actions";
+import { type AvailabilityItem, AvailabilityPanel } from "./availability-panel";
 import { apercuIcs, confirmerIcs } from "./import-actions";
 import { ScheduleEditor } from "./schedule-editor";
 import type { ScheduleBlock } from "./types";
@@ -88,6 +94,27 @@ export default async function MonHoraire({
     ? quietHoursFromDb(quietRow.unavailable_before, quietRow.unavailable_after)
     : null;
 
+  // Disponibilités ponctuelles à venir (segment 18). Table absente : migration 0012 manquante.
+  const today = formatInTimeZone(new Date(), TIME_ZONE, "yyyy-MM-dd");
+  const { data: slotRows, error: slotError } = await supabase
+    .from("availability_slots")
+    .select("id, day, start_time, end_time, note")
+    .eq("owner_id", userId)
+    .gte("day", today)
+    .order("day")
+    .order("start_time")
+    .returns<{ id: string; day: string; start_time: string; end_time: string; note: string }[]>();
+  if (slotError) console.error("Disponibilités :", slotError.code, slotError.message);
+  const availabilities: AvailabilityItem[] = (slotRows ?? []).map((r) => ({
+    id: r.id,
+    dayLabel: dayLabel(zonedTime(r.day, "12:00")),
+    timeLabel: availabilityLabel(
+      parseClock(toHHmm(r.start_time)) ?? 0,
+      parseClock(toHHmm(r.end_time)) ?? 0,
+    ),
+    note: r.note,
+  }));
+
   return (
     <>
       <SiteHeader />
@@ -121,7 +148,7 @@ export default async function MonHoraire({
           places={places.map((p) => ({ id: p.id, name: p.name }))}
           homeId={profile?.home_place_id ?? null}
           quiet={quiet}
-          today={formatInTimeZone(new Date(), TIME_ZONE, "yyyy-MM-dd")}
+          today={today}
           actions={{ ajouterBlocs, modifierBloc, supprimerBloc }}
           icsActions={{ apercuIcs, confirmerIcs }}
           extraPlaceNames={extraPlaceNames}
@@ -130,6 +157,17 @@ export default async function MonHoraire({
             conflicts,
             actions: { planifierEtude, replanifierConflits, verifierSeance, accepterSeances },
           }}
+        />
+        <AvailabilityPanel
+          items={availabilities}
+          today={today}
+          lastDay={shiftDay(today, 365)}
+          unavailable={
+            slotError
+              ? "Les disponibilités ponctuelles demandent la migration supabase/migration-0012.sql (voir README)."
+              : null
+          }
+          actions={{ ajouter: ajouterDisponibilite, supprimer: supprimerDisponibilite }}
         />
       </main>
     </>

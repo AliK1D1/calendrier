@@ -17,6 +17,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { frCA } from "date-fns/locale";
 
 import {
+  type AvailabilitySlotInput,
   type BusyBlockInput,
   type PlaceInput,
   type ProfileInput,
@@ -144,6 +145,19 @@ export interface MeetupStore {
   groupPlaces(groupId: string): Promise<StoreResult<PlaceInput[]>>;
   /** Blocs des membres par `group_busy_blocks(gid)` (titres masqués selon leur choix). */
   groupBlocks(groupId: string): Promise<StoreResult<BusyBlockInput[]>>;
+  /**
+   * Disponibilités ponctuelles des membres par `group_availability_slots(gid)` (segment 18,
+   * sans la note). Absent : aucune.
+   */
+  groupAvailabilities?(groupId: string): Promise<StoreResult<AvailabilitySlotInput[]>>;
+}
+
+/** Disponibilités ponctuelles d'un groupe, ou aucune si le magasin ne les lit pas. */
+export async function readGroupAvailabilities(
+  store: MeetupStore,
+  groupId: string,
+): Promise<StoreResult<AvailabilitySlotInput[]>> {
+  return store.groupAvailabilities ? store.groupAvailabilities(groupId) : { ok: true, value: [] };
 }
 
 /** Trajet d'une personne pour une proposition. */
@@ -235,12 +249,14 @@ export async function searchGroupMeetups(
 
   const range = periodRange(input.period, localDay(deps.now));
   const ids = input.participantIds;
-  const [profiles, personal, favorites, blocks] = await Promise.all([
+  const [profiles, personal, favorites, blocks, availabilities] = await Promise.all([
     store.profiles(ids),
     store.personalPlaces(ids),
     store.groupPlaces(input.groupId),
     store.groupBlocks(input.groupId),
+    readGroupAvailabilities(store, input.groupId),
   ]);
+  if (!availabilities.ok) return availabilities;
   if (!profiles.ok) return profiles;
   if (!personal.ok) return personal;
   if (!favorites.ok) return favorites;
@@ -275,7 +291,9 @@ export async function searchGroupMeetups(
 
   // L'ordre des participants suit la demande (affichage des trajets stable).
   const ordered = ids.flatMap((id) => profileRows.filter((p) => p.id === id));
-  const converted = toPeople(ordered, placeRows, blockRows, range);
+  const converted = toPeople(ordered, placeRows, blockRows, range, {
+    availabilities: availabilities.value.filter((a) => idSet.has(a.owner_id)),
+  });
   for (const inc of converted.incomplete) {
     excluded.push({
       id: inc.id,

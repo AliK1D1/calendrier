@@ -90,8 +90,8 @@ Dans le tableau de bord Supabase :
    - **Redirect URLs** → **Add URL** : `http://localhost:3000/auth/callback` (plus tard aussi
      `https://<ton-site>/auth/callback`).
 2. **Authentication → Sign In / Providers → Email** : laisser activé (lien magique). Le
-   service de courriel intégré de Supabase est limité à quelques courriels par heure : assez
-   pour tester, un SMTP perso sera utile au déploiement.
+   service de courriel intégré de Supabase est limité à 2 courriels par heure : assez pour
+   tester (voir « Déploiement » plus bas).
 3. **Google (facultatif)** : Authentication → Sign In / Providers → **Google** → activer, puis
    coller le **Client ID** et le **Client Secret** créés dans Google Cloud Console
    (APIs & Services → Credentials → OAuth client ID → « Web application »). Dans Google,
@@ -466,6 +466,57 @@ Comment c'est fait (`src/lib/travel/`) :
 - Tests avec `fetch` simulé et les vraies formes de réponse : `src/lib/travel/__tests__/`,
   `src/lib/meetups/__tests__/search-travel.test.ts`.
 
+## Déploiement (Vercel) et vérification automatique (segment 17)
+
+L'app est en ligne : <https://calendrier-opal.vercel.app>. Le projet Vercel est relié au dépôt
+GitHub : **chaque push sur `main` déploie la production**, chaque PR reçoit un aperçu
+(« Preview »).
+
+### Variables d'environnement (Vercel → projet → Settings → Environment Variables)
+
+| Variable                        | Obligatoire | Valeur                                                                        |
+| ------------------------------- | ----------- | ----------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | oui         | Supabase → Project Settings → API : « Project URL »                           |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | oui         | clé publique : « anon » (`eyJ…`) ou la **publishable key** `sb_publishable_…` |
+| `NEXT_PUBLIC_SITE_URL`          | non         | `https://calendrier-opal.vercel.app` (sinon l'adresse de la requête)          |
+| `ORS_API_KEY`                   | non         | vrais temps de trajet (voir segment 15) ; jamais `NEXT_PUBLIC_`               |
+| `GOOGLE_MAPS_API_KEY`           | non         | transport en commun (voir segment 15) ; jamais `NEXT_PUBLIC_`                 |
+
+Jamais la clé `service_role` ni la `secret key` (`sb_secret_…`). Après avoir changé une
+variable : **Deployments → ⋯ → Redeploy** (les `NEXT_PUBLIC_` sont figées au build).
+
+### Supabase en production
+
+1. **Authentication → URL Configuration**
+   - **Site URL** : `https://calendrier-opal.vercel.app`
+   - **Redirect URLs** : `https://calendrier-opal.vercel.app/auth/callback` et
+     `http://localhost:3000/auth/callback` (développement). Pour les aperçus Vercel, on peut
+     ajouter `https://*-<équipe>.vercel.app/**`.
+2. **Authentication → Emails (modèles)** : pour que le lien marche dans n'importe quel
+   navigateur (téléphone, autre appareil), utiliser `token_hash` plutôt que le lien par défaut :
+   - **Magic Link** :
+     `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=magiclink`
+   - **Confirm signup** :
+     `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup`
+3. **Limite de courriels** : le service de courriel intégré de Supabase n'envoie que
+   **2 courriels par heure** (tout le projet). Pour plus, brancher un SMTP perso
+   (Authentication → Emails → SMTP Settings).
+4. **Comptes de test** : sans courriel, créer des comptes dans **Authentication → Users → Add
+   user → Create new user** (courriel + mot de passe, « Auto Confirm User » coché), puis se
+   connecter avec « mot de passe » sur `/connexion`.
+
+### CI : GitHub Actions
+
+`.github/workflows/ci.yml` lance, sur chaque **pull request** et chaque **push sur `main`**,
+avec Node 22 : `npm ci`, `npm run lint`, `npm test` (y compris les tests de BD PGlite, en
+mémoire) et `npm run build`. **Aucun secret** : le build passe sans variable.
+
+Rendre le CI obligatoire (à faire une fois, par ali) : GitHub → dépôt → **Settings → Branches →
+Add branch protection rule** (ou **Rules → Rulesets**) pour `main` → cocher **Require a pull
+request before merging** et **Require status checks to pass** → chercher et choisir
+**« Lint, tests et build »** (le check apparaît après une première exécution du CI) → **Save**.
+Une PR dont les tests échouent ne peut alors plus être fusionnée.
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -502,6 +553,7 @@ Comment c'est fait (`src/lib/travel/`) :
 | 14  | Planificateur d'étude : interface | Fait    |
 | 15  | Vrai temps de trajet (API)        | Fait    |
 | 16  | Import par capture d'écran / PDF  | À faire |
+| 17  | Déploiement et CI                 | Fait    |
 
 ## Le cœur : `src/lib/scheduling/`
 

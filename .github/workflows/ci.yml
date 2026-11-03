@@ -1,0 +1,42 @@
+# Vérification automatique (segment 17) : lint, tests (dont PGlite) et build sur chaque PR et
+# chaque push sur main. Aucun secret : le build doit passer sans variable d'environnement.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    name: Lint, tests et build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Lint (ESLint + types)
+        run: npm run lint
+
+      - name: Tests (Vitest, dont la BD en mémoire PGlite)
+        run: npm test
+
+      - name: Build de production (sans variables)
+        run: npm run build

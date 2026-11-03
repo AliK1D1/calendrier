@@ -518,7 +518,7 @@ function BlockRow({
   onEdit: () => void;
 }) {
   return (
-    <li className="flex items-start gap-3 rounded-lg border p-3">
+    <li className="bg-card flex items-start gap-3 rounded-lg border p-3">
       <span className={cn("mt-1 size-3 shrink-0 rounded-full border-2", color)} aria-hidden />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
         <span className="font-medium break-words">

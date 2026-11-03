@@ -93,7 +93,7 @@ export function MeetupFinder({ groupId, myId, members, search = chercherMoments 
       </h2>
       <form
         onSubmit={submit}
-        className="flex flex-col gap-4 rounded-lg border p-4"
+        className="bg-card flex flex-col gap-4 rounded-lg border p-4"
         aria-describedby={`${formId}-aide`}
       >
         <p id={`${formId}-aide`} className="text-muted-foreground text-sm">
@@ -106,7 +106,7 @@ export function MeetupFinder({ groupId, myId, members, search = chercherMoments 
             {members.map((m) => (
               <label
                 key={m.userId}
-                className="has-[:checked]:border-primary has-[:checked]:bg-primary/5 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm"
+                className="bg-card has-[:checked]:border-primary has-[:checked]:bg-primary/5 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm"
               >
                 <input
                   type="checkbox"
@@ -127,7 +127,7 @@ export function MeetupFinder({ groupId, myId, members, search = chercherMoments 
             {MEETUP_PERIODS.map((p) => (
               <label
                 key={p}
-                className="has-[:checked]:border-primary has-[:checked]:bg-primary/5 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border px-3 text-center text-sm"
+                className="bg-card has-[:checked]:border-primary has-[:checked]:bg-primary/5 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md border px-3 text-center text-sm"
               >
                 <input
                   type="radio"
@@ -149,7 +149,7 @@ export function MeetupFinder({ groupId, myId, members, search = chercherMoments 
             <select
               value={duration}
               onChange={(e) => setDuration(Number(e.target.value) as MeetupDuration)}
-              className="border-input bg-background h-11 rounded-md border px-3 text-base font-normal"
+              className="border-input bg-card h-11 rounded-md border px-3 text-base font-normal"
             >
               {MEETUP_DURATIONS.map((d) => (
                 <option key={d} value={d}>
@@ -169,7 +169,7 @@ export function MeetupFinder({ groupId, myId, members, search = chercherMoments 
               value={buffer}
               onChange={(e) => setBuffer(e.target.value)}
               aria-describedby={`${formId}-marge`}
-              className="border-input bg-background h-11 rounded-md border px-3 text-base font-normal"
+              className="border-input bg-card h-11 rounded-md border px-3 text-base font-normal"
             />
           </label>
         </div>
@@ -216,7 +216,7 @@ function MeetupResults({
   return (
     <div className="flex flex-col gap-3" aria-live="polite">
       {view.excluded.length > 0 && (
-        <p className="rounded-md border border-amber-500/40 p-3 text-sm">
+        <p className="border-warning/60 bg-warning/15 rounded-md border p-3 text-sm">
           Pas dans le calcul : {view.excluded.map((x) => `${x.name} (${x.reason})`).join(", ")}.
         </p>
       )}
@@ -306,7 +306,7 @@ function MeetupResults({
 function ProposalCard({ p }: { p: ProposalView }) {
   const call = p.kind === "call";
   return (
-    <li className="flex flex-col gap-2 rounded-lg border p-4">
+    <li className="bg-card flex flex-col gap-2 rounded-lg border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="font-semibold first-letter:uppercase">{p.dayLabel}</p>
         <p className="tabular-nums">{p.timeLabel}</p>
@@ -345,7 +345,7 @@ function ProposalCard({ p }: { p: ProposalView }) {
 
 function AvailabilityGridView({ view }: { view: MeetupSearchView }) {
   const total = view.participants.length;
-  const shades = ["bg-muted", "bg-emerald-100", "bg-emerald-300", "bg-emerald-600"];
+  const shades = ["bg-muted", "bg-success/25", "bg-success/55", "bg-success"];
   const shade = (n: number) =>
     n === 0 ? shades[0] : n === total ? shades[3] : n / total >= 0.5 ? shades[2] : shades[1];
   // Case touchée : on affiche qui est libre (le « title » ne s'affiche pas au doigt).

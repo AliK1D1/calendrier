@@ -31,10 +31,10 @@ export function FlashMessage({ message, onClose }: { message: Flash; onClose: ()
         <p
           role={message.type === "erreur" ? "alert" : "status"}
           className={cn(
-            "bg-background pointer-events-auto flex w-full max-w-md items-start gap-2 rounded-lg border p-3 text-sm shadow-lg",
+            "bg-card pointer-events-auto flex w-full max-w-md items-start gap-2 rounded-lg border p-3 text-sm shadow-lg",
             message.type === "erreur"
               ? "border-destructive/50 text-destructive"
-              : "border-emerald-500/50",
+              : "border-success/60",
           )}
         >
           <span className="flex-1">{message.text}</span>

@@ -105,7 +105,7 @@ export function AddressSearch({
                 onClick={() => onSelect(r)}
                 aria-pressed={selectedId === r.id}
                 className={cn(
-                  "hover:bg-accent w-full rounded-md border px-3 py-2 text-left text-sm transition-colors",
+                  "bg-card hover:bg-accent w-full rounded-md border px-3 py-2 text-left text-sm transition-colors",
                   selectedId === r.id && "border-primary bg-accent",
                 )}
               >

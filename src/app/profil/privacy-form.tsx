@@ -41,7 +41,7 @@ export function PrivacyForm({ hideTitles }: { hideTitles: boolean }) {
       {message && (
         <p
           role={message.ok ? "status" : "alert"}
-          className={message.ok ? "text-sm text-emerald-700" : "text-destructive text-sm"}
+          className={message.ok ? "text-success text-sm" : "text-destructive text-sm"}
         >
           {message.text}
         </p>

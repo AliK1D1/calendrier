@@ -50,7 +50,7 @@ export default async function MesGroupes() {
                 <li key={g.id}>
                   <Link
                     href={`/groupes/${g.id}`}
-                    className="hover:bg-accent flex items-center gap-3 rounded-lg border p-3"
+                    className="bg-card hover:bg-accent flex items-center gap-3 rounded-lg border p-3"
                   >
                     <Users className="text-muted-foreground size-5 shrink-0" />
                     <span className="flex min-w-0 flex-1 flex-col">

@@ -58,7 +58,7 @@ export function BlockDialog({ draft, ...rest }: Props) {
       ref={ref}
       aria-labelledby="bloc-titre-fenetre"
       onClose={rest.onClose}
-      className="bg-background text-foreground m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 shadow-xl backdrop:bg-black/40 sm:m-auto sm:max-w-lg sm:rounded-2xl"
+      className="bg-card text-card-foreground m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 shadow-xl backdrop:bg-black/40 sm:m-auto sm:max-w-lg sm:rounded-2xl"
     >
       {/* Clé : un nouveau brouillon remet le formulaire à zéro. */}
       {draft && <BlockForm key={formKey(draft)} initial={draft} {...rest} />}
@@ -230,7 +230,7 @@ function BlockForm({
             <label
               key={kind}
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm has-[:focus-visible]:ring-2",
+                "bg-card flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm has-[:focus-visible]:ring-2",
                 d.kind === kind && "border-primary bg-accent font-medium",
               )}
             >
@@ -331,7 +331,7 @@ function BlockForm({
       {overlaps.length > 0 && (
         <p
           role="status"
-          className="flex gap-2 rounded-md border border-amber-500/50 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100"
+          className="border-warning/60 bg-warning/15 flex gap-2 rounded-md border p-3 text-sm"
         >
           <AlertTriangle className="size-4 shrink-0" />
           <span>

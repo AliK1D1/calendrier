@@ -100,7 +100,7 @@ export function PlacesManager({ places, homeId }: Props) {
         </h2>
         <ul className="flex flex-col gap-2">
           {places.map((p) => (
-            <li key={p.id} className="rounded-lg border p-3">
+            <li key={p.id} className="bg-card rounded-lg border p-3">
               {editingId === p.id ? (
                 <form
                   className="flex flex-col gap-2 sm:flex-row"

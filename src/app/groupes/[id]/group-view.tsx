@@ -244,7 +244,10 @@ export function GroupView(props: Props) {
         </h2>
         <ul className="flex flex-col gap-2">
           {members.map((m) => (
-            <li key={m.userId} className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
+            <li
+              key={m.userId}
+              className="bg-card flex flex-wrap items-center gap-2 rounded-lg border p-3"
+            >
               <span className="min-w-0 flex-1 font-medium break-words">
                 {m.displayName}
                 {m.userId === myId && (
@@ -315,7 +318,10 @@ export function GroupView(props: Props) {
         ) : (
           <ul className="flex flex-col gap-2">
             {favorites.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
+              <li
+                key={f.id}
+                className="bg-card flex flex-wrap items-center gap-2 rounded-lg border p-3"
+              >
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -415,7 +421,11 @@ export function GroupView(props: Props) {
           .
         </p>
         {schedules.map((s) => (
-          <details key={s.userId} className="rounded-lg border p-3" open={schedules.length <= 3}>
+          <details
+            key={s.userId}
+            className="bg-card rounded-lg border p-3"
+            open={schedules.length <= 3}
+          >
             <summary className="cursor-pointer font-medium">
               {s.displayName}
               {s.userId === myId ? " (toi)" : ""}{" "}

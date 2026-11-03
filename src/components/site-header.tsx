@@ -1,18 +1,22 @@
-import { House } from "lucide-react";
 import Link from "next/link";
 
+import { LogoMark } from "./logo-mark";
 import { NavLinks } from "./nav-links";
 
 /** En-tête des pages connectées : retour à l'accueil et liens principaux. */
 export function SiteHeader() {
   return (
-    <header className="bg-background/95 sticky top-0 z-10 border-b backdrop-blur">
+    <header className="bg-card/90 sticky top-0 z-10 border-b backdrop-blur">
       <nav
         aria-label="Navigation principale"
-        className="mx-auto flex h-12 max-w-3xl items-center gap-3 px-4 text-sm sm:gap-4"
+        className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-4 text-sm sm:gap-4"
       >
-        <Link href="/" className="font-semibold" aria-label="Accueil">
-          <House className="size-5 sm:hidden" aria-hidden />
+        <Link
+          href="/"
+          className="flex items-center gap-2 font-semibold tracking-tight"
+          aria-label="Accueil"
+        >
+          <LogoMark />
           <span className="hidden sm:inline">Temps libre commun</span>
         </Link>
         <span className="flex-1" />

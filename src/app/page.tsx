@@ -2,6 +2,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { CalendarSearch, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
+import { LogoMark } from "@/components/logo-mark";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +40,7 @@ export default async function Accueil() {
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-4 py-12 sm:py-20">
       <header className="flex flex-col gap-3">
+        <LogoMark className="size-10 rounded-xl [&>svg]:size-5" />
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Temps libre commun</h1>
         <p className="text-muted-foreground text-lg">
           Des moments et des endroits où se voir qui sont vraiment réalistes : trajet, durée
@@ -56,8 +58,15 @@ export default async function Accueil() {
         {etapes.map((etape, i) => (
           <Card key={etape.titre}>
             <CardHeader>
+              <span
+                aria-hidden
+                className="bg-primary/10 text-primary mb-2 flex size-8 items-center justify-center rounded-full text-sm font-semibold"
+              >
+                {i + 1}
+              </span>
               <CardTitle>
-                {i + 1}. {etape.titre}
+                <span className="sr-only">{i + 1}. </span>
+                {etape.titre}
               </CardTitle>
               <CardDescription>{etape.texte}</CardDescription>
             </CardHeader>
@@ -128,14 +137,14 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
                           href={s.href}
                           aria-current={isNext ? "step" : undefined}
                           className={cn(
-                            "hover:bg-accent flex items-center gap-3 rounded-lg border p-3",
+                            "bg-card hover:bg-accent flex items-center gap-3 rounded-lg border p-3",
                             isNext && "border-primary bg-primary/5",
                           )}
                         >
                           <span
                             className={cn(
                               "flex size-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
-                              s.done && "border-emerald-600 bg-emerald-600 text-white",
+                              s.done && "border-success bg-success text-success-foreground",
                             )}
                             aria-hidden
                           >
@@ -170,7 +179,7 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
                 <li key={g.id}>
                   <Link
                     href={`/groupes/${g.id}${g.memberCount >= 2 ? "#se-voir" : "#inviter"}`}
-                    className="hover:bg-accent flex items-center gap-3 rounded-lg border p-3"
+                    className="bg-card hover:bg-accent flex items-center gap-3 rounded-lg border p-3"
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="font-medium break-words">{g.name}</span>

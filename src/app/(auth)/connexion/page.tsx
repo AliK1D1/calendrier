@@ -51,7 +51,10 @@ export default async function Connexion({ searchParams }: { searchParams: Search
             </p>
           )}
           {envoye && (
-            <p role="status" className="rounded-md border border-emerald-500/40 p-3 text-sm">
+            <p
+              role="status"
+              className="border-success/50 bg-success/10 rounded-md border p-3 text-sm"
+            >
               Lien envoyé ! Ouvre le courriel <strong>dans ce même navigateur</strong> pour te
               connecter. Pense à regarder dans les indésirables.
             </p>

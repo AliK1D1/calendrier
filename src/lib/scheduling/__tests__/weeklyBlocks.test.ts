@@ -214,15 +214,44 @@ describe("suggestSession", () => {
   it("ignore les sessions finies et les ponctuels ; sinon devine la session de cégep", () => {
     const fini = bloc({ validFrom: "2025-01-20", validUntil: "2025-05-20" });
     const ponctuel = bloc({ weekday: null, validFrom: "2025-10-01", validUntil: "2025-10-01" });
-    // Pendant la session d'automne : à partir d'aujourd'hui jusqu'au 20 décembre.
+    // Pendant la session d'automne : à partir du lundi de cette semaine jusqu'au 20 décembre.
     expect(suggestSession([fini, ponctuel], "2025-10-01")).toEqual({
-      from: "2025-10-01",
+      from: "2025-09-29",
       to: "2025-12-20",
     });
     // Pendant le congé des fêtes : la session d'hiver qui vient.
     expect(suggestSession([], "2025-12-27")).toEqual({ from: "2026-01-20", to: "2026-05-20" });
     expect(suggestSession([], "2026-01-05")).toEqual({ from: "2026-01-20", to: "2026-05-20" });
     expect(suggestSession([], "2026-06-01")).toEqual({ from: "2026-06-01", to: "2026-08-20" });
+  });
+
+  // Régression : un cours du lundi saisi un mardi n'apparaissait pas le lundi de la semaine
+  // affichée (la session commençait « aujourd'hui », le mardi).
+  it("un cours du lundi saisi un mardi paraît dès le lundi de la semaine en cours", () => {
+    const mardi = "2026-11-03";
+    const lundi = "2026-11-02";
+    const session = suggestSession([], mardi);
+    expect(session.from).toBe(lundi);
+    const coursDuLundi = bloc({ weekday: 1, validFrom: session.from, validUntil: session.to });
+    expect(occursOn(coursDuLundi, lundi)).toBe(true);
+    expect(blocksOnDay([coursDuLundi], lundi)).toHaveLength(1);
+  });
+
+  it("ramène au lundi une session déjà commencée un autre jour de la semaine en cours", () => {
+    // Blocs saisis le mardi avant le correctif : session du 3 novembre.
+    const dejaSaisis = [
+      bloc({ id: "1", weekday: 2, validFrom: "2026-11-03", validUntil: "2026-12-20" }),
+      bloc({ id: "2", weekday: 4, validFrom: "2026-11-03", validUntil: "2026-12-20" }),
+    ];
+    expect(suggestSession(dejaSaisis, "2026-11-04")).toEqual({
+      from: "2026-11-02",
+      to: "2026-12-20",
+    });
+    // Une session qui commence une autre semaine n'est pas touchée.
+    expect(suggestSession(dejaSaisis, "2026-11-10")).toEqual({
+      from: "2026-11-03",
+      to: "2026-12-20",
+    });
   });
 });
 

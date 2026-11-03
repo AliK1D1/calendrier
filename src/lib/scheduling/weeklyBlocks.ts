@@ -204,6 +204,11 @@ export function findOverlaps<T extends BlockSpec>(
  *    (on entre en général tous les cours d'une même session) ;
  * 2. sinon, la session de cégep qui contient `today` ou la prochaine : automne (fin août →
  *    20 déc.), hiver (20 janv. → 20 mai), été (21 mai → 20 août). À ajuster dans le formulaire.
+ *
+ * Le début proposé ne tombe jamais après le lundi de la semaine en cours : l'horaire s'ouvre
+ * sur cette semaine, et un cours du lundi saisi un mardi doit y paraître dès ce lundi-là
+ * (sinon son « premier lundi » manque). Un début déjà placé plus tard dans la semaine en cours
+ * (bloc saisi avant ce correctif) est aussi ramené au lundi.
  */
 export function suggestSession(blocks: readonly BlockSpec[], today: string): DateRange {
   assertDay(today);
@@ -218,7 +223,7 @@ export function suggestSession(blocks: readonly BlockSpec[], today: string): Dat
   const best = [...counts.values()].sort(
     (x, y) => y.n - x.n || x.range.from.localeCompare(y.range.from),
   )[0];
-  if (best) return best.range;
+  if (best) return { from: notAfterThisMonday(best.range.from, today), to: best.range.to };
 
   const year = Number(today.slice(0, 4));
   const sessions: DateRange[] = [
@@ -228,8 +233,18 @@ export function suggestSession(blocks: readonly BlockSpec[], today: string): Dat
     { from: `${year + 1}-01-20`, to: `${year + 1}-05-20` },
   ];
   const current = sessions.find((s) => today <= s.to) ?? sessions[3];
-  // Pendant la session : à partir d'aujourd'hui (inutile de remonter dans le passé).
-  return { from: today > current.from ? today : current.from, to: current.to };
+  // Pendant la session : à partir du lundi de cette semaine (inutile de remonter plus loin).
+  const thisMonday = weekStart(today);
+  return { from: thisMonday > current.from ? thisMonday : current.from, to: current.to };
+}
+
+/**
+ * `from` s'il tombe avant la semaine de `today` ou après elle ; sinon (un jour de la semaine
+ * en cours) le lundi de cette semaine.
+ */
+function notAfterThisMonday(from: string, today: string): string {
+  const thisMonday = weekStart(today);
+  return weekStart(from) === thisMonday ? thisMonday : from;
 }
 
 // ─── Validation des données envoyées par le navigateur ──────────────────────────────────────

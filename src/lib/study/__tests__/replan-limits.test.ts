@@ -4,8 +4,13 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { EstimatedTravelProvider } from "@/lib/scheduling/travel";
-import { MAX_REPLAN_SESSIONS, replanMyConflicts, type StudyStore } from "@/lib/study/service";
+import { EstimatedTravelProvider, type TravelTimeProvider } from "@/lib/scheduling/travel";
+import {
+  MAX_REPLAN_SESSIONS,
+  planMyStudy,
+  replanMyConflicts,
+  type StudyStore,
+} from "@/lib/study/service";
 
 const ME = "00000000-0000-4000-8000-00000000000a";
 const uid = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
@@ -72,5 +77,20 @@ describe("Replanifier : coût borné (revue)", () => {
     if (!r.ok) return;
     expect(r.value.sessions.length).toBeGreaterThan(0);
     expect(r.value.warnings.some((w) => /autres? séances? en conflit/.test(w))).toBe(false);
+  });
+});
+
+describe("Trajets d'API : limite par personne (revue)", () => {
+  it("le planificateur passe la personne connectée comme clé de limite par jour", async () => {
+    const seen: (string | undefined)[] = [];
+    const estimate = new EstimatedTravelProvider();
+    const spy: TravelTimeProvider = {
+      minutes: (from, to, mode) => estimate.minutes(from, to, mode),
+      prefetch: async (_requests, options) => {
+        seen.push(options?.budgetKey);
+      },
+    };
+    await planMyStudy(store(3), { userId: ME, now: NOW, travel: spy });
+    expect(seen).toEqual([ME]);
   });
 });

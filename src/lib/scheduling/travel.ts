@@ -12,7 +12,19 @@ export interface TravelTimeProvider {
    * ces lieux. Appelé AVANT le calcul (findMeetups, planificateur), qui n'attend ainsi jamais
    * le réseau. Ne lève jamais d'erreur : ce qui n'a pas pu être préparé sera estimé.
    */
-  prefetch?(requests: readonly TravelPrefetchRequest[]): Promise<void>;
+  prefetch?(
+    requests: readonly TravelPrefetchRequest[],
+    options?: TravelPrefetchOptions,
+  ): Promise<void>;
+}
+
+/** Options d'une préparation. */
+export interface TravelPrefetchOptions {
+  /**
+   * Qui demande (identifiant de la personne connectée) : sert à la limite d'appels d'API par
+   * personne et par jour (revue de sécurité). Sans clé, seules les limites globales comptent.
+   */
+  budgetKey?: string;
 }
 
 /** Lieux entre lesquels préparer les trajets, pour un mode de transport. */

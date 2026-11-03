@@ -74,6 +74,18 @@ describe("Quand on peut se voir : vrai temps de trajet", () => {
     expect(fetch.calls[0].url).toContain("/v2/matrix/foot-walking");
   });
 
+  it("la recherche passe la personne connectée comme clé de limite par jour (revue)", async () => {
+    const seen: (string | undefined)[] = [];
+    const spy: TravelTimeProvider = {
+      minutes: async (from, to, mode) => estimateTravelMinutes(from, to, mode),
+      prefetch: async (_requests, options) => {
+        seen.push(options?.budgetKey);
+      },
+    };
+    await search(spy);
+    expect(seen).toEqual([A]);
+  });
+
   it("API en panne : la recherche marche quand même, avec l'estimation", async () => {
     const fetch = fakeFetch(() => json({ error: "Quota exceeded" }, 403));
     const travel = createTravelProvider({ ORS_API_KEY: "k" }, fetch);

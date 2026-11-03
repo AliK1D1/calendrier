@@ -182,6 +182,35 @@ describe("FallbackTravelProvider", () => {
     expect(fetch.calls).toHaveLength(3);
   });
 
+  it("limite par personne et par jour : une personne ne vide pas le quota de tout le monde (revue)", async () => {
+    let t = 0;
+    const { fetch, ors } = orsFake();
+    const travel = new FallbackTravelProvider({
+      sources: [ors],
+      callsPerUserPerDay: 3,
+      now: () => t,
+      onError: silent,
+    });
+    // L'attaquante change de lieux à chaque recherche (cache manqué) : 3 appels, puis estimation.
+    for (let i = 0; i < 10; i++) {
+      t += 61_000; // hors limite par minute
+      await travel.prefetch([{ mode: "car", places: [P[0], { ...P[1], lat: 45 + i / 100 }] }], {
+        budgetKey: "attaquante",
+      });
+    }
+    expect(fetch.calls).toHaveLength(3);
+    // Quelqu'un d'autre a encore droit aux vrais trajets.
+    await travel.prefetch([{ mode: "car", places: [P[2], P[3]] }], { budgetKey: "ali" });
+    expect(fetch.calls).toHaveLength(4);
+    expect(await travel.minutes(P[2], P[3], "car")).toBe(10);
+    // Le lendemain, l'attaquante a de nouveau droit à quelques appels.
+    t += 24 * 3600 * 1000;
+    await travel.prefetch([{ mode: "car", places: [P[0], { ...P[1], lat: 46 }] }], {
+      budgetKey: "attaquante",
+    });
+    expect(fetch.calls).toHaveLength(5);
+  });
+
   it("mêmes erreurs que l'estimation (coordonnées invalides, mode inconnu)", async () => {
     const { ors } = orsFake();
     const travel = new FallbackTravelProvider({ sources: [ors], onError: silent });

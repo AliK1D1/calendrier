@@ -307,7 +307,9 @@ export async function searchGroupMeetups(
   // findMeetups n'attend jamais le réseau. Sans clé d'API, `prefetch` n'existe pas.
   if (deps.travel.prefetch) {
     await deps.travel
-      .prefetch(prefetchRequestsFor(people, favoritePlaces, candidatePlaceIds))
+      .prefetch(prefetchRequestsFor(people, favoritePlaces, candidatePlaceIds), {
+        budgetKey: deps.userId,
+      })
       .catch((e: unknown) => console.warn("Temps de trajet (préparation) :", e));
   }
 

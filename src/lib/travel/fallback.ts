@@ -28,6 +28,7 @@ import { createKeyedLimiter, type KeyedLimiter } from "@/lib/geocoding/rateLimit
 import {
   EstimatedTravelProvider,
   isSamePlace,
+  type TravelPrefetchOptions,
   type TravelPrefetchRequest,
   type TravelTimeProvider,
 } from "@/lib/scheduling/travel";
@@ -40,6 +41,13 @@ export const DEFAULT_MAX_CALLS_PER_PREFETCH = 4;
 export const DEFAULT_MAX_PLACES_PER_MODE = 100;
 export const DEFAULT_CALLS_PER_MINUTE = 30;
 export const DEFAULT_CALLS_PER_DAY = 450;
+/**
+ * Appels d'API par personne et par jour (toutes API confondues). Une recherche normale en fait
+ * au plus 4, et le cache de 30 jours évite de les refaire. Sans cette limite, une seule
+ * personne (qui crée des lieux partout, puis relance des recherches) vidait en 15 minutes le
+ * quota du jour de tout le monde, et faisait payer des appels Google (revue de sécurité).
+ */
+export const DEFAULT_CALLS_PER_USER_PER_DAY = 40;
 export const DEFAULT_COOLDOWN_MS = 60_000;
 export const TRAVEL_CACHE_TTL_MS = 30 * 24 * 3600 * 1000;
 export const DEFAULT_TRAVEL_API_CACHE_SIZE = 50_000;
@@ -56,6 +64,8 @@ export interface FallbackTravelOptions {
   callsPerMinute?: number;
   /** Appels permis par API et par jour (24 h glissantes), pour tout le processus. */
   callsPerDay?: number;
+  /** Appels permis par personne (`budgetKey`) et par jour, toutes API confondues. */
+  callsPerUserPerDay?: number;
   cooldownMs?: number;
   cacheEntries?: number;
   /** Horloge (ms). Défaut : `Date.now`. */
@@ -85,6 +95,7 @@ export class FallbackTravelProvider implements TravelTimeProvider {
   private readonly cache: TtlCache<number>;
   private readonly perMinute: KeyedLimiter;
   private readonly perDay: KeyedLimiter;
+  private readonly perUserDay: KeyedLimiter;
   private readonly disabledUntil = new Map<string, number>();
   private readonly now: () => number;
   private readonly timeoutMs: number;
@@ -118,6 +129,11 @@ export class FallbackTravelProvider implements TravelTimeProvider {
       windowMs: 24 * 3600 * 1000,
       now: this.now,
     });
+    this.perUserDay = createKeyedLimiter({
+      limit: options.callsPerUserPerDay ?? DEFAULT_CALLS_PER_USER_PER_DAY,
+      windowMs: 24 * 3600 * 1000,
+      now: this.now,
+    });
   }
 
   /**
@@ -135,7 +151,10 @@ export class FallbackTravelProvider implements TravelTimeProvider {
     return this.cache.size;
   }
 
-  async prefetch(requests: readonly TravelPrefetchRequest[]): Promise<void> {
+  async prefetch(
+    requests: readonly TravelPrefetchRequest[],
+    options: TravelPrefetchOptions = {},
+  ): Promise<void> {
     const stats: PrefetchStats = { calls: 0, failures: 0, skipped: 0 };
     this.lastPrefetch = stats;
     const jobs: Job[] = [];
@@ -147,7 +166,7 @@ export class FallbackTravelProvider implements TravelTimeProvider {
 
     const running: Promise<void>[] = [];
     for (const job of jobs) {
-      if (running.length >= this.maxCalls || !this.mayCall(job.source)) {
+      if (running.length >= this.maxCalls || !this.mayCall(job.source, options.budgetKey)) {
         stats.skipped++;
         continue;
       }
@@ -200,8 +219,10 @@ export class FallbackTravelProvider implements TravelTimeProvider {
   }
 
   /** L'API n'est pas mise de côté, et les limites par minute et par jour le permettent. */
-  private mayCall(source: TravelMatrixSource): boolean {
+  private mayCall(source: TravelMatrixSource, budgetKey?: string): boolean {
     if ((this.disabledUntil.get(source.name) ?? 0) > this.now()) return false;
+    // Limite de la personne d'abord : si elle refuse, les limites globales ne sont pas entamées.
+    if (budgetKey !== undefined && !this.perUserDay.tryAcquire(budgetKey)) return false;
     // Vérifie la limite du jour sans la consommer si celle de la minute refuse.
     return this.perMinute.tryAcquire(source.name) && this.perDay.tryAcquire(source.name);
   }

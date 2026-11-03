@@ -153,7 +153,7 @@ export async function loadStudy(
   // Vrais temps de trajet entre mes lieux (segment 15), préparés avant tout calcul.
   if (deps.travel.prefetch) {
     await deps.travel
-      .prefetch(prefetchRequestsFor([person]))
+      .prefetch(prefetchRequestsFor([person]), { budgetKey: deps.userId })
       .catch((e: unknown) => console.warn("Temps de trajet (préparation) :", e));
   }
 

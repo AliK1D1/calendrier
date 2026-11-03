@@ -268,6 +268,12 @@ export const meetupPlans = pgTable(
     check("meetup_plans_time_order", sql`${t.ends_at} > ${t.starts_at}`),
     check("meetup_plans_title_length", sql`length(${t.title}) <= 80`),
     check("meetup_plans_location_length", sql`length(${t.location}) <= 100`),
+    // Revue : mêmes caractères interdits que le formulaire (tabulation et retour à la ligne permis).
+    check("meetup_plans_title_chars", sql`${t.title} !~ '[\\x01-\\x08\\x0b-\\x1f\\x7f-\\x9f]'`),
+    check(
+      "meetup_plans_location_chars",
+      sql`${t.location} !~ '[\\x01-\\x08\\x0b-\\x1f\\x7f-\\x9f]'`,
+    ),
     check("meetup_plans_max_duration", sql`${t.ends_at} - ${t.starts_at} <= interval '12 hours'`),
   ],
 );

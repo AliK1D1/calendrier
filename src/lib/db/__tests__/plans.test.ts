@@ -465,3 +465,55 @@ describe("Segment 12 : migration 0009 sur une base en 0008 avec des données", (
     }
   }, 60_000);
 });
+
+describe("Plans : revue de sécurité", () => {
+  it("un titre ou un lieu avec des caractères de contrôle est refusé par la base", async () => {
+    await expect(propose(A, { title: "Souper\rBEGIN:VALARM" })).rejects.toThrow(
+      /meetup_plans_title_chars/,
+    );
+    await expect(propose(A, { location: "Parc\u0007" })).rejects.toThrow(
+      /meetup_plans_location_chars/,
+    );
+    // Ce que le formulaire permet reste permis (tabulation, retour à la ligne, accents).
+    expect(await propose(A, { title: "Souper\tchez « Léo »\nà 18 h" })).toBeTruthy();
+  });
+
+  it("le titre d'un plan n'est pas montré aux membres d'un AUTRE groupe, même titres visibles", async () => {
+    // B montre ses titres ; B est aussi dans le groupe H avec D.
+    await as(B, () => rows("UPDATE profiles SET hide_block_titles = false WHERE id = $1", [B]));
+    const [h] = await as(B, () =>
+      rows<{ id: string }>("SELECT public.create_group('Hockey') AS id"),
+    );
+    const [{ invite_code }] = await rows<{ invite_code: string }>(
+      "SELECT invite_code FROM groups WHERE id = $1",
+      [h.id],
+    );
+    await as(D, () => rows("SELECT public.join_group_by_code($1)", [invite_code]));
+    await as(B, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, start_time, end_time, weekday) VALUES ('Cours de chimie', '10:00', '12:00', 2)`,
+      ),
+    );
+    const plan = await propose(A, { title: "Fête surprise pour Dan" });
+    await respond(B, plan, true);
+
+    const vusParD = await as(D, () =>
+      rows<{ title: string; title_hidden: boolean }>(
+        "SELECT title, title_hidden FROM public.group_busy_blocks($1) ORDER BY title",
+        [h.id],
+      ),
+    );
+    expect(vusParD).toEqual([
+      { title: "Cours de chimie", title_hidden: false },
+      { title: "Occupé", title_hidden: true },
+    ]);
+    // Dans le groupe du plan, rien ne change : les membres voient le titre que B montre.
+    const vusParC = await as(C, () =>
+      rows<{ title: string }>(
+        "SELECT title FROM public.group_busy_blocks($1) WHERE owner_id = $2 ORDER BY title",
+        [G, B],
+      ),
+    );
+    expect(vusParC.map((r) => r.title)).toEqual(["Cours de chimie", "Fête surprise pour Dan"]);
+  });
+});

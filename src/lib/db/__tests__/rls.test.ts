@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0009.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0010.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -124,6 +124,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0007.sql",
       "supabase/migration-0008.sql",
       "supabase/migration-0009.sql",
+      "supabase/migration-0010.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);

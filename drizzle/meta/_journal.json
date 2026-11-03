@@ -71,6 +71,13 @@
       "when": 1793731626309,
       "tag": "0009_segment12_meetup_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793733434376,
+      "tag": "0010_review_plan_privacy",
+      "breakpoints": true
     }
   ]
 }

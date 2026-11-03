@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0010.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0011.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -125,6 +125,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0008.sql",
       "supabase/migration-0009.sql",
       "supabase/migration-0010.sql",
+      "supabase/migration-0011.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -280,13 +281,13 @@ describe("migrations (supabase/setup.sql)", () => {
       const { rows: policies } = await vide.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public'",
       );
-      expect(policies[0].n).toBe(20);
+      expect(policies[0].n).toBe(28);
     } finally {
       await vide.close();
     }
   }, 60_000);
 
-  it("s'applique sur une base vide et crée les 8 tables avec RLS activé", async () => {
+  it("s'applique sur une base vide et crée les 10 tables avec RLS activé", async () => {
     const tables = await rows<{ relname: string; relrowsecurity: boolean }>(
       `SELECT c.relname, c.relrowsecurity FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -294,6 +295,7 @@ describe("migrations (supabase/setup.sql)", () => {
     );
     expect(tables.map((t) => t.relname)).toEqual([
       "busy_blocks",
+      "deadlines",
       "group_members",
       "groups",
       "meetup_plans",
@@ -301,6 +303,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "plan_invitees",
       "plan_votes",
       "profiles",
+      "study_preferences",
     ]);
     expect(tables.every((t) => t.relrowsecurity)).toBe(true);
   });

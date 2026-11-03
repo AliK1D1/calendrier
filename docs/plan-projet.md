@@ -564,6 +564,12 @@ venir avec la logique de findMeetups et marquer "à revoir" ceux qui ne sont plu
 
 **Objectif** : à partir des examens et travaux d'une personne, calculer des séances d'étude réalistes dans ses moments libres.
 
+> **Réalisé** (voir README, « Planificateur d'étude : la logique ») : en plus du plan, une table
+> `study_preferences` (préférences du segment 14), la vérification d'une séance déplacée
+> (`checkStudySession`), la détection des conflits et la replanification des séances
+> déplaçables (`findStudyConflicts`, `rescheduleStudySessions`). Une séance d'étude est toujours
+> « Occupé » pour les membres des groupes.
+
 **Livrables**
 - Types `Deadline`, `StudySession`, `StudyPreferences` dans `types.ts`.
 - `studyPlanner.ts` : `planStudySessions(person, deadlines, prefs, travelProvider, now)` qui retourne `{ sessions, warnings }`, en suivant la section 3 bis.

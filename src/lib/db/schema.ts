@@ -58,6 +58,9 @@ export const planStatusEnum = pgEnum("plan_status", ["proposed", "confirmed", "c
 /** Vote sur un plan. */
 export const voteEnum = pgEnum("vote", ["yes", "no", "maybe"]);
 
+/** Type d'échéance (même valeurs que `DeadlineKind` dans src/lib/scheduling/types.ts). */
+export const deadlineKindEnum = pgEnum("deadline_kind", ["exam", "assignment"]);
+
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow();
 
@@ -159,16 +162,33 @@ export const busyBlocks = pgTable(
     meetup_plan_id: uuid("meetup_plan_id").references((): AnyPgColumn => meetupPlans.id, {
       onDelete: "cascade",
     }),
+    /**
+     * Séance d'étude acceptée (`source = 'study'`, segment 13) : échéance préparée. Toujours une
+     * échéance de la même personne (trigger `check_block_deadline_owner`, migration 0011).
+     */
+    deadline_id: uuid("deadline_id").references((): AnyPgColumn => deadlines.id, {
+      onDelete: "cascade",
+    }),
+    /** Séance d'étude déplaçable : l'app propose de la replacer si autre chose tombe dessus. */
+    movable: boolean("movable").notNull().default(false),
     created_at: createdAt(),
   },
   (t) => [
     index("busy_blocks_owner_idx").on(t.owner_id),
     uniqueIndex("busy_blocks_meetup_plan_owner_key").on(t.meetup_plan_id, t.owner_id),
+    index("busy_blocks_deadline_idx").on(t.deadline_id),
     // Comparaison en texte : la valeur 'meetup' est ajoutée dans la même transaction.
     check(
       "busy_blocks_meetup_link",
       sql`(${t.source}::text = 'meetup') = (${t.meetup_plan_id} is not null)`,
     ),
+    // Segment 13 : une séance d'étude a une échéance, est ponctuelle ; seule elle est déplaçable.
+    check(
+      "busy_blocks_study_link",
+      sql`(${t.source}::text = 'study') = (${t.deadline_id} is not null)`,
+    ),
+    check("busy_blocks_study_one_off", sql`${t.source}::text <> 'study' or ${t.weekday} is null`),
+    check("busy_blocks_movable_study", sql`not ${t.movable} or ${t.source}::text = 'study'`),
     check("busy_blocks_time_order", sql`${t.end_time} > ${t.start_time}`),
     check("busy_blocks_weekday_range", sql`${t.weekday} is null or ${t.weekday} between 1 and 7`),
     check(
@@ -320,6 +340,92 @@ export const planVotes = pgTable(
   ],
 );
 
+/**
+ * Examen ou travail à remettre (segment 13). Visible et modifiable **seulement** par son
+ * propriétaire (RLS, migration 0011). `estimated_hours` nul : défaut selon `difficulty`
+ * (3 h, 5 h, 8 h). Limites : 100 échéances par personne, date dans l'année qui vient
+ * (trigger `enforce_deadline_limits`).
+ */
+export const deadlines = pgTable(
+  "deadlines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    owner_id: uuid("owner_id")
+      .notNull()
+      .default(sql`auth.uid()`)
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    kind: deadlineKindEnum("kind").notNull().default("exam"),
+    course: text("course").notNull(),
+    due_at: timestamp("due_at", { withTimezone: true, mode: "string" }).notNull(),
+    estimated_hours: doublePrecision("estimated_hours"),
+    difficulty: smallint("difficulty").notNull().default(2),
+    created_at: createdAt(),
+  },
+  (t) => [
+    index("deadlines_owner_idx").on(t.owner_id),
+    check("deadlines_course_not_blank", sql`length(trim(${t.course})) > 0`),
+    check("deadlines_course_length", sql`length(${t.course}) <= 80`),
+    // Une seule ligne : aucun caractère de contrôle (ni tabulation ni retour à la ligne).
+    check("deadlines_course_chars", sql`${t.course} !~ '[\\x01-\\x1f\\x7f-\\x9f]'`),
+    check(
+      "deadlines_estimated_hours_range",
+      sql`${t.estimated_hours} is null or (${t.estimated_hours} >= 0.5 and ${t.estimated_hours} <= 60 and ${t.estimated_hours} * 2 = floor(${t.estimated_hours} * 2))`,
+    ),
+    check("deadlines_difficulty_range", sql`${t.difficulty} between 1 and 3`),
+    check(
+      "deadlines_due_at_range",
+      sql`${t.due_at} >= '2020-01-01' and ${t.due_at} < '2100-01-01'`,
+    ),
+  ],
+);
+
+/**
+ * Préférences d'étude (segment 14, réglées dans /profil), une ligne par personne, visibles
+ * seulement par elle. Absente : préférences par défaut (`DEFAULT_STUDY_PREFERENCES`).
+ */
+export const studyPreferences = pgTable(
+  "study_preferences",
+  {
+    owner_id: uuid("owner_id")
+      .primaryKey()
+      .default(sql`auth.uid()`)
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    min_session_minutes: smallint("min_session_minutes").notNull().default(45),
+    max_session_minutes: smallint("max_session_minutes").notNull().default(120),
+    max_minutes_per_day: smallint("max_minutes_per_day").notNull().default(180),
+    break_minutes: smallint("break_minutes").notNull().default(15),
+    study_start: time("study_start").notNull().default("08:00"),
+    study_end: time("study_end").notNull().default("22:00"),
+    /** La veille d'un examen, pas d'étude après cette heure ; nul = pas de limite. */
+    eve_cutoff: time("eve_cutoff").default("21:00"),
+    /** Part du temps libre des soirées et fins de semaine gardée libre, en %. */
+    keep_free_percent: smallint("keep_free_percent").notNull().default(30),
+    updated_at: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check(
+      "study_preferences_min_session",
+      sql`${t.min_session_minutes} between 30 and 120 and ${t.min_session_minutes} % 15 = 0`,
+    ),
+    check(
+      "study_preferences_max_session",
+      sql`${t.max_session_minutes} between ${t.min_session_minutes} and 240 and ${t.max_session_minutes} % 15 = 0`,
+    ),
+    check(
+      "study_preferences_max_per_day",
+      sql`${t.max_minutes_per_day} between ${t.min_session_minutes} and 600 and ${t.max_minutes_per_day} % 15 = 0`,
+    ),
+    check("study_preferences_break", sql`${t.break_minutes} between 0 and 60`),
+    check(
+      "study_preferences_hours",
+      sql`${t.study_end} - ${t.study_start} >= make_interval(mins => ${t.min_session_minutes})`,
+    ),
+    check("study_preferences_keep_free", sql`${t.keep_free_percent} between 0 and 90`),
+  ],
+);
+
 export type ProfileRow = typeof profiles.$inferSelect;
 export type PlaceRow = typeof places.$inferSelect;
 export type BusyBlockRow = typeof busyBlocks.$inferSelect;
@@ -328,3 +434,5 @@ export type GroupMemberRow = typeof groupMembers.$inferSelect;
 export type MeetupPlanRow = typeof meetupPlans.$inferSelect;
 export type PlanVoteRow = typeof planVotes.$inferSelect;
 export type PlanInviteeRow = typeof planInvitees.$inferSelect;
+export type DeadlineRow = typeof deadlines.$inferSelect;
+export type StudyPreferencesRow = typeof studyPreferences.$inferSelect;

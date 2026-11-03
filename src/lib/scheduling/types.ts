@@ -144,3 +144,73 @@ export interface MeetupProposal {
   /** Score de classement (plus haut = meilleur). */
   score: number;
 }
+
+// ---------------------------------------------------------------------------
+// Planificateur d'étude (section 3 bis)
+// ---------------------------------------------------------------------------
+
+/** Type d'échéance : examen ou travail à remettre. */
+export type DeadlineKind = "exam" | "assignment";
+
+/** Difficulté ressentie : 1 = facile, 2 = moyen, 3 = difficile. */
+export type Difficulty = 1 | 2 | 3;
+
+/** Un examen ou un travail à remettre. */
+export interface Deadline {
+  /** Identifiant unique. */
+  id: string;
+  /** Examen ou travail. */
+  kind: DeadlineKind;
+  /** Nom du cours (ex. « Chimie »). */
+  course: string;
+  /** Moment de l'examen ou de la remise (instant absolu). */
+  dueAt: Date;
+  /** Heures d'étude estimées ; `null` = défaut selon la difficulté. */
+  estimatedHours: number | null;
+  /** Difficulté (sert au défaut quand les heures ne sont pas connues). */
+  difficulty: Difficulty;
+}
+
+/** Séance d'étude ordinaire, ou courte révision placée la veille. */
+export type StudySessionKind = "study" | "review";
+
+/** Une séance d'étude (proposée par le planificateur, ou déjà acceptée). */
+export interface StudySession {
+  /** Échéance préparée par cette séance. */
+  deadlineId: string;
+  /** Début (instant absolu). */
+  start: Date;
+  /** Fin (instant absolu, exclusive). */
+  end: Date;
+  /** Lieu où la personne étudie (là où elle est déjà, ou la maison). */
+  placeId: PlaceId;
+  /** Séance ou courte révision de la veille. */
+  kind: StudySessionKind;
+}
+
+/** Préférences d'étude d'une personne (réglées dans /profil). */
+export interface StudyPreferences {
+  /** Durée minimale d'une séance, en minutes (ex. 45). */
+  minSessionMinutes: number;
+  /** Durée maximale d'une séance, en minutes (ex. 120). */
+  maxSessionMinutes: number;
+  /** Maximum d'étude par jour, en minutes (ex. 180), séances acceptées comprises. */
+  maxStudyMinutesPerDay: number;
+  /** Pause minimale entre deux séances, en minutes. */
+  breakMinutes: number;
+  /** Heures de la journée où j'accepte d'étudier (le reste : « je n'étudie pas »). */
+  studyHours: DayHours;
+  /** La veille d'un examen, pas d'étude après cette heure (« HH:mm ») ; `null` = pas de limite. */
+  eveCutoff: string | null;
+  /**
+   * Part du temps libre des soirées (après `eveningStart`) et des fins de semaine qui reste
+   * libre, de 0 à 0,9 (ex. 0,3 = on en garde au moins 30 %).
+   */
+  keepFreeRatio: number;
+  /** Début des « soirées » pour `keepFreeRatio` (« HH:mm », ex. « 18:00 »). */
+  eveningStart: string;
+  /** Marge ajoutée à chaque trajet réel, en minutes (comme pour les rencontres). */
+  bufferMinutes: number;
+  /** On commence à étudier au plus tôt ce nombre de jours avant l'échéance. */
+  windowDays: number;
+}

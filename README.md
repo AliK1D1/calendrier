@@ -50,9 +50,9 @@ Méthode simple, sans mot de passe de BD :
 
 1. Supabase → **SQL Editor** → **New query**.
 2. Coller **tout** le contenu de [`supabase/setup.sql`](supabase/setup.sql) → **Run**.
-3. Vérifier dans **Table Editor** : 8 tables (`profiles`, `places`, `busy_blocks`, `groups`,
-   `group_members`, `meetup_plans`, `plan_invitees`, `plan_votes`), chacune marquée « RLS
-   enabled ».
+3. Vérifier dans **Table Editor** : 10 tables (`profiles`, `places`, `busy_blocks`, `groups`,
+   `group_members`, `meetup_plans`, `plan_invitees`, `plan_votes`, `deadlines`,
+   `study_preferences`), chacune marquée « RLS enabled ».
 
 Le script tourne dans une transaction : en cas d'erreur, rien n'est appliqué. Il est fait
 pour une base **vide** (le relancer échoue sur « type already exists »).
@@ -71,6 +71,8 @@ manquent, chacune dans une nouvelle requête du SQL Editor :
 | `supabase/migration-0007.sql` | Revue du segment 10 : nouveau lien d'invitation quand un admin retire un membre                   |
 | `supabase/migration-0008.sql` | Revue du segment 11 : nombre maximal de lieux et de blocs                                         |
 | `supabase/migration-0009.sql` | Segment 12 : proposer un moment au groupe (invités, réponses, blocs « plan » dans l'horaire)      |
+| `supabase/migration-0010.sql` | Revue du segment 12 : caractères de contrôle refusés, titre d'un plan gardé dans son groupe       |
+| `supabase/migration-0011.sql` | Segments 13-14 : examens et travaux, séances d'étude dans l'horaire, préférences d'étude          |
 
 Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
 (« already exists »).
@@ -341,6 +343,55 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
   y compris la migration 0009 sur une base en 0008 avec des données) et
   `src/lib/plans/__tests__/` (validation, mise en forme, `.ics`).
 
+## Planificateur d'étude : la logique (segment 13)
+
+**Migration à appliquer : `supabase/migration-0011.sql`** (SQL Editor, une seule fois).
+
+- **`src/lib/scheduling/studyPlanner.ts`** (fonctions pures, testées) :
+  `planStudySessions(person, deadlines, prefs, travelProvider, now, options)` renvoie
+  `{ sessions, warnings }` (types `Deadline`, `StudySession`, `StudyPreferences` dans `types.ts`).
+  - **Réalisme** : une séance a lieu là où la personne est déjà (lieu du bloc d'avant ou d'après,
+    ex. le cégep entre deux cours) ou à la maison, jamais ailleurs ; si la fenêtre implique de
+    changer de lieu, le trajet et la marge sont retirés avec le même calcul que `findMeetups`
+    (`availabilityInWindow`). `options.studyPlaceIds` limite les lieux (l'app : mes lieux, pas
+    le café d'un plan de groupe).
+  - **Heures nécessaires** : l'estimation, sinon 3 h, 5 h ou 8 h selon la difficulté (1 à 3).
+  - **Répartition** : une courte révision (durée minimale) la veille, avant l'heure limite du
+    soir ; le reste étalé sur les 14 jours d'avant avec plus de poids 2-3 jours avant, puis 4-5
+    jours avant ; le matin même en dernier recours ; la veille au plus la moitié des heures
+    (jamais tout la veille). Échéances traitées de la plus proche à la plus lointaine (puis la
+    plus lourde) ; chacune a sa révision avant que les autres se servent.
+  - **Limites** : séances de 45 min à 2 h par défaut (pas de 15 min), 3 h par jour au plus
+    (séances acceptées comprises), pause entre deux séances, heures d'étude (8 h à 22 h), 30 %
+    du temps libre des soirées (après 18 h) et des fins de semaine gardé libre.
+  - **Avertissements** : « Il te manque 2 h avant l'examen de chimie. » plutôt que de surcharger ;
+    échéance passée : rien ; aujourd'hui : au plus une courte révision.
+  - `checkStudySession` revalide une séance (déplacée à la main) avant de l'enregistrer ;
+    `findStudyConflicts` trouve les séances acceptées et déplaçables sur lesquelles tombe autre
+    chose (plan de groupe, cours, trajet devenu impossible) ; `rescheduleStudySessions` les
+    replace au moment libre le plus proche avant l'échéance.
+- **BD (migration 0011)** :
+  - Table **`deadlines`** (`kind` examen/travail, `course`, `due_at`, `estimated_hours`,
+    `difficulty`) : visible et modifiable **seulement par son propriétaire** (RLS, anon refusé).
+    Limites : nom du cours 1 à 80 caractères sur une ligne, heures estimées 0,5 à 60 (par
+    demi-heure), difficulté 1 à 3, date dans l'année qui vient (revérifiée seulement si elle
+    change), 100 échéances par personne.
+  - **`busy_blocks`** : `source = 'study'` avec `deadline_id` (toujours une échéance de la même
+    personne : trigger `check_block_deadline_owner`, même en contournant la RLS) et `movable`.
+    Une séance est ponctuelle ; seul un bloc d'étude est déplaçable ; `deadline_id` ne se
+    modifie pas. Supprimer une échéance retire ses séances. La limite de 1000 blocs s'applique.
+  - **Confidentialité** : dans l'horaire du groupe (`group_busy_blocks`), une séance d'étude est
+    toujours « Occupé » (le titre contient le nom du cours), même si la personne montre ses
+    titres.
+  - Table **`study_preferences`** (une ligne par personne, seulement la sienne, bornes en BD).
+- Les séances **proposées** ne sont jamais écrites : seules les séances acceptées deviennent des
+  blocs (segment 14).
+- Tests : `src/lib/scheduling/__tests__/studyPlanner.test.ts` (cas limites de la section 3 bis,
+  maximum par jour, durées, horaires aléatoires vérifiés sans chevauchement ni trajet impossible)
+  et `src/lib/db/__tests__/study.test.ts` (PGlite : RLS par requêtes directes, anon refusé,
+  limites, échéance d'un autre refusée, confidentialité, migration 0011 sur une base en 0010 avec
+  des blocs « plan » et un plan).
+
 ## Commandes
 
 | Commande               | Effet                                                     |
@@ -358,22 +409,23 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
 
 ## État des segments
 
-| #   | Segment                       | État    |
-| --- | ----------------------------- | ------- |
-| 0   | Mise en place du projet       | Fait    |
-| 1   | Types et données de test      | Fait    |
-| 2   | Fenêtres libres               | Fait    |
-| 3   | Temps de trajet (estimation)  | Fait    |
-| 4   | Recherche de rencontres       | Fait    |
-| 5   | Classement des propositions   | Fait    |
-| 6   | Base de données et comptes    | Fait    |
-| 7   | Mes lieux                     | Fait    |
-| 8   | Mon horaire (saisie manuelle) | Fait    |
-| 9   | Import d'horaire .ics         | Fait    |
-| 10  | Groupes et amis               | Fait    |
-| 11  | Vue « quand on peut se voir » | Fait    |
-| 12  | Proposer un moment au groupe  | Fait    |
-| 13+ | Planificateur d'étude…        | À faire |
+| #   | Segment                            | État    |
+| --- | ---------------------------------- | ------- |
+| 0   | Mise en place du projet            | Fait    |
+| 1   | Types et données de test           | Fait    |
+| 2   | Fenêtres libres                    | Fait    |
+| 3   | Temps de trajet (estimation)       | Fait    |
+| 4   | Recherche de rencontres            | Fait    |
+| 5   | Classement des propositions        | Fait    |
+| 6   | Base de données et comptes         | Fait    |
+| 7   | Mes lieux                          | Fait    |
+| 8   | Mon horaire (saisie manuelle)      | Fait    |
+| 9   | Import d'horaire .ics              | Fait    |
+| 10  | Groupes et amis                    | Fait    |
+| 11  | Vue « quand on peut se voir »      | Fait    |
+| 12  | Proposer un moment au groupe       | Fait    |
+| 13  | Planificateur d'étude : logique    | Fait    |
+| 14+ | Planificateur d'étude : interface… | À faire |
 
 ## Le cœur : `src/lib/scheduling/`
 
@@ -390,6 +442,7 @@ Logique pure (sans BD ni React), entièrement testée avec Vitest (`__tests__/`)
 | `weeklyBlocks.ts` | Horaire saisi : validation, récurrence hebdomadaire, chevauchements, semaines                  |
 | `weekGrid.ts`     | Mise en page de la grille de /horaire (colonnes côte à côte, clic-glisser)                     |
 | `quietHours.ts`   | Heures où je ne sors pas → blocs occupés à la maison                                           |
+| `studyPlanner.ts` | `planStudySessions` : séances d'étude réalistes avant un examen ou un travail (section 3 bis)  |
 
 Exemple :
 

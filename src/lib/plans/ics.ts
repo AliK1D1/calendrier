@@ -3,13 +3,18 @@
  * Instants en UTC (suffixe Z) : aucun fuseau à décrire, chaque agenda affiche l'heure locale.
  */
 
-/** Échappement d'un texte iCalendar (RFC 5545, 3.3.11). */
+/**
+ * Échappement d'un texte iCalendar (RFC 5545, 3.3.11). Tout saut de ligne (y compris un « \r »
+ * seul, que beaucoup d'agendas lisent comme une fin de ligne) devient « \n », et les autres
+ * caractères de contrôle sont retirés : un titre ne peut pas ajouter de lignes au fichier.
+ */
 export function escapeIcsText(s: string): string {
   return s
     .replace(/\\/g, "\\\\")
     .replace(/;/g, "\\;")
     .replace(/,/g, "\\,")
-    .replace(/\r?\n/g, "\\n");
+    .replace(/\r\n|\r|\n/g, "\\n")
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
 }
 
 /** « 2027-03-16T22:00:00.000Z » → « 20270316T220000Z ». */

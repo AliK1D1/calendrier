@@ -245,3 +245,46 @@ describe("buildPlanIcs", () => {
     expect(escapeIcsText("a\\b\nc")).toBe("a\\\\b\\nc");
   });
 });
+
+describe("buildPlanIcs : titre piégé (revue)", () => {
+  it("un « \\r » seul ou un caractère de contrôle n'ajoute aucune ligne au fichier", () => {
+    const ics = buildPlanIcs(
+      {
+        id: "11111111-2222-4333-8444-555555555555",
+        title: "Souper\rBEGIN:VALARM\rTRIGGER:-PT1M\rEND:VALARM",
+        where: "Parc\u0007\u001b Lafontaine",
+        groupName: "Gang",
+        startsAt: "2027-03-16T22:00:00.000Z",
+        endsAt: "2027-03-17T00:00:00.000Z",
+      },
+      new Date("2027-03-01T12:00:00Z"),
+    );
+    const lines = ics.split("\r\n").filter((l) => l !== "");
+    expect(lines.filter((l) => !l.startsWith(" ")).map((l) => l.split(":")[0])).toEqual([
+      "BEGIN",
+      "VERSION",
+      "PRODID",
+      "CALSCALE",
+      "METHOD",
+      "BEGIN",
+      "UID",
+      "DTSTAMP",
+      "DTSTART",
+      "DTEND",
+      "SUMMARY",
+      "LOCATION",
+      "DESCRIPTION",
+      "END",
+      "END",
+    ]);
+    expect(ics).not.toMatch(/[\r](?!\n)/);
+    expect(ics).toContain("SUMMARY:Souper\\nBEGIN:VALARM\\nTRIGGER:-PT1M\\nEND:VALARM");
+    expect(ics).toContain("LOCATION:Parc Lafontaine");
+  });
+
+  it("un titre normal est écrit comme avant", () => {
+    expect(escapeIcsText("Souper chez « Léo », 18 h; dessert\nà apporter")).toBe(
+      "Souper chez « Léo »\\, 18 h\\; dessert\\nà apporter",
+    );
+  });
+});

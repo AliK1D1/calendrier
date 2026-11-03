@@ -1,12 +1,7 @@
 import { House } from "lucide-react";
 import Link from "next/link";
 
-const LIENS = [
-  { href: "/groupes", label: "Groupes" },
-  { href: "/horaire", label: "Horaire" },
-  { href: "/lieux", label: "Lieux" },
-  { href: "/profil", label: "Profil" },
-];
+import { NavLinks } from "./nav-links";
 
 /** En-tête des pages connectées : retour à l'accueil et liens principaux. */
 export function SiteHeader() {
@@ -21,11 +16,7 @@ export function SiteHeader() {
           <span className="hidden sm:inline">Temps libre commun</span>
         </Link>
         <span className="flex-1" />
-        {LIENS.map((l) => (
-          <Link key={l.href} href={l.href} className="text-muted-foreground hover:text-foreground">
-            {l.label}
-          </Link>
-        ))}
+        <NavLinks />
       </nav>
     </header>
   );

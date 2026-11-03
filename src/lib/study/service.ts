@@ -325,8 +325,16 @@ export async function replanMyConflicts(
     deps.now,
   );
   if (ids.length === 0) return { ok: false, error: "Aucune séance en conflit." };
-  const toMove = l.accepted.filter((s) => ids.includes(s.id));
-  const keep = l.accepted.filter((s) => !ids.includes(s.id));
+  // Au plus MAX_REPLAN_SESSIONS séances par calcul (les plus proches) : chaque séance replacée
+  // parcourt tous les jours jusqu'à son échéance (revue de sécurité : 900 séances = 63 s).
+  // Les autres restent à leur place et comptent comme occupées ; on replanifie de nouveau après.
+  const conflicting = l.accepted
+    .filter((s) => ids.includes(s.id))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  const toMove = conflicting.slice(0, MAX_REPLAN_SESSIONS);
+  const moving = new Set(toMove.map((s) => s.id));
+  const keep = l.accepted.filter((s) => !moving.has(s.id));
+  const leftOver = conflicting.length - toMove.length;
   const { moves, warnings } = await rescheduleStudySessions(
     l.person,
     l.deadlines,
@@ -352,10 +360,20 @@ export async function replanMyConflicts(
           m.id,
         ),
       ),
-      warnings: warnings.map((w) => w.message),
+      warnings: [
+        ...warnings.map((w) => w.message),
+        ...(leftOver > 0
+          ? [
+              `${leftOver} autre${leftOver > 1 ? "s" : ""} séance${leftOver > 1 ? "s" : ""} en conflit : accepte ces propositions, puis replanifie de nouveau.`,
+            ]
+          : []),
+      ],
     },
   };
 }
+
+/** Séances replacées au plus par « Replanifier » (borne le coût du calcul). */
+export const MAX_REPLAN_SESSIONS = 20;
 
 /** Résultat d'une acceptation : nombre de séances écrites, ou l'erreur (et la séance visée). */
 export type AcceptResult = { ok: true; count: number } | { ok: false; error: string; key?: string };

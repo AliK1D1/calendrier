@@ -675,13 +675,20 @@ export async function sessionFits(
   const place = places.get(session.placeId);
   if (!place) return false;
   const near = person.busyBlocks.filter((b) => b.end >= bounds.start && b.start <= bounds.end);
-  const extra: BusyBlock[] = others.map((o, i) => ({
-    id: `autre-${i}`,
-    start: o.start,
-    end: o.end,
-    placeId: o.placeId,
-    title: "Étude",
-  }));
+  // Seules les séances qui touchent ce jour comptent (même filtre que `near`) : sans ce filtre,
+  // vérifier N séances coûtait N² (revue de sécurité), pour le même résultat.
+  const extra: BusyBlock[] = [];
+  others.forEach((o, i) => {
+    if (o.end >= bounds.start && o.start <= bounds.end) {
+      extra.push({
+        id: `autre-${i}`,
+        start: o.start,
+        end: o.end,
+        placeId: o.placeId,
+        title: "Étude",
+      });
+    }
+  });
   const windows = getFreeWindows({ ...person, busyBlocks: near }, bounds.start, bounds.end, {
     extraBusyBlocks: extra,
   });
@@ -770,11 +777,29 @@ export async function findStudyConflicts(
   timeZone: string = TIME_ZONE,
 ): Promise<string[]> {
   const travel = memoizeTravel(travelProvider);
+  // Blocs de la personne rangés par jour une seule fois (revue de sécurité : sinon chaque
+  // séance relisait tout l'horaire de l'année, 1,4 s pour 900 séances). sessionFits refait le
+  // même filtre sur ces blocs : résultat identique.
+  const byDay = new Map<string, Person>();
+  const personOn = (start: Date): Person => {
+    const day = formatInTimeZone(start, timeZone, "yyyy-MM-dd");
+    let p = byDay.get(day);
+    if (!p) {
+      const bounds = zonedDayBounds(day, timeZone);
+      p = {
+        ...person,
+        busyBlocks: person.busyBlocks.filter((b) => b.end >= bounds.start && b.start <= bounds.end),
+      };
+      byDay.set(day, p);
+    }
+    return p;
+  };
   const out: string[] = [];
   for (const s of accepted) {
     if (!s.movable || s.end.getTime() <= now.getTime()) continue;
     const others = accepted.filter((o) => o.id !== s.id);
-    if (!(await sessionFits(person, s, others, travel, bufferMinutes, timeZone))) out.push(s.id);
+    const fits = await sessionFits(personOn(s.start), s, others, travel, bufferMinutes, timeZone);
+    if (!fits) out.push(s.id);
   }
   return out;
 }

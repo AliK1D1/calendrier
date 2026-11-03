@@ -30,6 +30,12 @@ const travel = new EstimatedTravelProvider();
 
 /** Calculs par minute et par personne : le planificateur occupe le serveur. */
 const calculLimiter = createKeyedLimiter({ limit: 30, windowMs: 60_000 });
+/**
+ * Calculs complets (« Planifier », « Replanifier ») : jusqu'à environ 1 s chacun avec un horaire
+ * très chargé, donc 10 par minute au plus (revue de sécurité). Vérifier et accepter des séances
+ * restent à 30 par minute (glisser une séance en lance une vérification).
+ */
+const planLimiter = createKeyedLimiter({ limit: 10, windowMs: 60_000 });
 
 const refresh = () => {
   revalidatePath("/etude");
@@ -37,9 +43,12 @@ const refresh = () => {
 };
 
 /** Contexte d'un calcul : personne connectée, limite, magasin Supabase (RLS). */
-async function studyContext() {
+async function studyContext(heavy = false) {
   const ctx = await requireUser();
   if (!ctx.ok) return ctx;
+  if (heavy && !planLimiter.tryAcquire(ctx.user.id)) {
+    return { ok: false as const, error: "Trop de calculs d'un coup. Attends une minute." };
+  }
   if (!calculLimiter.tryAcquire(ctx.user.id)) {
     return { ok: false as const, error: "Trop de calculs d'un coup. Attends une minute." };
   }
@@ -90,7 +99,7 @@ export async function supprimerEcheance(id: unknown): Promise<ActionResult> {
 
 /** « Planifier mon étude » : séances proposées, rien n'est écrit. */
 export async function planifierEtude(): Promise<Result<StudyPlanView>> {
-  const c = await studyContext();
+  const c = await studyContext(true);
   if (!c.ok) return c;
   try {
     return await planMyStudy(c.store, c.deps);
@@ -102,7 +111,7 @@ export async function planifierEtude(): Promise<Result<StudyPlanView>> {
 
 /** « Replanifier » : nouvelles places pour les séances en conflit, rien n'est écrit. */
 export async function replanifierConflits(): Promise<Result<StudyPlanView>> {
-  const c = await studyContext();
+  const c = await studyContext(true);
   if (!c.ok) return c;
   try {
     return await replanMyConflicts(c.store, c.deps);

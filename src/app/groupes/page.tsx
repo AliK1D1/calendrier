@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMyGroups } from "@/lib/groups/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { plural } from "@/lib/ux/plural";
 
 import { CreateGroupForm, JoinByCodeForm } from "./group-forms";
 
@@ -41,7 +42,7 @@ export default async function MesGroupes() {
 
         <section aria-labelledby="liste-groupes" className="flex flex-col gap-3">
           <h2 id="liste-groupes" className="text-lg font-semibold">
-            {groups.length === 0 ? "Aucun groupe pour l'instant" : `${groups.length} groupe(s)`}
+            {groups.length === 0 ? "Aucun groupe pour l'instant" : plural(groups.length, "groupe")}
           </h2>
           {groups.length > 0 && (
             <ul className="flex flex-col gap-2">

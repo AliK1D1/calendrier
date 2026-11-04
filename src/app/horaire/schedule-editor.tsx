@@ -56,6 +56,8 @@ const COLORS = [
 
 /** Couleur des plans de groupe acceptés (lecture seule). */
 const MEETUP_COLOR = "bg-primary/15 border-primary text-foreground";
+/** Temps occupé lu dans Outlook (lecture seule). */
+const OUTLOOK_COLOR = "bg-muted border-muted-foreground/60 text-foreground";
 
 const dayLabel = (day: string, pattern: string) => format(parseISO(day), pattern, { locale: frCA });
 
@@ -327,8 +329,11 @@ export function ScheduleEditor({
         a.startMinute - b.startMinute ||
         a.title.localeCompare(b.title),
     );
+  const outlookCount = blocks.filter(
+    (b) => b.source === "outlook" && (b.validFrom ?? "") >= today,
+  ).length;
   const once = blocks
-    .filter((b) => b.weekday == null && (b.validFrom ?? "") >= today)
+    .filter((b) => b.weekday == null && b.source !== "outlook" && (b.validFrom ?? "") >= today)
     .sort(
       (a, b) =>
         (a.validFrom ?? "").localeCompare(b.validFrom ?? "") || a.startMinute - b.startMinute,
@@ -583,6 +588,8 @@ export function ScheduleEditor({
                           setMessage(null);
                           // Plan de groupe : on le gère (refuser) dans « Mes plans ».
                           if (b.source === "meetup") router.push("/plans");
+                          // Outlook : lecture seule, géré dans Profil.
+                          else if (b.source === "outlook") router.push("/profil#outlook");
                           // Séance d'étude : on la gère (retirer, déplaçable) dans « Étude ».
                           else if (b.source === "study") router.push("/etude");
                           else setDraft(editDraft(b, day));
@@ -593,7 +600,9 @@ export function ScheduleEditor({
                             ? MEETUP_COLOR
                             : b.source === "study"
                               ? ACCEPTED_STUDY_COLOR
-                              : colorOf(b.placeId),
+                              : b.source === "outlook"
+                                ? OUTLOOK_COLOR
+                                : colorOf(b.placeId),
                           conflictIds.has(b.id) && "ring-destructive ring-2",
                           p.cutTop && "rounded-t-none",
                           p.cutBottom && "rounded-b-none",
@@ -675,6 +684,15 @@ export function ScheduleEditor({
           </ul>
         )}
         <h2 className="text-lg font-semibold">Une seule fois (à venir)</h2>
+        {outlookCount > 0 && (
+          <p className="text-muted-foreground text-sm">
+            Plus {outlookCount} {outlookCount > 1 ? "blocs occupés lus" : "bloc occupé lu"} dans ton
+            calendrier Outlook (en gris dans la grille).{" "}
+            <Link href="/profil#outlook" className="underline underline-offset-2">
+              Gérer Outlook
+            </Link>
+          </p>
+        )}
         {once.length === 0 ? (
           <p className="text-muted-foreground text-sm">Aucun bloc ponctuel à venir.</p>
         ) : (
@@ -747,7 +765,9 @@ function BlockRow({
             ? MEETUP_COLOR
             : block.source === "study"
               ? ACCEPTED_STUDY_COLOR
-              : color,
+              : block.source === "outlook"
+                ? OUTLOOK_COLOR
+                : color,
         )}
         aria-hidden
       />

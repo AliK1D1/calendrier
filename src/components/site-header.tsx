@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { LogoMark } from "./logo-mark";
 import { BottomTabs, NavLinks } from "./nav-links";
+import { OutlookAutoSync } from "./outlook-auto-sync";
 import { PlansBadge } from "./plans-badge";
 
 /**
@@ -36,6 +37,7 @@ export function SiteHeader() {
         </nav>
       </header>
       <BottomTabs plansBadge={badge} />
+      <OutlookAutoSync />
     </>
   );
 }

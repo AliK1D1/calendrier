@@ -1,3 +1,5 @@
+import { formatDistanceStrict } from "date-fns";
+import { frCA } from "date-fns/locale";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -12,30 +14,55 @@ import {
   getMyQuietHours,
   getMyStudyPreferences,
 } from "@/lib/profile";
+import { getOutlookConfig } from "@/lib/outlook/config";
+import { getOutlookStatus } from "@/lib/outlook/supabaseStore";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { PrivacyForm } from "./privacy-form";
+import { OutlookCard } from "./outlook-card";
 import { ProfileForm } from "./profile-form";
 import { QuietHoursForm } from "./quiet-hours-form";
 import { StudyPrefsForm } from "./study-prefs-form";
 
 export const metadata: Metadata = { title: "Profil · Temps libre commun" };
 export const dynamic = "force-dynamic";
+// Actions Outlook (synchro, choix du calendrier) : Microsoft peut être lent.
+export const maxDuration = 60;
 
-export default async function Profil() {
+/** Message au retour de Microsoft (`/profil?outlook=…`). */
+const OUTLOOK_RETURN: Record<string, { ok: boolean; text: string }> = {
+  connecte: { ok: true, text: "Outlook connecté et synchronisé." },
+  "connecte-erreur": {
+    ok: false,
+    text: "Outlook est connecté, mais la première synchro n'a pas fonctionné (voir ci-dessus).",
+  },
+  refuse: { ok: false, text: "Connexion à Outlook annulée." },
+  expire: { ok: false, text: "La connexion à Outlook a expiré. Recommence." },
+  echec: { ok: false, text: "La connexion à Outlook n'a pas fonctionné. Réessaie." },
+  "non-configure": { ok: false, text: "Outlook n'est pas encore configuré sur ce site." },
+};
+
+export default async function Profil({
+  searchParams,
+}: {
+  searchParams: Promise<{ outlook?: string | string[] }>;
+}) {
+  const { outlook } = await searchParams;
   const supabase = await createSupabaseServerClient();
   if (!supabase) redirect("/connexion?erreur=config&next=/profil");
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/connexion?next=/profil");
 
-  const [profile, places, quietRow, hideTitles, studyPrefs] = await Promise.all([
+  const [profile, places, quietRow, hideTitles, studyPrefs, outlookStatus] = await Promise.all([
     getMyProfile(supabase, data.user.id),
     getMyPlaces(supabase, data.user.id),
     getMyQuietHours(supabase, data.user.id),
     getMyPrivacy(supabase, data.user.id),
     getMyStudyPreferences(supabase, data.user.id),
+    getOutlookStatus(supabase, data.user.id),
   ]);
+  const now = new Date();
   const quiet = quietRow
     ? quietHoursFromDb(quietRow.unavailable_before, quietRow.unavailable_after)
     : null;
@@ -99,6 +126,26 @@ export default async function Profil() {
             )}
           </CardContent>
         </Card>
+        <OutlookCard
+          configured={getOutlookConfig() !== null}
+          dbReady={outlookStatus !== "absent"}
+          status={
+            outlookStatus && outlookStatus !== "absent"
+              ? {
+                  accountEmail: outlookStatus.accountEmail,
+                  calendarName: outlookStatus.calendarName,
+                  lastSynced: outlookStatus.lastSyncedAt
+                    ? formatDistanceStrict(new Date(outlookStatus.lastSyncedAt), now, {
+                        addSuffix: true,
+                        locale: frCA,
+                      })
+                    : null,
+                  lastSyncError: outlookStatus.lastSyncError,
+                }
+              : null
+          }
+          returnMessage={typeof outlook === "string" ? (OUTLOOK_RETURN[outlook] ?? null) : null}
+        />
         <Card id="etude" className="scroll-mt-16">
           <CardHeader>
             <CardTitle>Préférences d&apos;étude</CardTitle>

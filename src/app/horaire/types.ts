@@ -7,11 +7,12 @@ import type { BlockSpec } from "@/lib/scheduling/weeklyBlocks";
 
 /**
  * Bloc affiché par /horaire : `BlockSpec` enregistré + son origine. `meetup` : plan de groupe
- * accepté (segment 12), en lecture seule ici (on le refuse dans « Mes plans »).
+ * accepté (segment 12), en lecture seule ici (on le refuse dans « Mes plans »). `outlook` :
+ * temps occupé lu dans Outlook, en lecture seule (géré dans Profil).
  */
 export type ScheduleBlock = BlockSpec & {
   id: string;
-  source: "manual" | "ics" | "image" | "study" | "meetup";
+  source: "manual" | "ics" | "image" | "study" | "meetup" | "outlook";
   /** Séance d'étude acceptée (segment 14) : déplaçable ou non. */
   movable?: boolean;
 };

@@ -526,6 +526,78 @@ trigger (jour entre hier et dans un an, 100 disponibilités à venir au plus). L
 groupes lisent jour et heures par `group_availability_slots(gid)`, jamais la note. Sans la
 migration, l'app marche comme avant (la section dit qu'il manque la migration).
 
+## Calendrier Outlook (connecteur, facultatif)
+
+Profil → **Calendrier Outlook** → « Connecter Outlook » : la personne se connecte avec son
+compte Microsoft (personnel Outlook.com/Hotmail **ou** travail/école Microsoft 365) et ses
+événements Outlook comptent comme du temps occupé partout (horaire, recherche de moments,
+planificateur d'étude), sans les entrer à la main.
+
+Choix faits :
+
+| Question                  | Choix                                                                                                                            |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Où ?                      | Page **Profil**, carte « Calendrier Outlook »                                                                                    |
+| Types de comptes          | Les deux (point de terminaison Microsoft `common`)                                                                               |
+| Calendriers lus           | Le principal par défaut ; « Choisir le calendrier » pour en prendre un autre (un seul)                                           |
+| Ce que les autres voient  | « Occupé » et l'heure, **jamais** le titre ni le lieu (même si la personne montre ses titres)                                    |
+| Lecture / écriture        | **Lecture seule** (`Calendars.Read`) : l'app n'écrit jamais dans Outlook                                                         |
+| Synchro                   | Aux 15 min **quand la personne a l'app ouverte**, + bouton « Actualiser maintenant » (au plus 1 fois/min), 8 semaines à l'avance |
+| Déconnexion               | Supprime **tout de suite** la connexion (jeton) et tous les blocs Outlook                                                        |
+| Événements « Disponible » | Ignorés ; occupé, provisoire, absent, ailleurs : occupés. Annulés : ignorés                                                      |
+| Lieu                      | Aucun : un bloc Outlook est « à la maison » pour les trajets                                                                     |
+
+**Mise en place (une fois, par l'admin du site)** :
+
+1. <https://portal.azure.com> (compte Microsoft ; un compte Azure gratuit suffit, une
+   inscription d'app ne coûte rien) → chercher **App registrations** → **New registration**.
+   - Name : `Temps libre commun`.
+   - Supported account types : **Accounts in any organizational directory (Any Microsoft
+     Entra ID tenant - Multitenant) and personal Microsoft accounts**.
+   - Redirect URI : plateforme **Web**, `https://calendrier-opal.vercel.app/api/outlook/callback`.
+   - **Register**.
+2. Page de l'app → **Authentication** → **Add URI** :
+   `http://localhost:3000/api/outlook/callback` (pour `npm run dev`) → **Save**.
+3. **Certificates & secrets** → **New client secret** (24 mois) → copier la **Value** tout de
+   suite (elle ne s'affiche qu'une fois). Noter la date d'expiration : il faudra la renouveler.
+4. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated
+   permissions** → cocher `Calendars.Read`, `User.Read`, `offline_access` → **Add
+   permissions**. (Pas besoin de « Grant admin consent ».)
+5. **Overview** → copier **Application (client) ID**.
+6. Générer la clé de chiffrement :
+   `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+7. Variables (local : `.env.local` ; Vercel : Settings → Environment Variables, puis
+   **Redeploy**) : `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `OUTLOOK_TOKEN_KEY`.
+   Jamais de préfixe `NEXT_PUBLIC_`. Ne pas changer `OUTLOOK_TOKEN_KEY` ensuite (sinon chacun
+   doit reconnecter Outlook).
+8. Supabase → SQL Editor : coller `supabase/migration-0014.sql` → **Run**.
+
+Limite à connaître : un compte de **travail/école** (ex. celui du cégep) peut afficher
+« Approbation de l'administrateur requise » si l'organisation interdit aux élèves d'autoriser
+des apps d'éditeurs non vérifiés. Les comptes personnels marchent toujours.
+
+Sécurité et confidentialité (`src/lib/outlook/`, migration 0014) :
+
+- Flux OAuth « code d'autorisation » avec **PKCE** et secret client côté serveur ; `state`
+  aléatoire gardé dans un cookie `httpOnly` **chiffré**, lié à la personne connectée, 10 min.
+- Seul le **jeton de rafraîchissement** est gardé, **chiffré** (AES-256-GCM, clé
+  `OUTLOOK_TOKEN_KEY` connue du serveur seulement, lié au propriétaire). Le jeton d'accès (1 h)
+  n'est jamais enregistré. Rien de tout ça n'arrive au navigateur.
+- Table `outlook_connections` : RLS, lisible et modifiable **par la personne seulement**.
+- On ne demande à Graph que début, fin, « toute la journée », `showAs` et annulation : aucun
+  titre, lieu, description ni participant n'est lu ni enregistré. Les blocs s'appellent
+  « Outlook » (`source = 'outlook'`), sont ponctuels, sans lieu, et ne s'écrivent que par
+  `replace_outlook_blocks` (remplacement complet en une transaction, 500 au plus).
+- Le jeton n'est envoyé qu'à `graph.microsoft.com` (un « nextLink » qui pointerait ailleurs est
+  refusé). Délai de 10 s par appel.
+- Pourquoi pas de synchro quand l'app est fermée : il faudrait que le serveur lise les jetons
+  de tout le monde, donc la clé `service_role`, que l'app n'utilise jamais. Les amis voient
+  donc l'état Outlook de la dernière visite de la personne.
+
+Logique pure et tests : `src/lib/scheduling/outlookBusy.ts` (découpage par jour local, minuit,
+heure avancée, fusion), `src/lib/outlook/__tests__/` (OAuth, Graph, synchro avec `fetch`
+simulé), `rls.test.ts` (RLS, fonctions, migration 0014 sur une base existante).
+
 ## Déploiement (Vercel) et vérification automatique (segment 17)
 
 L'app est en ligne : <https://calendrier-opal.vercel.app>. Le projet Vercel est relié au dépôt
@@ -541,6 +613,9 @@ GitHub : **chaque push sur `main` déploie la production**, chaque PR reçoit un
 | `NEXT_PUBLIC_SITE_URL`          | non         | `https://calendrier-opal.vercel.app` (sinon l'adresse de la requête)          |
 | `ORS_API_KEY`                   | non         | vrais temps de trajet (voir segment 15) ; jamais `NEXT_PUBLIC_`               |
 | `GOOGLE_MAPS_API_KEY`           | non         | transport en commun (voir segment 15) ; jamais `NEXT_PUBLIC_`                 |
+| `MICROSOFT_CLIENT_ID`           | non         | connecteur Outlook (voir « Calendrier Outlook ») ; jamais `NEXT_PUBLIC_`      |
+| `MICROSOFT_CLIENT_SECRET`       | non         | connecteur Outlook ; jamais `NEXT_PUBLIC_`                                    |
+| `OUTLOOK_TOKEN_KEY`             | non         | connecteur Outlook : 32 octets base64 pour chiffrer les jetons                |
 
 Jamais la clé `service_role` ni la `secret key` (`sb_secret_…`). Après avoir changé une
 variable : **Deployments → ⋯ → Redeploy** (les `NEXT_PUBLIC_` sont figées au build).
@@ -615,6 +690,7 @@ Une PR dont les tests échouent ne peut alors plus être fusionnée.
 | 16  | Import par capture d'écran / PDF  | À faire |
 | 17  | Déploiement et CI                 | Fait    |
 | 18  | Bonus (sans courriel/push)        | Fait    |
+| —   | Connecteur Outlook (user story)   | Fait    |
 
 ## Le cœur : `src/lib/scheduling/`
 

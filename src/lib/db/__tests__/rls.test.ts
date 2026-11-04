@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0013.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0014.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -128,6 +128,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0011.sql",
       "supabase/migration-0012.sql",
       "supabase/migration-0013.sql",
+      "supabase/migration-0014.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -283,13 +284,13 @@ describe("migrations (supabase/setup.sql)", () => {
       const { rows: policies } = await vide.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public'",
       );
-      expect(policies[0].n).toBe(32);
+      expect(policies[0].n).toBe(36);
     } finally {
       await vide.close();
     }
   }, 60_000);
 
-  it("s'applique sur une base vide et crée les 11 tables avec RLS activé", async () => {
+  it("s'applique sur une base vide et crée les 12 tables avec RLS activé", async () => {
     const tables = await rows<{ relname: string; relrowsecurity: boolean }>(
       `SELECT c.relname, c.relrowsecurity FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -302,6 +303,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "group_members",
       "groups",
       "meetup_plans",
+      "outlook_connections",
       "places",
       "plan_invitees",
       "plan_votes",
@@ -2067,6 +2069,251 @@ describe("Revue 18.1 : migration 0013 sur une base en 0012 avec des données", (
       expect(dispos).toEqual([{ note: "pas de shift" }]);
       const { rows: droits } = await ancienne.query<{ ok: boolean }>(
         "SELECT has_function_privilege('authenticated', 'public.enforce_availability_limits()', 'EXECUTE') AS ok",
+      );
+      expect(droits).toEqual([{ ok: false }]);
+    } finally {
+      await ancienne.close();
+    }
+  }, 60_000);
+});
+
+describe("Connecteur Outlook (migration 0014) : jeton privé, blocs « Occupé », déconnexion", () => {
+  const OUTLOOK_BLOCKS = JSON.stringify([
+    { day: "2026-11-04", start: "10:00", end: "11:30" },
+    { day: "2026-11-05", start: "22:00", end: "24:00" },
+  ]);
+
+  async function connect(uid: string, token = "v1.chiffre") {
+    await as(uid, () =>
+      rows(
+        "INSERT INTO outlook_connections (owner_id, account_email, refresh_token_enc) VALUES ($1, 'x@outlook.com', $2)",
+        [uid, token],
+      ),
+    );
+  }
+
+  it("la connexion (et son jeton chiffré) n'est visible que par la personne", async () => {
+    await connect(A);
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    expect(await as(A, () => rows("SELECT refresh_token_enc FROM outlook_connections"))).toEqual([
+      { refresh_token_enc: "v1.chiffre" },
+    ]);
+    // Même un membre du groupe ne voit rien, ne modifie rien, ne supprime rien.
+    expect(await as(B, () => rows("SELECT * FROM outlook_connections"))).toEqual([]);
+    const maj = await as(
+      B,
+      async () =>
+        (
+          await db.query(
+            "UPDATE outlook_connections SET refresh_token_enc = 'pirate' WHERE owner_id = $1",
+            [A],
+          )
+        ).affectedRows,
+    );
+    expect(maj).toBe(0);
+    const del = await as(
+      B,
+      async () =>
+        (await db.query("DELETE FROM outlook_connections WHERE owner_id = $1", [A])).affectedRows,
+    );
+    expect(del).toBe(0);
+    // Personne ne crée une connexion au nom d'un autre ; un visiteur anonyme ne lit rien.
+    await as(A, () => rows("DELETE FROM outlook_connections"));
+    await expect(
+      as(B, () =>
+        rows("INSERT INTO outlook_connections (owner_id, refresh_token_enc) VALUES ($1, 'x')", [A]),
+      ),
+    ).rejects.toThrow();
+    await expect(as(null, () => rows("SELECT * FROM outlook_connections"))).rejects.toThrow();
+  });
+
+  it("replace_outlook_blocks remplace tous les blocs Outlook, sans titre ni lieu", async () => {
+    await connect(A);
+    await seedSchedule(A, "Chimie");
+    await as(A, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [OUTLOOK_BLOCKS]));
+    const [{ n }] = await as(A, () =>
+      rows<{ n: number }>("SELECT public.replace_outlook_blocks($1::jsonb) AS n", [OUTLOOK_BLOCKS]),
+    );
+    expect(n).toBe(2);
+    expect(
+      await as(A, () =>
+        rows(
+          "SELECT title, place_id, start_time, end_time, weekday, valid_from::text AS valid_from, source FROM busy_blocks WHERE source = 'outlook' ORDER BY valid_from",
+        ),
+      ),
+    ).toEqual([
+      {
+        title: "Outlook",
+        place_id: null,
+        start_time: "10:00:00",
+        end_time: "11:30:00",
+        weekday: null,
+        valid_from: "2026-11-04",
+        source: "outlook",
+      },
+      {
+        title: "Outlook",
+        place_id: null,
+        start_time: "22:00:00",
+        end_time: "24:00:00",
+        weekday: null,
+        valid_from: "2026-11-05",
+        source: "outlook",
+      },
+    ]);
+    // Les autres blocs ne sont pas touchés.
+    expect(
+      await as(A, () => rows("SELECT title FROM busy_blocks WHERE source <> 'outlook'")),
+    ).toEqual([{ title: "Chimie" }]);
+  });
+
+  it("un bloc refusé annule tout (les anciens restent) ; au plus 500 ; seulement si connecté", async () => {
+    await connect(A);
+    await as(A, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [OUTLOOK_BLOCKS]));
+    const invalide = JSON.stringify([
+      { day: "2026-11-06", start: "09:00", end: "10:00" },
+      { day: "2026-11-06", start: "12:00", end: "11:00" },
+    ]);
+    await expect(
+      as(A, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [invalide])),
+    ).rejects.toThrow();
+    const trop = JSON.stringify(
+      Array.from({ length: 501 }, () => ({ day: "2026-11-06", start: "09:00", end: "10:00" })),
+    );
+    await expect(
+      as(A, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [trop])),
+    ).rejects.toThrow(/500 au maximum/);
+    expect(
+      await as(A, () =>
+        rows("SELECT count(*)::int AS n FROM busy_blocks WHERE source = 'outlook'"),
+      ),
+    ).toEqual([{ n: 2 }]);
+    // B n'a pas connecté Outlook : refusé.
+    await expect(
+      as(B, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [OUTLOOK_BLOCKS])),
+    ).rejects.toThrow(/pas connecté/);
+    await expect(
+      as(null, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [OUTLOOK_BLOCKS])),
+    ).rejects.toThrow();
+  });
+
+  it("les blocs Outlook ne se créent, modifient ni suppriment à la main", async () => {
+    await connect(A);
+    await as(A, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [OUTLOOK_BLOCKS]));
+    await expect(
+      as(A, () =>
+        rows(
+          "INSERT INTO busy_blocks (title, start_time, end_time, valid_from, source) VALUES ('x', '08:00', '09:00', '2026-11-07', 'outlook')",
+        ),
+      ),
+    ).rejects.toThrow();
+    const maj = await as(
+      A,
+      async () =>
+        (await db.query("UPDATE busy_blocks SET title = 'x' WHERE source = 'outlook'"))
+          .affectedRows,
+    );
+    const del = await as(
+      A,
+      async () => (await db.query("DELETE FROM busy_blocks WHERE source = 'outlook'")).affectedRows,
+    );
+    expect([maj, del]).toEqual([0, 0]);
+    // Un bloc Outlook est toujours ponctuel et sans lieu (contrainte, même pour la BD).
+    await expect(
+      db.query(
+        "INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday, source) VALUES ($1, 'x', '08:00', '09:00', 1, 'outlook')",
+        [A],
+      ),
+    ).rejects.toThrow(/busy_blocks_outlook_one_off/);
+  });
+
+  it("les membres du groupe voient « Occupé », même si A montre ses titres", async () => {
+    await connect(A);
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    await as(A, () => rows("UPDATE profiles SET hide_block_titles = false WHERE id = $1", [A]));
+    await as(A, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [OUTLOOK_BLOCKS]));
+    expect(
+      await as(B, () =>
+        rows(
+          "SELECT title, title_hidden, start_time FROM public.group_busy_blocks($1) WHERE owner_id = $2 ORDER BY valid_from",
+          [g.id, A],
+        ),
+      ),
+    ).toEqual([
+      { title: "Occupé", title_hidden: true, start_time: "10:00:00" },
+      { title: "Occupé", title_hidden: true, start_time: "22:00:00" },
+    ]);
+  });
+
+  it("claim_outlook_sync : réserve, puis « busy », puis « recent » ; « none » sans connexion", async () => {
+    expect(await as(A, () => rows("SELECT public.claim_outlook_sync(15) AS r"))).toEqual([
+      { r: { status: "none" } },
+    ]);
+    await connect(A);
+    const [{ r }] = await as(A, () =>
+      rows<{ r: Record<string, unknown> }>("SELECT public.claim_outlook_sync(15) AS r"),
+    );
+    expect(r).toEqual({ status: "ok", refresh_token_enc: "v1.chiffre", calendar_id: null });
+    expect(await as(A, () => rows("SELECT public.claim_outlook_sync(1) AS r"))).toEqual([
+      { r: { status: "busy" } },
+    ]);
+    await as(A, () => rows("UPDATE outlook_connections SET sync_started_at = NULL"));
+    expect(await as(A, () => rows("SELECT public.claim_outlook_sync(15) AS r"))).toEqual([
+      { r: { status: "recent" } },
+    ]);
+    // B ne réserve jamais la synchro de A (il n'a pas de connexion à lui).
+    expect(await as(B, () => rows("SELECT public.claim_outlook_sync(0) AS r"))).toEqual([
+      { r: { status: "none" } },
+    ]);
+  });
+
+  it("déconnexion : la connexion et tous les blocs Outlook sont supprimés, le reste gardé", async () => {
+    await connect(A);
+    await seedSchedule(A, "Chimie");
+    await as(A, () => rows("SELECT public.replace_outlook_blocks($1::jsonb)", [OUTLOOK_BLOCKS]));
+    await as(A, () => rows("SELECT public.disconnect_outlook()"));
+    expect(await as(A, () => rows("SELECT * FROM outlook_connections"))).toEqual([]);
+    expect(await as(A, () => rows("SELECT title, source FROM busy_blocks"))).toEqual([
+      { title: "Chimie", source: "manual" },
+    ]);
+  });
+
+  it("migration 0014 seule sur une base en 0013 avec des données", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      for (const tag of [
+        "0000_schema",
+        "0001_rls_triggers",
+        "0002_review_hardening",
+        "0003_onboarding",
+        "0004_quiet_hours",
+        "0005_review_limits",
+        "0006_groups",
+        "0007_review_kick_new_code",
+        "0008_review_row_limits",
+        "0009_segment12_meetup_invites",
+        "0010_review_plan_privacy",
+        "0011_segment13_study_planner",
+        "0012_segment18_availability_slots",
+        "0013_review_availability_limit",
+      ]) {
+        await ancienne.exec(drizzleSql(tag));
+      }
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      await ancienne.query(
+        "INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday) VALUES ($1, 'Chimie', '10:00', '12:00', 1)",
+        [A],
+      );
+      await ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0014.sql"), "utf8"));
+      const { rows: blocs } = await ancienne.query("SELECT title FROM busy_blocks");
+      expect(blocs).toEqual([{ title: "Chimie" }]);
+      const { rows: droits } = await ancienne.query<{ ok: boolean }>(
+        "SELECT has_function_privilege('anon', 'public.replace_outlook_blocks(jsonb)', 'EXECUTE') AS ok",
       );
       expect(droits).toEqual([{ ok: false }]);
     } finally {

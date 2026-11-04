@@ -40,6 +40,9 @@ export const travelModeEnum = pgEnum("travel_mode", ["walk", "bike", "transit", 
  * Origine d'un bloc occupé. `study` : séance d'étude acceptée (plan, section 3 bis).
  * `meetup` : plan de groupe accepté (segment 12) ; le bloc est créé et retiré par la BD
  * (`respond_to_meetup`, `propose_meetup`, `cancel_meetup`), lié au plan par `meetup_plan_id`.
+ * `outlook` : temps occupé lu dans le calendrier Outlook de la personne (connecteur Outlook) ;
+ * bloc ponctuel sans titre ni lieu, remplacé à chaque synchronisation
+ * (`replace_outlook_blocks`, migration 0014).
  */
 export const blockSourceEnum = pgEnum("block_source", [
   "manual",
@@ -47,6 +50,7 @@ export const blockSourceEnum = pgEnum("block_source", [
   "image",
   "study",
   "meetup",
+  "outlook",
 ]);
 
 /** Rôle dans un groupe. */
@@ -189,6 +193,11 @@ export const busyBlocks = pgTable(
     ),
     check("busy_blocks_study_one_off", sql`${t.source}::text <> 'study' or ${t.weekday} is null`),
     check("busy_blocks_movable_study", sql`not ${t.movable} or ${t.source}::text = 'study'`),
+    // Connecteur Outlook : un bloc Outlook est ponctuel et sans lieu (la maison).
+    check(
+      "busy_blocks_outlook_one_off",
+      sql`${t.source}::text <> 'outlook' or (${t.weekday} is null and ${t.place_id} is null)`,
+    ),
     check("busy_blocks_time_order", sql`${t.end_time} > ${t.start_time}`),
     check("busy_blocks_weekday_range", sql`${t.weekday} is null or ${t.weekday} between 1 and 7`),
     check(
@@ -468,6 +477,48 @@ export const availabilitySlots = pgTable(
   ],
 );
 
+/**
+ * Connecteur Outlook : un compte Microsoft (personnel ou travail/école) par personne. Visible
+ * et modifiable **seulement** par son propriétaire (RLS, migration 0014) ; les membres des
+ * groupes ne voient que les blocs « Occupé » qui en sont tirés.
+ *
+ * `refresh_token_enc` : jeton de rafraîchissement Microsoft **chiffré** (AES-256-GCM, clé
+ * `OUTLOOK_TOKEN_KEY` connue du serveur seulement, lié à `owner_id`). Le jeton en clair
+ * n'est jamais écrit dans la BD ni envoyé au navigateur. `calendar_id` nul : calendrier
+ * principal. `sync_started_at` : verrou d'une synchronisation en cours (2 min au plus).
+ */
+export const outlookConnections = pgTable(
+  "outlook_connections",
+  {
+    owner_id: uuid("owner_id")
+      .primaryKey()
+      .default(sql`auth.uid()`)
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    account_email: text("account_email").notNull().default(""),
+    refresh_token_enc: text("refresh_token_enc").notNull(),
+    calendar_id: text("calendar_id"),
+    calendar_name: text("calendar_name").notNull().default(""),
+    last_attempt_at: timestamp("last_attempt_at", { withTimezone: true, mode: "string" }),
+    last_synced_at: timestamp("last_synced_at", { withTimezone: true, mode: "string" }),
+    last_sync_error: text("last_sync_error").notNull().default(""),
+    sync_started_at: timestamp("sync_started_at", { withTimezone: true, mode: "string" }),
+    created_at: createdAt(),
+  },
+  (t) => [
+    check("outlook_connections_email_length", sql`length(${t.account_email}) <= 320`),
+    check(
+      "outlook_connections_token_length",
+      sql`length(${t.refresh_token_enc}) between 1 and 16000`,
+    ),
+    check(
+      "outlook_connections_calendar_id_length",
+      sql`${t.calendar_id} is null or length(${t.calendar_id}) between 1 and 1024`,
+    ),
+    check("outlook_connections_calendar_name_length", sql`length(${t.calendar_name}) <= 255`),
+    check("outlook_connections_error_length", sql`length(${t.last_sync_error}) <= 300`),
+  ],
+);
+
 export type ProfileRow = typeof profiles.$inferSelect;
 export type PlaceRow = typeof places.$inferSelect;
 export type BusyBlockRow = typeof busyBlocks.$inferSelect;
@@ -479,3 +530,4 @@ export type PlanInviteeRow = typeof planInvitees.$inferSelect;
 export type DeadlineRow = typeof deadlines.$inferSelect;
 export type StudyPreferencesRow = typeof studyPreferences.$inferSelect;
 export type AvailabilitySlotRow = typeof availabilitySlots.$inferSelect;
+export type OutlookConnectionRow = typeof outlookConnections.$inferSelect;

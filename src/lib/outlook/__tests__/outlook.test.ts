@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
+import { createKeyedLimiter } from "@/lib/geocoding/rateLimiter";
+
 import { readOutlookConfig, type OutlookConfig } from "../config";
 import { decryptSecret, encryptSecret, refreshTokenAad } from "../crypto";
 import { GRAPH_BASE, getBusyEvents, listCalendars, parseGraphUtc, toBusyEvent } from "../graph";
@@ -18,6 +20,8 @@ import {
   chooseOutlookCalendar,
   type ClaimResult,
   completeOutlookConnection,
+  listOutlookCalendars,
+  OUTLOOK_TOKEN_REFRESHES_PER_MINUTE,
   type OutlookBlockRow,
   type OutlookDeps,
   type OutlookStore,
@@ -511,5 +515,66 @@ describe("connexion et choix du calendrier", () => {
 
     await chooseOutlookCalendar(deps(store, microsoft()), "princ");
     expect(store.connection).toMatchObject({ calendarId: null, calendarName: "" });
+  });
+});
+
+describe("revue Outlook 1 : appels à Microsoft limités par personne", () => {
+  /** Dépendances avec une limite comme dans l'app (horloge réglable). */
+  function limited(store: FakeStore, net: ReturnType<typeof fakeFetch>, clock: { t: number }) {
+    const limiter = createKeyedLimiter({
+      limit: OUTLOOK_TOKEN_REFRESHES_PER_MINUTE,
+      windowMs: 60_000,
+      now: () => clock.t,
+    });
+    return (userId = USER): OutlookDeps => ({ ...deps(store, net), userId, limiter });
+  }
+  const tokenCalls = (net: ReturnType<typeof fakeFetch>) =>
+    net.calls.filter((c) => c.url === TOKEN_URL).length;
+
+  it("la liste des calendriers en boucle : au plus 10 jetons par minute, puis ça repart", async () => {
+    const store = new FakeStore();
+    connected(store);
+    const net = microsoft({ rotate: false });
+    const clock = { t: 0 };
+    const make = limited(store, net, clock);
+    const results = [];
+    for (let i = 0; i < 25; i++) results.push(await listOutlookCalendars(make()));
+    expect(tokenCalls(net)).toBe(OUTLOOK_TOKEN_REFRESHES_PER_MINUTE);
+    expect(results.filter((r) => r.ok)).toHaveLength(OUTLOOK_TOKEN_REFRESHES_PER_MINUTE);
+    expect(results.at(-1)).toEqual({
+      ok: false,
+      message: "Trop d'essais avec Outlook d'un coup. Attends une minute et réessaie.",
+    });
+    clock.t += 60_001;
+    expect(await listOutlookCalendars(make())).toMatchObject({ ok: true });
+  });
+
+  it("synchro au-delà de la limite (délai de la BD contourné) : rien n'est appelé, blocs gardés", async () => {
+    const store = new FakeStore();
+    connected(store);
+    store.blocks = [{ day: "2026-11-04", start: "08:00", end: "09:00" }];
+    const net = microsoft({ rotate: false });
+    const make = limited(store, net, { t: 0 });
+    for (let i = 0; i < OUTLOOK_TOKEN_REFRESHES_PER_MINUTE; i++) {
+      expect(await syncOutlook(make(), { manual: true })).toMatchObject({ status: "synced" });
+    }
+    const before = net.calls.length;
+    store.blocks = [{ day: "2026-11-04", start: "08:00", end: "09:00" }];
+    const r = await syncOutlook(make(), { manual: true });
+    expect(r).toMatchObject({ status: "error", reauth: false });
+    expect(net.calls.length).toBe(before);
+    expect(store.blocks).toHaveLength(1);
+    // Le verrou est retiré (finishSync), l'erreur est notée.
+    expect(store.finished.at(-1)).toMatchObject({ ok: false });
+    // Une autre personne (même processus, même limite) n'est pas touchée.
+    const other = new FakeStore();
+    other.connection = {
+      refreshTokenEnc: encryptSecret("jeton-b", KEY, refreshTokenAad(OTHER)),
+      calendarId: null,
+      calendarName: "",
+      email: "",
+    };
+    const otherDeps: OutlookDeps = { ...make(OTHER), store: other };
+    expect(await syncOutlook(otherDeps, { manual: true })).toMatchObject({ status: "synced" });
   });
 });

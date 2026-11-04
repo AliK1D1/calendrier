@@ -58,7 +58,17 @@ export interface OutlookDeps {
   fetch: FetchLike;
   userId: string;
   now: () => Date;
+  /**
+   * Limite par personne des jetons demandés à Microsoft (revue Outlook 1). Absente : aucune
+   * limite (tests).
+   */
+  limiter?: { tryAcquire(key: string): boolean };
 }
+
+/** Jetons d'accès demandés à Microsoft, par minute et par personne (revue Outlook 1). */
+export const OUTLOOK_TOKEN_REFRESHES_PER_MINUTE = 10;
+
+const TOO_MANY = "Trop d'essais avec Outlook d'un coup. Attends une minute et réessaie.";
 
 export type SyncOutcome =
   | { status: "synced"; blocks: number; truncated: boolean }
@@ -77,6 +87,13 @@ function errorOutcome(e: unknown): { status: "error"; message: string; reauth: b
 
 /** Jeton d'accès frais ; enregistre le nouveau jeton de rafraîchissement s'il a changé. */
 async function accessTokenFrom(deps: OutlookDeps, refreshTokenEnc: string): Promise<string> {
+  // Revue Outlook 1 : les délais de la BD (1 min, 15 min) se contournent par l'API REST
+  // (last_attempt_at est modifiable), et la liste des calendriers n'en a aucun. Sans limite,
+  // une personne pouvait faire appeler Microsoft en boucle avec l'identifiant de l'app, qui
+  // est partagé par tout le monde (risque de blocage par Microsoft pour toute l'app).
+  if (deps.limiter && !deps.limiter.tryAcquire(deps.userId)) {
+    throw new OutlookError(TOO_MANY, "unavailable");
+  }
   const refresh = decryptSecret(
     refreshTokenEnc,
     deps.config.tokenKey,

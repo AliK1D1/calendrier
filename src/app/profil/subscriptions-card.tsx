@@ -248,7 +248,9 @@ export function SubscriptionsCard({
                   />
                   <span className="text-muted-foreground text-xs">
                     Sur le site du calendrier, cherche « S&apos;abonner », « iCal » ou « Ajouter à
-                    Outlook / Google », puis copie le lien.
+                    Outlook / Google », puis copie le lien. Attention : un lien secret (ex. «
+                    adresse secrète iCal » de Google) donne accès à tout ce calendrier ; ne le
+                    partage avec personne d&apos;autre.
                   </span>
                 </label>
                 <label className="flex flex-col gap-1">

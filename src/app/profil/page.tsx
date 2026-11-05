@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { PageSections } from "@/components/page-sections";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,7 +81,18 @@ export default async function Profil({
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <h1 className="text-2xl font-bold tracking-tight">Profil</h1>
-        <Card>
+        <PageSections
+          items={[
+            { id: "toi", label: "Toi" },
+            { id: "heures", label: "Heures où je ne sors pas" },
+            { id: "confidentialite", label: "Confidentialité" },
+            { id: "outlook", label: "Outlook" },
+            { id: "abonnements", label: "Calendriers en ligne" },
+            { id: "etude", label: "Étude" },
+            { id: "maison", label: "Maison et déconnexion" },
+          ]}
+        />
+        <Card id="toi" className="scroll-mt-16">
           <CardHeader>
             <CardTitle>Toi</CardTitle>
             <CardDescription>
@@ -95,7 +107,7 @@ export default async function Profil({
             />
           </CardContent>
         </Card>
-        <Card>
+        <Card id="heures" className="scroll-mt-16">
           <CardHeader>
             <CardTitle>Heures où je ne sors pas</CardTitle>
             <CardDescription>
@@ -114,7 +126,7 @@ export default async function Profil({
             )}
           </CardContent>
         </Card>
-        <Card>
+        <Card id="confidentialite" className="scroll-mt-16">
           <CardHeader>
             <CardTitle>Confidentialité</CardTitle>
             <CardDescription>
@@ -192,7 +204,7 @@ export default async function Profil({
             )}
           </CardContent>
         </Card>
-        <Card>
+        <Card id="maison" className="scroll-mt-16">
           <CardHeader>
             <CardTitle>Maison</CardTitle>
             <CardDescription>

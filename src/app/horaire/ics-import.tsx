@@ -3,6 +3,7 @@
 import { format, parseISO } from "date-fns";
 import { frCA } from "date-fns/locale";
 import { AlertTriangle, FileUp, MapPin, X } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { AddressSearch } from "@/components/places/address-search";
@@ -40,7 +41,7 @@ interface Props {
   onImported: (message: string) => void;
 }
 
-/** Bouton « Importer un fichier .ics » + fenêtre d'aperçu et de confirmation. */
+/** Bouton « Importer un horaire » (.ics, ou renvoi vers Outlook et les abonnements) + fenêtre d'aperçu et de confirmation. */
 export function IcsImport(props: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
@@ -67,7 +68,7 @@ export function IcsImport(props: Props) {
       >
         <FileUp />
         <span>
-          Importer<span className="max-sm:hidden"> un fichier</span> .ics
+          Importer<span className="max-sm:hidden"> un horaire</span>
         </span>
       </Button>
       <dialog
@@ -214,7 +215,7 @@ function ImportFlow({
     <div className="flex flex-col gap-4 p-4 sm:p-6">
       <div className="flex items-center justify-between gap-2">
         <h2 id="ics-titre" className="text-lg font-semibold">
-          Importer un fichier .ics
+          Importer ton horaire
         </h2>
         <Button type="button" variant="ghost" size="icon" aria-label="Fermer" onClick={onClose}>
           <X />
@@ -223,10 +224,28 @@ function ImportFlow({
 
       {!preview ? (
         <div className="flex flex-col gap-3">
-          <p className="text-muted-foreground text-sm">
-            Exporte ton horaire en fichier calendrier (.ics) depuis Google Agenda, Outlook ou ta
-            plateforme scolaire. Tu verras un aperçu avant que quoi que ce soit soit enregistré.
-          </p>
+          <ul className="flex flex-col gap-2 text-sm">
+            <li className="rounded-lg border p-3">
+              <strong>Ton horaire est dans Outlook ?</strong>{" "}
+              <Link href="/profil#outlook" className="underline underline-offset-2">
+                Connecte ton compte
+              </Link>{" "}
+              : il se met à jour tout seul.
+            </li>
+            <li className="rounded-lg border p-3">
+              <strong>Tu as un lien de calendrier ?</strong> (Google Agenda, iCloud, lien « webcal
+              »){" "}
+              <Link href="/profil#abonnements" className="underline underline-offset-2">
+                Abonne-toi au lien
+              </Link>{" "}
+              : il se met à jour tout seul aussi.
+            </li>
+            <li className="border-primary bg-primary/5 rounded-lg border p-3">
+              <strong>Sinon, un fichier .ics</strong> : exporte ton horaire en fichier calendrier,
+              puis choisis-le ici. C&apos;est une copie : refais l&apos;import si ton horaire
+              change. Tu verras un aperçu avant que quoi que ce soit soit enregistré.
+            </li>
+          </ul>
           <div className="flex flex-col gap-2">
             <Label htmlFor="ics-fichier">Fichier .ics (1 Mo au maximum)</Label>
             <Input

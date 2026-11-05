@@ -200,7 +200,7 @@ prend la première.
 
 ## Import d'horaire .ics (segment 9)
 
-Dans `/horaire`, bouton **« Importer un fichier .ics »** (exporté de Google Agenda, Outlook ou
+Dans `/horaire`, bouton **« Importer un horaire »** (fichier .ics) (exporté de Google Agenda, Outlook ou
 d'une plateforme scolaire). Aucune migration de BD n'est nécessaire.
 
 1. **Téléverser** le fichier (1 Mo au maximum). Une action serveur le lit et renvoie un

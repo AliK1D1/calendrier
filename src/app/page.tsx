@@ -8,11 +8,15 @@ import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMyGroups } from "@/lib/groups/queries";
+import { loadPlans } from "@/lib/plans/queries";
 import { getMyBusyBlocks, getMyProfile, getOnboardingStatus } from "@/lib/profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { plural } from "@/lib/ux/plural";
+import { homePlans } from "@/lib/ux/homePlans";
 import { setupSteps } from "@/lib/ux/setupSteps";
+
+import { HomePlans } from "./home-plans";
 
 const etapes = [
   {
@@ -83,12 +87,15 @@ export default async function Accueil() {
  * présentation), puis des raccourcis vers ses groupes.
  */
 async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; user: User }) {
-  const [onboarded, profile, blocks, groups] = await Promise.all([
+  const [onboarded, profile, blocks, groups, plans] = await Promise.all([
     getOnboardingStatus(supabase),
     getMyProfile(supabase, user.id),
     getMyBusyBlocks(supabase, user.id),
     getMyGroups(supabase, user.id),
+    loadPlans(supabase, user.id, new Date()),
   ]);
+  // Plans illisibles (ex. migration absente) : l'accueil s'affiche quand même, sans eux.
+  const myPlans = homePlans(plans.ok ? plans.views : []);
   const plan = setupSteps({
     onboarded,
     hasHome: Boolean(profile?.home_place_id),
@@ -120,6 +127,8 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
             </Link>
           </Button>
         )}
+
+        <HomePlans {...myPlans} />
 
         {/* Bonus « Je suis libre maintenant » : dès qu'un groupe compte au moins un ami. */}
         {profile?.home_place_id && groups.some((g) => g.memberCount >= 2) && <FreeNow />}

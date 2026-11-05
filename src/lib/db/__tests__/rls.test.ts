@@ -17,6 +17,9 @@ import type { BlockSpec } from "@/lib/scheduling/weeklyBlocks";
 import { fromBlockSpec } from "../convert";
 import { FAKE_SUPABASE } from "./pgliteHarness";
 
+// Insère environ 1000 lignes dans PGlite : lent quand toute la suite tourne en parallèle.
+const LONG_DB_TEST_MS = 30_000;
+
 const ROOT = join(__dirname, "../../../..");
 const SETUP_SQL = readFileSync(join(ROOT, "supabase/setup.sql"), "utf8");
 const MIGRATION_0003 = readFileSync(join(ROOT, "supabase/migration-0003.sql"), "utf8");
@@ -1442,15 +1445,19 @@ describe("Limites de nombre de lieux et de blocs (revue)", () => {
       ),
     );
 
-  it("1000 blocs par personne au plus ; les autres ne sont pas touchés", async () => {
-    await ajouterBlocs(A, 1000);
-    await expect(ajouterBlocs(A, 1)).rejects.toThrow(/Trop de blocs dans l'horaire/);
-    await ajouterBlocs(B, 5);
-    await as(A, () =>
-      rows("DELETE FROM busy_blocks WHERE ctid IN (SELECT ctid FROM busy_blocks LIMIT 1)"),
-    );
-    await ajouterBlocs(A, 1);
-  });
+  it(
+    "1000 blocs par personne au plus ; les autres ne sont pas touchés",
+    async () => {
+      await ajouterBlocs(A, 1000);
+      await expect(ajouterBlocs(A, 1)).rejects.toThrow(/Trop de blocs dans l'horaire/);
+      await ajouterBlocs(B, 5);
+      await as(A, () =>
+        rows("DELETE FROM busy_blocks WHERE ctid IN (SELECT ctid FROM busy_blocks LIMIT 1)"),
+      );
+      await ajouterBlocs(A, 1);
+    },
+    LONG_DB_TEST_MS,
+  );
 
   it("200 lieux par personne et 100 lieux par groupe au plus, même en déplaçant un lieu", async () => {
     await ajouterLieux(A, 200);

@@ -10,6 +10,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { asUser, FAKE_SUPABASE } from "./pgliteHarness";
 
+// Insère environ 1000 lignes dans PGlite : lent quand toute la suite tourne en parallèle.
+const LONG_DB_TEST_MS = 30_000;
+
 const ROOT = join(__dirname, "../../../..");
 const SETUP_SQL = readFileSync(join(ROOT, "supabase/setup.sql"), "utf8");
 const MIGRATION_0011 = readFileSync(join(ROOT, "supabase/migration-0011.sql"), "utf8");
@@ -276,15 +279,19 @@ describe("busy_blocks 'study' : séances acceptées", () => {
     expect(miens.map((r) => r.title)).toEqual(["Cours de chimie", "Étude : Examen secret"]);
   });
 
-  it("la limite de 1000 blocs s'applique aux séances", async () => {
-    const d = await addDeadline(A);
-    await db.query(
-      `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, valid_from)
+  it(
+    "la limite de 1000 blocs s'applique aux séances",
+    async () => {
+      const d = await addDeadline(A);
+      await db.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, valid_from)
        SELECT $1, 'b', '08:00', '09:00', '2030-01-01'::date + i FROM generate_series(1, 1000) i`,
-      [A],
-    );
-    await expect(addSession(A, d)).rejects.toThrow(/Trop de blocs/);
-  });
+        [A],
+      );
+      await expect(addSession(A, d)).rejects.toThrow(/Trop de blocs/);
+    },
+    LONG_DB_TEST_MS,
+  );
 });
 
 describe("study_preferences : seulement les miennes, dans les bornes", () => {

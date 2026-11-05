@@ -9,6 +9,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { asUser, FAKE_SUPABASE } from "./pgliteHarness";
 
+// Insère environ 1000 lignes dans PGlite : lent quand toute la suite tourne en parallèle.
+const LONG_DB_TEST_MS = 30_000;
+
 const ROOT = join(__dirname, "../../../..");
 const SETUP_SQL = readFileSync(join(ROOT, "supabase/setup.sql"), "utf8");
 
@@ -230,16 +233,20 @@ describe("Story 5 : plans récurrents partagés", () => {
     ).rejects.toThrow(/permission denied/);
   });
 
-  it("un bloc « tous les jours » compte pour 7 dans la limite de 1000 blocs", async () => {
-    await db.query(
-      `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday)
+  it(
+    "un bloc « tous les jours » compte pour 7 dans la limite de 1000 blocs",
+    async () => {
+      await db.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday)
        SELECT $1, 'Cours', '08:00', '09:00', 1 + (g % 7) FROM generate_series(1, 995) g`,
-      [B],
-    );
-    const plan = await proposeSeries(A, { every: 1 });
-    await expect(respond(B, plan, true)).rejects.toThrow(/Trop de blocs/);
-    expect(await meetupBlocks(B)).toEqual([]);
-  });
+        [B],
+      );
+      const plan = await proposeSeries(A, { every: 1 });
+      await expect(respond(B, plan, true)).rejects.toThrow(/Trop de blocs/);
+      expect(await meetupBlocks(B)).toEqual([]);
+    },
+    LONG_DB_TEST_MS,
+  );
 
   it("anon ne peut pas proposer de série", async () => {
     await expect(

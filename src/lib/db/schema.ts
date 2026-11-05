@@ -161,6 +161,13 @@ export const busyBlocks = pgTable(
     weekday: smallint("weekday"),
     valid_from: date("valid_from", { mode: "string" }),
     valid_until: date("valid_until", { mode: "string" }),
+    /**
+     * Répétition personnalisée (story 2, migration 0015) : « tous les `repeat_every`
+     * `repeat_unit` » à partir de `valid_from`. Nulle = hebdomadaire simple (`weekday`) ou
+     * ponctuel. « week » va avec `weekday` ; « day », « month », « year » avec `weekday` nul.
+     */
+    repeat_unit: text("repeat_unit", { enum: ["day", "week", "month", "year"] }),
+    repeat_every: smallint("repeat_every").notNull().default(1),
     source: blockSourceEnum("source").notNull().default("manual"),
     /** Plan accepté qui a créé ce bloc (`source = 'meetup'`), sinon nul. */
     meetup_plan_id: uuid("meetup_plan_id").references((): AnyPgColumn => meetupPlans.id, {
@@ -207,13 +214,29 @@ export const busyBlocks = pgTable(
     // Mêmes limites que le formulaire (validateBlockForm), appliquées aussi par la BD : la clé
     // « anon » est publique, on peut écrire dans Supabase sans passer par les actions serveur.
     check("busy_blocks_title_length", sql`length(${t.title}) <= 100`),
+    // Session d'un hebdomadaire simple : moins d'un an. Répétition personnalisée : 10 ans
+    // (MAX_REPEAT_SPAN_DAYS), ou sans fin.
     check(
       "busy_blocks_validity_span",
-      sql`${t.valid_from} is null or ${t.valid_until} is null or ${t.valid_until} - ${t.valid_from} < 366`,
+      sql`${t.valid_from} is null or ${t.valid_until} is null or ${t.valid_until} - ${t.valid_from} < (case when ${t.repeat_unit} is null then 366 else 3660 end)`,
     ),
     check(
       "busy_blocks_one_off_has_day",
-      sql`${t.weekday} is not null or (${t.valid_from} is not null and (${t.valid_until} is null or ${t.valid_until} = ${t.valid_from}))`,
+      sql`${t.weekday} is not null or ${t.repeat_unit} is not null or (${t.valid_from} is not null and (${t.valid_until} is null or ${t.valid_until} = ${t.valid_from}))`,
+    ),
+    // Story 2 : X de 1 à 99 ; une répétition a un début (l'ancrage) ; « week » a un jour de
+    // semaine, les autres unités n'en ont pas ; sans unité, X vaut 1. (« is not null » explicite :
+    // une comparaison avec NULL donnerait NULL, et un CHECK à NULL laisse passer.)
+    check("busy_blocks_repeat_every_range", sql`${t.repeat_every} between 1 and 99`),
+    check(
+      "busy_blocks_repeat_shape",
+      sql`(${t.repeat_unit} is null and ${t.repeat_every} = 1) or (${t.repeat_unit} is not null and ((${t.repeat_unit} = 'week' and ${t.weekday} is not null and ${t.valid_from} is not null) or (${t.repeat_unit} in ('day', 'month', 'year') and ${t.weekday} is null and ${t.valid_from} is not null)))`,
+    ),
+    // Seuls les blocs saisis à la main ont une répétition personnalisée (pas les séances
+    // d'étude, les plans acceptés, Outlook ni l'import .ics).
+    check(
+      "busy_blocks_repeat_manual",
+      sql`${t.repeat_unit} is null or ${t.source}::text = 'manual'`,
     ),
   ],
 );

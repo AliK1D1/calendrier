@@ -16,6 +16,8 @@ import {
   blocksOnDay,
   formatClock,
   formatClockFr,
+  isRecurring,
+  repeatLabel,
   shiftDay,
   suggestSession,
   WEEKDAY_LONG,
@@ -191,21 +193,29 @@ export function ScheduleEditor({
       date: day,
       sessionStart: session.from,
       sessionEnd: session.to,
+      ...CUSTOM_DEFAULTS,
     };
   }
 
   function editDraft(b: ScheduleBlock, day: string): BlockDraft {
+    const custom = b.repeatUnit != null;
     return {
       id: b.id,
       title: b.title,
       placeId: b.placeId,
       start: formatClock(b.startMinute),
       end: formatClock(b.endMinute),
-      kind: b.weekday == null ? "once" : "weekly",
+      kind: custom ? "custom" : b.weekday == null ? "once" : "weekly",
       weekdays: b.weekday == null ? [weekdayOf(day)] : [b.weekday],
       date: b.weekday == null ? (b.validFrom ?? day) : day,
       sessionStart: b.validFrom ?? session.from,
-      sessionEnd: b.validUntil ?? session.to,
+      sessionEnd: b.validUntil ?? (custom ? "" : session.to),
+      ...CUSTOM_DEFAULTS,
+      ...(custom && {
+        repeatEvery: String(b.repeatEvery ?? 1),
+        repeatUnit: b.repeatUnit ?? "week",
+        repeatEnd: b.validUntil ? "date" : "never",
+      }),
     };
   }
 
@@ -321,11 +331,13 @@ export function ScheduleEditor({
     layoutDay(blocksOnDay(blocks, day), RANGE).hidden.map((b) => ({ day, b })),
   );
 
+  // Blocs qui reviennent : hebdomadaires (par jour) puis autres répétitions (par début).
   const weekly = blocks
-    .filter((b) => b.weekday != null)
+    .filter((b) => isRecurring(b))
     .sort(
       (a, b) =>
-        (a.weekday ?? 0) - (b.weekday ?? 0) ||
+        (a.weekday ?? 8) - (b.weekday ?? 8) ||
+        (a.validFrom ?? "").localeCompare(b.validFrom ?? "") ||
         a.startMinute - b.startMinute ||
         a.title.localeCompare(b.title),
     );
@@ -654,11 +666,11 @@ export function ScheduleEditor({
       {/* Liste : utile au clavier et pour voir les sessions d'un coup d'œil */}
       <section aria-labelledby="liste-blocs" className="flex flex-col gap-3">
         <h2 id="liste-blocs" className="text-lg font-semibold">
-          Chaque semaine
+          Chaque semaine et autres répétitions
         </h2>
         {weekly.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            Aucun cours ni engagement hebdomadaire pour l&apos;instant.
+            Aucun cours ni engagement qui revient pour l&apos;instant.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -666,17 +678,22 @@ export function ScheduleEditor({
               <BlockRow
                 key={b.id}
                 block={b}
-                when={`${WEEKDAY_LONG[b.weekday as Weekday]}, ${formatClockFr(b.startMinute)} à ${formatClockFr(b.endMinute)}`}
+                when={`${recurringWhen(b)}, ${formatClockFr(b.startMinute)} à ${formatClockFr(b.endMinute)}`}
                 period={
                   b.validFrom && b.validUntil
                     ? `du ${dayLabel(b.validFrom, "d MMM yyyy")} au ${dayLabel(b.validUntil, "d MMM yyyy")}`
-                    : "sans fin"
+                    : b.validFrom
+                      ? `à partir du ${dayLabel(b.validFrom, "d MMM yyyy")}, sans fin`
+                      : "sans fin"
                 }
                 place={placeLabel(b.placeId)}
                 color={colorOf(b.placeId)}
                 onEdit={() => {
                   setMessage(null);
-                  const day = days.find((d) => weekdayOf(d) === b.weekday) ?? days[0];
+                  const day =
+                    b.weekday == null
+                      ? (b.validFrom ?? today)
+                      : (days.find((d) => weekdayOf(d) === b.weekday) ?? days[0]);
                   setDraft(editDraft(b, day));
                 }}
               />
@@ -739,6 +756,25 @@ function QuietZone({ top, bottom }: { top: number | string; bottom: string }) {
       style={{ top, height: `calc(${bottom} - ${typeof top === "number" ? `${top}%` : top})` }}
     />
   );
+}
+
+/** Valeurs de départ des champs « Personnalisée » d'un brouillon. */
+const CUSTOM_DEFAULTS = {
+  repeatEvery: "2",
+  repeatUnit: "week",
+  repeatEnd: "never",
+  repeatCount: "10",
+} as const;
+
+/**
+ * Quand revient un bloc, pour la liste : « lundi », « mardi, toutes les 2 semaines »,
+ * « Chaque mois, le 31 (ou le dernier jour du mois) ».
+ */
+function recurringWhen(b: ScheduleBlock): string {
+  const label = repeatLabel(b) ?? "";
+  if (b.weekday == null) return label.charAt(0).toUpperCase() + label.slice(1);
+  const day = WEEKDAY_LONG[b.weekday as Weekday];
+  return (b.repeatEvery ?? 1) > 1 ? `${day}, ${label}` : day;
 }
 
 function BlockRow({

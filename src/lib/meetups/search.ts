@@ -21,6 +21,7 @@ import {
   type BusyBlockInput,
   type PlaceInput,
   type ProfileInput,
+  isRecurringRow,
   toPeople,
   toPlace,
 } from "@/lib/db/convert";
@@ -373,9 +374,9 @@ export async function searchGroupMeetups(
   };
 }
 
-/** Le bloc peut-il tomber dans la période ? (ponctuel : son jour ; hebdomadaire : sa validité) */
+/** Le bloc peut-il tomber dans la période ? (ponctuel : son jour ; qui revient : sa validité) */
 function blockTouchesRange(b: BusyBlockInput, range: DateRange): boolean {
-  if (b.weekday === null) {
+  if (!isRecurringRow(b)) {
     return b.valid_from !== null && b.valid_from >= range.from && b.valid_from <= range.to;
   }
   return (

@@ -1,7 +1,13 @@
 import { format, parseISO } from "date-fns";
 import { frCA } from "date-fns/locale";
 
-import { type BlockSpec, formatClockFr, WEEKDAY_SHORT } from "@/lib/scheduling/weeklyBlocks";
+import {
+  type BlockSpec,
+  formatClockFr,
+  isRecurring,
+  repeatLabel,
+  WEEKDAY_SHORT,
+} from "@/lib/scheduling/weeklyBlocks";
 
 /** Une ligne d'horaire affichée dans la page du groupe. */
 export interface ScheduleLine {
@@ -13,8 +19,8 @@ export interface ScheduleLine {
 }
 
 /**
- * Blocs d'un membre → lignes lisibles : les blocs hebdomadaires encore en vigueur (par jour
- * puis heure), puis les blocs ponctuels de la période `range`. Le titre est déjà masqué
+ * Blocs d'un membre → lignes lisibles : les blocs qui reviennent encore en vigueur
+ * (hebdomadaires par jour puis heure, puis les autres répétitions), puis les blocs ponctuels de la période `range`. Le titre est déjà masqué
  * (« Occupé ») par la base si la personne l'a choisi.
  */
 export function scheduleLines(
@@ -31,21 +37,25 @@ export function scheduleLines(
     place: b.placeId ? (placeNames[b.placeId] ?? null) : null,
   });
 
+  const when = (b: BlockSpec) => {
+    const label = repeatLabel(b) ?? "";
+    if (b.weekday == null) return `${label.charAt(0).toUpperCase()}${label.slice(1)} · ${hours(b)}`;
+    const every = (b.repeatEvery ?? 1) > 1 ? ` (${label})` : "";
+    return `${WEEKDAY_SHORT[b.weekday]} ${hours(b)}${every}`;
+  };
   const weekly = blocks
-    .filter(
-      ({ spec }) => spec.weekday !== null && (!spec.validUntil || spec.validUntil >= range.from),
-    )
+    .filter(({ spec }) => isRecurring(spec) && (!spec.validUntil || spec.validUntil >= range.from))
     .sort(
       (a, b) =>
-        (a.spec.weekday ?? 0) - (b.spec.weekday ?? 0) || a.spec.startMinute - b.spec.startMinute,
+        (a.spec.weekday ?? 8) - (b.spec.weekday ?? 8) ||
+        (a.spec.validFrom ?? "").localeCompare(b.spec.validFrom ?? "") ||
+        a.spec.startMinute - b.spec.startMinute,
     )
-    .map(({ spec, titleHidden }) =>
-      line(spec, titleHidden, `${WEEKDAY_SHORT[spec.weekday ?? 1]} ${hours(spec)}`),
-    );
+    .map(({ spec, titleHidden }) => line(spec, titleHidden, when(spec)));
   const oneOff = blocks
     .filter(
       ({ spec }) =>
-        spec.weekday === null &&
+        !isRecurring(spec) &&
         spec.validFrom !== null &&
         spec.validFrom >= range.from &&
         spec.validFrom <= range.to,

@@ -240,6 +240,8 @@ describe("horaire saisi (/horaire) ↔ busy_blocks", () => {
       weekday: 3,
       valid_from: null,
       valid_until: null,
+      repeat_unit: null,
+      repeat_every: 1,
     });
   });
 
@@ -337,5 +339,73 @@ describe("horaire saisi (/horaire) ↔ busy_blocks", () => {
       ["b1@2025-09-15", "cegep-ali"],
       ["calme-apres@2025-09-15", "maison-ali"],
     ]);
+  });
+});
+
+describe("répétition personnalisée (story 2) ↔ busy_blocks", () => {
+  const nov = { from: "2026-11-01", to: "2026-11-30" };
+
+  it("toutes les 2 semaines : seulement une semaine sur deux à partir du début", () => {
+    const row = block({
+      weekday: 2,
+      valid_from: "2026-11-05",
+      repeat_unit: "week",
+      repeat_every: 2,
+    });
+    expect(expandBusyBlock(row, nov, "maison-ali").map((b) => b.id)).toEqual(["b1@2026-11-17"]);
+  });
+
+  it("chaque mois le 31 : le 30 novembre (mois de 30 jours)", () => {
+    const row = block({
+      weekday: null,
+      valid_from: "2026-10-31",
+      repeat_unit: "month",
+      repeat_every: 1,
+    });
+    const out = expandBusyBlock(row, nov, "maison-ali");
+    expect(out.map((b) => b.id)).toEqual(["b1@2026-11-30"]);
+    // 10 h heure de l'Est (HNE après le 1er novembre) = 15 h UTC.
+    expect(iso(out[0].start)).toBe("2026-11-30T15:00:00.000Z");
+  });
+
+  it("tous les 3 jours, sans fin, traverse le changement d'heure en gardant 10 h locale", () => {
+    const row = block({
+      weekday: null,
+      valid_from: "2026-10-29",
+      repeat_unit: "day",
+      repeat_every: 3,
+    });
+    const out = expandBusyBlock(row, { from: "2026-10-29", to: "2026-11-04" }, "maison-ali");
+    expect(out.map((b) => formatInTimeZone(b.start, TIME_ZONE, "yyyy-MM-dd HH:mm"))).toEqual([
+      "2026-10-29 10:00",
+      "2026-11-01 10:00",
+      "2026-11-04 10:00",
+    ]);
+  });
+
+  it("toBlockSpec / fromBlockSpec gardent la répétition ; valeurs inconnues refusées", () => {
+    const row = block({
+      weekday: null,
+      valid_from: "2026-11-05",
+      repeat_unit: "year",
+      repeat_every: 2,
+    });
+    const spec = toBlockSpec(row);
+    expect(spec).toMatchObject({ repeatUnit: "year", repeatEvery: 2, weekday: null });
+    expect(fromBlockSpec(spec)).toMatchObject({ repeat_unit: "year", repeat_every: 2 });
+    expect(() => toBlockSpec(block({ repeat_unit: "decade" as "year" }))).toThrow(/Unité/);
+    expect(() => toBlockSpec(block({ repeat_every: 0 }))).toThrow(/Intervalle/);
+    // Ligne lue avant la migration 0015 (colonnes absentes) : hebdomadaire simple.
+    expect(toBlockSpec(block({}))).toMatchObject({ repeatUnit: null, repeatEvery: 1 });
+  });
+
+  it("toPeople : une répétition jour / mois / an compte comme un bloc qui revient", () => {
+    const { people } = toPeople(
+      [{ id: ALI, display_name: "Ali", travel_mode: "transit", home_place_id: "maison-ali" }],
+      places,
+      [block({ weekday: null, valid_from: "2026-11-02", repeat_unit: "day", repeat_every: 7 })],
+      { from: "2026-11-01", to: "2026-11-15" },
+    );
+    expect(people[0].busyBlocks.map((b) => b.id)).toEqual(["b1@2026-11-02", "b1@2026-11-09"]);
   });
 });

@@ -7,7 +7,6 @@
  * après le changement d'heure (l'instant UTC, lui, change). Voir `zonedTime` pour les heures
  * qui n'existent pas ou existent deux fois.
  */
-import { getISODay, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 
 import {
@@ -33,9 +32,13 @@ import type {
   StudySession,
   TravelMode,
 } from "@/lib/scheduling/types";
+import { isValidEvery, REPEAT_UNITS, type RepeatUnit } from "@/lib/scheduling/recurrence";
 import {
+  type BlockDays,
   type BlockSpec,
   formatClock,
+  isRecurring,
+  occursOn,
   parseClock,
   type Weekday,
 } from "@/lib/scheduling/weeklyBlocks";
@@ -60,7 +63,10 @@ export type ProfileInput = Pick<
   Partial<Pick<ProfileRow, "unavailable_before" | "unavailable_after">>;
 /** Colonnes utiles d'un lieu. */
 export type PlaceInput = Pick<PlaceRow, "id" | "owner_id" | "name" | "lat" | "lng">;
-/** Colonnes utiles d'un bloc occupé. */
+/**
+ * Colonnes utiles d'un bloc occupé. La répétition personnalisée (migration 0015) est
+ * facultative : absente = 1 et pas d'unité (hebdomadaire simple ou ponctuel).
+ */
 export type BusyBlockInput = Pick<
   BusyBlockRow,
   | "id"
@@ -72,7 +78,42 @@ export type BusyBlockInput = Pick<
   | "weekday"
   | "valid_from"
   | "valid_until"
->;
+> &
+  Partial<Pick<BusyBlockRow, "repeat_unit" | "repeat_every">>;
+
+/** Champs de répétition d'une ligne (valeurs inconnues de la BD : erreur). */
+function repeatOf(row: Pick<BusyBlockInput, "repeat_unit" | "repeat_every">): {
+  repeatUnit: RepeatUnit | null;
+  repeatEvery: number;
+} {
+  const unit = row.repeat_unit ?? null;
+  if (unit !== null && !(REPEAT_UNITS as readonly string[]).includes(unit)) {
+    throw new Error(`Unité de répétition invalide venant de la BD : ${unit}`);
+  }
+  const every = row.repeat_every ?? 1;
+  if (!isValidEvery(every)) {
+    throw new Error(`Intervalle de répétition invalide venant de la BD : ${every}`);
+  }
+  return { repeatUnit: unit as RepeatUnit | null, repeatEvery: every };
+}
+
+/** Champs qui décident des jours d'un bloc, à partir d'une ligne. */
+function rowDays(row: BusyBlockInput): BlockDays {
+  return {
+    weekday: row.weekday == null ? null : (row.weekday as Weekday),
+    validFrom: row.valid_from,
+    validUntil: row.valid_until,
+    ...repeatOf(row),
+  };
+}
+
+/** Vrai si la ligne revient (hebdomadaire ou répétition personnalisée). */
+export function isRecurringRow(row: Pick<BusyBlockInput, "weekday" | "repeat_unit">): boolean {
+  return isRecurring({
+    weekday: row.weekday == null ? null : (row.weekday as Weekday),
+    repeatUnit: (row.repeat_unit ?? null) as RepeatUnit | null,
+  });
+}
 
 const TIME_RE = /^(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/;
 
@@ -103,6 +144,7 @@ export function toBlockSpec(row: BusyBlockInput): BlockSpec {
     weekday: weekday == null ? null : (weekday as Weekday),
     validFrom: row.valid_from,
     validUntil: row.valid_until,
+    ...repeatOf(row),
   };
 }
 
@@ -111,7 +153,15 @@ export function fromBlockSpec(
   spec: BlockSpec,
 ): Pick<
   BusyBlockRow,
-  "title" | "place_id" | "start_time" | "end_time" | "weekday" | "valid_from" | "valid_until"
+  | "title"
+  | "place_id"
+  | "start_time"
+  | "end_time"
+  | "weekday"
+  | "valid_from"
+  | "valid_until"
+  | "repeat_unit"
+  | "repeat_every"
 > {
   return {
     title: spec.title,
@@ -121,6 +171,8 @@ export function fromBlockSpec(
     weekday: spec.weekday,
     valid_from: spec.validFrom,
     valid_until: spec.validUntil,
+    repeat_unit: spec.repeatUnit ?? null,
+    repeat_every: spec.repeatEvery ?? 1,
   };
 }
 
@@ -129,16 +181,12 @@ export function toPlace(row: PlaceInput): Place {
   return { id: row.id, name: row.name, lat: row.lat, lng: row.lng };
 }
 
-/** Jour de la semaine ISO (1 = lundi … 7 = dimanche) d'un jour `yyyy-MM-dd`. */
-function isoWeekday(day: string): number {
-  return getISODay(parseISO(day));
-}
-
 /**
- * Déplie un bloc (hebdomadaire ou ponctuel) en blocs datés sur la plage `range` (jours
- * locaux inclus). Un bloc hebdomadaire apparaît chaque jour de la plage qui tombe le bon jour
- * de semaine et dans sa période de validité `valid_from` → `valid_until` (incluses). Un bloc
- * ponctuel apparaît si son jour (`valid_from`) est dans la plage.
+ * Déplie un bloc (hebdomadaire, répétition personnalisée ou ponctuel) en blocs datés sur la
+ * plage `range` (jours locaux inclus). Un bloc qui revient apparaît chaque jour de la plage où
+ * il a lieu (`occursOn` : bon jour de semaine, une semaine sur X, même quantième du mois…) dans
+ * sa période de validité `valid_from` → `valid_until` (incluses). Un bloc ponctuel apparaît si
+ * son jour (`valid_from`) est dans la plage.
  *
  * `fallbackPlaceId` : lieu utilisé quand `place_id` est nul (lieu supprimé), en général la
  * maison. Identifiant d'un bloc déplié : `<id>@<jour>`.
@@ -153,14 +201,16 @@ export function expandBusyBlock(
   const endTime = toHHmm(row.end_time);
   const placeId = row.place_id ?? fallbackPlaceId;
 
+  const recurring = isRecurringRow(row);
   let days: string[];
-  if (row.weekday == null) {
+  if (!recurring) {
     if (!row.valid_from) return [];
     days = row.valid_from >= range.from && row.valid_from <= range.to ? [row.valid_from] : [];
   } else {
     const from = row.valid_from && row.valid_from > range.from ? row.valid_from : range.from;
     const to = row.valid_until && row.valid_until < range.to ? row.valid_until : range.to;
-    days = from <= to ? eachDay(from, to).filter((d) => isoWeekday(d) === row.weekday) : [];
+    const rule = rowDays(row);
+    days = from <= to ? eachDay(from, to).filter((d) => occursOn(rule, d)) : [];
   }
 
   const blocks: BusyBlock[] = [];
@@ -170,7 +220,7 @@ export function expandBusyBlock(
     // Bloc entièrement dans l'heure sautée en mars (ex. 2 h 15 → 2 h 45) : durée nulle.
     if (end <= start) continue;
     blocks.push({
-      id: row.weekday == null ? row.id : `${row.id}@${day}`,
+      id: recurring ? `${row.id}@${day}` : row.id,
       start,
       end,
       placeId,
@@ -266,13 +316,13 @@ export function toPeople(
       profile.unavailable_after ?? null,
     );
     const weekly = expandBusyBlocks(
-      ownBlocks.filter((b) => b.weekday != null),
+      ownBlocks.filter((b) => isRecurringRow(b)),
       range,
       home,
       timeZone,
     );
     const oneOff = expandBusyBlocks(
-      ownBlocks.filter((b) => b.weekday == null),
+      ownBlocks.filter((b) => !isRecurringRow(b)),
       range,
       home,
       timeZone,
@@ -411,7 +461,7 @@ export function toAcceptedSession(
   homePlaceId: string,
   timeZone: string = TIME_ZONE,
 ): AcceptedStudySession | null {
-  if (row.source !== "study" || !row.deadline_id || row.weekday != null || !row.valid_from) {
+  if (row.source !== "study" || !row.deadline_id || isRecurringRow(row) || !row.valid_from) {
     return null;
   }
   const start = zonedTime(row.valid_from, toHHmm(row.start_time), timeZone);

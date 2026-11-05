@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0014.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0015.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -129,6 +129,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0012.sql",
       "supabase/migration-0013.sql",
       "supabase/migration-0014.sql",
+      "supabase/migration-0015.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -2314,6 +2315,122 @@ describe("Connecteur Outlook (migration 0014) : jeton privé, blocs « Occupé �
       expect(blocs).toEqual([{ title: "Chimie" }]);
       const { rows: droits } = await ancienne.query<{ ok: boolean }>(
         "SELECT has_function_privilege('anon', 'public.replace_outlook_blocks(jsonb)', 'EXECUTE') AS ok",
+      );
+      expect(droits).toEqual([{ ok: false }]);
+    } finally {
+      await ancienne.close();
+    }
+  }, 60_000);
+});
+
+describe("Répétition personnalisée (story 2, migration 0015)", () => {
+  it("j'enregistre « toutes les 2 semaines » et « chaque mois » ; le groupe reçoit la répétition", async () => {
+    await as(A, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, start_time, end_time, weekday, valid_from, repeat_unit, repeat_every)
+         VALUES ('Club', '18:00', '20:00', 2, '2026-11-05', 'week', 2),
+                ('Loyer', '09:00', '10:00', NULL, '2026-01-31', 'month', 1)`,
+      ),
+    );
+    await as(A, () =>
+      rows("UPDATE busy_blocks SET repeat_every = 3 WHERE title = 'Club' AND owner_id = $1", [A]),
+    );
+    const g = await createGroup(A, "Gang");
+    await join_(B, g.code);
+    const vus = await as(B, () =>
+      rows<{ repeat_unit: string | null; repeat_every: number; valid_until: string | null }>(
+        `SELECT repeat_unit, repeat_every, valid_until FROM public.group_busy_blocks($1)
+         WHERE owner_id = $2 ORDER BY repeat_unit`,
+        [g.id, A],
+      ),
+    );
+    expect(vus).toEqual([
+      { repeat_unit: "month", repeat_every: 1, valid_until: null },
+      { repeat_unit: "week", repeat_every: 3, valid_until: null },
+    ]);
+  });
+
+  it("la base refuse un X hors 1..99, une forme incohérente et une répétition hors « manuel »", async () => {
+    const insert = (cols: string, vals: string) =>
+      db.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, ${cols})
+                VALUES ($1, 'x', '10:00', '11:00', ${vals})`,
+        [A],
+      );
+    await expect(
+      insert("weekday, valid_from, repeat_unit, repeat_every", "1, '2026-11-02', 'week', 0"),
+    ).rejects.toThrow(/busy_blocks_repeat_every_range/);
+    await expect(
+      insert("weekday, valid_from, repeat_unit, repeat_every", "1, '2026-11-02', 'week', 100"),
+    ).rejects.toThrow(/busy_blocks_repeat_every_range/);
+    // Intervalle sans unité, « mois » avec un jour de semaine, « semaine » sans début.
+    await expect(insert("weekday, valid_from, repeat_every", "1, '2026-11-02', 2")).rejects.toThrow(
+      /busy_blocks_repeat_shape/,
+    );
+    await expect(
+      insert("weekday, valid_from, repeat_unit", "1, '2026-11-02', 'month'"),
+    ).rejects.toThrow(/busy_blocks_repeat_shape/);
+    await expect(insert("weekday, repeat_unit", "1, 'week'")).rejects.toThrow(
+      /busy_blocks_repeat_shape/,
+    );
+    await expect(insert("valid_from, repeat_unit", "'2026-11-02', 'siècle'")).rejects.toThrow(
+      /busy_blocks_repeat_shape/,
+    );
+    await expect(
+      insert("weekday, valid_from, repeat_unit, source", "1, '2026-11-02', 'week', 'ics'"),
+    ).rejects.toThrow(/busy_blocks_repeat_manual/);
+    // 10 ans au plus avec une date de fin ; un hebdomadaire simple garde la limite d'un an.
+    await expect(
+      insert("valid_from, valid_until, repeat_unit", "'2026-11-02', '2036-12-01', 'month'"),
+    ).rejects.toThrow(/busy_blocks_validity_span/);
+    await insert("valid_from, valid_until, repeat_unit", "'2026-11-02', '2030-11-02', 'month'");
+    await expect(
+      insert("weekday, valid_from, valid_until", "1, '2026-11-02', '2028-11-02'"),
+    ).rejects.toThrow(/busy_blocks_validity_span/);
+  });
+
+  it("migration 0015 seule sur une base en 0014 avec des données", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      for (const tag of [
+        "0000_schema",
+        "0001_rls_triggers",
+        "0002_review_hardening",
+        "0003_onboarding",
+        "0004_quiet_hours",
+        "0005_review_limits",
+        "0006_groups",
+        "0007_review_kick_new_code",
+        "0008_review_row_limits",
+        "0009_segment12_meetup_invites",
+        "0010_review_plan_privacy",
+        "0011_segment13_study_planner",
+        "0012_segment18_availability_slots",
+        "0013_review_availability_limit",
+        "0014_outlook_connector",
+      ]) {
+        await ancienne.exec(drizzleSql(tag));
+      }
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      await ancienne.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday, valid_from, valid_until)
+         VALUES ($1, 'Chimie', '10:00', '12:00', 1, '2026-08-24', '2026-12-18'),
+                ($1, 'Dentiste', '09:00', '10:00', NULL, '2026-11-20', '2026-11-20')`,
+        [A],
+      );
+      await ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0015.sql"), "utf8"));
+      const { rows: blocs } = await ancienne.query(
+        "SELECT title, repeat_unit, repeat_every FROM busy_blocks ORDER BY title",
+      );
+      expect(blocs).toEqual([
+        { title: "Chimie", repeat_unit: null, repeat_every: 1 },
+        { title: "Dentiste", repeat_unit: null, repeat_every: 1 },
+      ]);
+      const { rows: droits } = await ancienne.query<{ ok: boolean }>(
+        "SELECT has_function_privilege('anon', 'public.group_busy_blocks(uuid)', 'EXECUTE') AS ok",
       );
       expect(droits).toEqual([{ ok: false }]);
     } finally {

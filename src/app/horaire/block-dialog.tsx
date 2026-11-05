@@ -1,18 +1,28 @@
 "use client";
 
+import { format, parseISO } from "date-fns";
+import { frCA } from "date-fns/locale";
 import { AlertTriangle, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  REPEAT_COUNT_MAX,
+  REPEAT_EVERY_MAX,
+  REPEAT_UNIT_LABEL,
+  REPEAT_UNITS,
+} from "@/lib/scheduling/recurrence";
 import { clockOptions } from "@/lib/scheduling/weekGrid";
 import {
   BLOCK_TITLE_MAX,
   type BlockFormInput,
+  type BlockSpec,
   findOverlaps,
   formatClock,
   formatClockFr,
+  repeatLabel,
   validateBlockForm,
   WEEKDAY_LONG,
   WEEKDAY_SHORT,
@@ -100,6 +110,24 @@ function BlockForm({
 
   const homeName = places.find((p) => p.id === homeId)?.name;
 
+  // Résumé d'une répétition personnalisée valide (« Toutes les 2 semaines, le mardi… »).
+  const preview = useMemo(() => {
+    if (d.kind !== "custom") return null;
+    const v = validateBlockForm({ ...d, title: d.title.trim() || "?" }, { single: editing });
+    return v.ok ? describeCustom(v.value) : null;
+  }, [d, editing]);
+
+  function chooseKind(kind: BlockDraft["kind"]) {
+    setD((prev) => ({
+      ...prev,
+      kind,
+      // Une répétition par jour / mois / an commence au jour choisi dans la grille.
+      ...(kind === "custom" && !editing && prev.repeatUnit !== "week"
+        ? { sessionStart: prev.date }
+        : {}),
+    }));
+  }
+
   function submit() {
     setError(null);
     const v = validateBlockForm(d, { single: editing });
@@ -124,7 +152,12 @@ function BlockForm({
 
   function remove() {
     if (!d.id) return;
-    const quoi = d.kind === "weekly" ? "toutes les semaines de ce bloc" : "ce bloc";
+    const quoi =
+      d.kind === "weekly"
+        ? "toutes les semaines de ce bloc"
+        : d.kind === "custom"
+          ? "toutes les répétitions de ce bloc"
+          : "ce bloc";
     if (!window.confirm(`Supprimer ${quoi} (« ${d.title} ») ?`)) return;
     setError(null);
     startTransition(async () => {
@@ -137,6 +170,8 @@ function BlockForm({
   return (
     <form
       method="dialog"
+      // Nos propres messages (en français, pour tous les champs) plutôt que ceux du navigateur.
+      noValidate
       className="flex flex-col gap-4 p-4 sm:p-6"
       onSubmit={(e) => {
         e.preventDefault();
@@ -220,11 +255,12 @@ function BlockForm({
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-sm font-medium">Répétition</legend>
-        <div className="grille-4-demi">
+        <div className="grid grid-cols-3 gap-2">
           {(
             [
               ["weekly", "Chaque semaine"],
               ["once", "Une seule fois"],
+              ["custom", "Personnalisée"],
             ] as const
           ).map(([kind, label]) => (
             <label
@@ -239,7 +275,7 @@ function BlockForm({
                 name="bloc-repetition"
                 className="sr-only"
                 checked={d.kind === kind}
-                onChange={() => set("kind", kind)}
+                onChange={() => chooseKind(kind)}
               />
               {label}
             </label>
@@ -247,47 +283,16 @@ function BlockForm({
         </div>
       </fieldset>
 
-      {d.kind === "weekly" ? (
+      {d.kind === "custom" ? (
+        <CustomRepeat d={d} set={set} editing={editing} preview={preview} />
+      ) : d.kind === "weekly" ? (
         <>
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 text-sm font-medium">
-              {editing ? "Jour" : "Jours (coche tous les jours de ce cours)"}
-            </legend>
-            <div className="grid grid-cols-7 gap-1">
-              {WEEKDAYS.map((w) => {
-                const checked = d.weekdays.includes(w);
-                return (
-                  <label
-                    key={w}
-                    title={WEEKDAY_LONG[w]}
-                    className={cn(
-                      "flex h-10 cursor-pointer items-center justify-center rounded-md border text-xs has-[:focus-visible]:ring-2",
-                      checked && "border-primary bg-primary text-primary-foreground font-medium",
-                    )}
-                  >
-                    <input
-                      type={editing ? "radio" : "checkbox"}
-                      name="bloc-jours"
-                      className="sr-only"
-                      checked={checked}
-                      aria-label={WEEKDAY_LONG[w]}
-                      onChange={() =>
-                        set(
-                          "weekdays",
-                          editing
-                            ? [w]
-                            : checked
-                              ? d.weekdays.filter((x) => x !== w)
-                              : [...d.weekdays, w].sort(),
-                        )
-                      }
-                    />
-                    {WEEKDAY_SHORT[w].replace(".", "")}
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
+          <WeekdayPicker
+            weekdays={d.weekdays}
+            editing={editing}
+            legend={editing ? "Jour" : "Jours (coche tous les jours de ce cours)"}
+            onChange={(w) => set("weekdays", w)}
+          />
           <div className="grille-4-demi">
             <div className="flex flex-col gap-2">
               <Label htmlFor="bloc-session-debut">Début de session</Label>
@@ -366,5 +371,225 @@ function BlockForm({
         )}
       </div>
     </form>
+  );
+}
+
+function WeekdayPicker({
+  weekdays,
+  editing,
+  legend,
+  onChange,
+}: {
+  weekdays: number[];
+  editing: boolean;
+  legend: string;
+  onChange: (weekdays: number[]) => void;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-2 text-sm font-medium">{legend}</legend>
+      <div className="grid grid-cols-7 gap-1">
+        {WEEKDAYS.map((w) => {
+          const checked = weekdays.includes(w);
+          return (
+            <label
+              key={w}
+              title={WEEKDAY_LONG[w]}
+              className={cn(
+                "flex h-10 cursor-pointer items-center justify-center rounded-md border text-xs has-[:focus-visible]:ring-2",
+                checked && "border-primary bg-primary text-primary-foreground font-medium",
+              )}
+            >
+              <input
+                type={editing ? "radio" : "checkbox"}
+                name="bloc-jours"
+                className="sr-only"
+                checked={checked}
+                aria-label={WEEKDAY_LONG[w]}
+                onChange={() =>
+                  onChange(
+                    editing
+                      ? [w]
+                      : checked
+                        ? weekdays.filter((x) => x !== w)
+                        : [...weekdays, w].sort(),
+                  )
+                }
+              />
+              {WEEKDAY_SHORT[w].replace(".", "")}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+/** Résumé d'une répétition personnalisée validée, pour l'aperçu sous le formulaire. */
+function describeCustom(specs: BlockSpec[]): string {
+  const first = specs[0];
+  const label = repeatLabel(first) ?? "";
+  let text = label.charAt(0).toUpperCase() + label.slice(1);
+  const weekdays = specs.flatMap((b) => (b.weekday == null ? [] : [WEEKDAY_LONG[b.weekday]]));
+  if (weekdays.length) {
+    const list =
+      weekdays.length > 1
+        ? `${weekdays.slice(0, -1).join(", ")} et ${weekdays[weekdays.length - 1]}`
+        : weekdays[0];
+    text += `, le ${list}`;
+  }
+  const day = (iso: string) => format(parseISO(iso), "d MMMM yyyy", { locale: frCA });
+  if (first.validFrom) text += `, à partir du ${day(first.validFrom)}`;
+  text += first.validUntil ? `, jusqu'au ${day(first.validUntil)}.` : ", sans fin.";
+  return text;
+}
+
+const END_CHOICES = [
+  ["never", "Jamais"],
+  ["date", "Le"],
+  ["count", "Après"],
+] as const;
+
+/** Champs « Personnalisée » : tous les X jours / semaines / mois / ans, début, jours et fin. */
+function CustomRepeat({
+  d,
+  set,
+  editing,
+  preview,
+}: {
+  d: BlockDraft;
+  set: <K extends keyof BlockDraft>(key: K, value: BlockDraft[K]) => void;
+  editing: boolean;
+  preview: string | null;
+}) {
+  const every = Number(d.repeatEvery);
+  const plural = !Number.isInteger(every) || every !== 1;
+  const unit = (REPEAT_UNITS as readonly string[]).includes(d.repeatUnit ?? "")
+    ? (d.repeatUnit as (typeof REPEAT_UNITS)[number])
+    : "week";
+  const startDay = Number((d.sessionStart || "").slice(8, 10));
+
+  return (
+    <>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="bloc-tous-les">Tous les</Label>
+        <div className="grid grid-cols-[6rem_1fr] gap-2">
+          <Input
+            id="bloc-tous-les"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={REPEAT_EVERY_MAX}
+            step={1}
+            value={d.repeatEvery ?? ""}
+            onChange={(e) => set("repeatEvery", e.target.value)}
+            aria-describedby="bloc-tous-les-aide"
+            required
+          />
+          <select
+            aria-label="Unité"
+            className={SELECT}
+            value={unit}
+            onChange={(e) => {
+              const next = e.target.value;
+              set("repeatUnit", next);
+              // Passer des semaines à jour / mois / an : on part du jour choisi dans la grille.
+              if (!editing && unit === "week" && next !== "week") set("sessionStart", d.date);
+            }}
+          >
+            {REPEAT_UNITS.map((u) => (
+              <option key={u} value={u}>
+                {plural ? REPEAT_UNIT_LABEL[u].many : REPEAT_UNIT_LABEL[u].one}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p id="bloc-tous-les-aide" className="text-muted-foreground text-xs">
+          Un nombre de 1 à {REPEAT_EVERY_MAX} (ex. 2 semaines, 3 mois).
+        </p>
+      </div>
+
+      {unit === "week" && (
+        <WeekdayPicker
+          weekdays={d.weekdays}
+          editing={editing}
+          legend={editing ? "Jour" : "Jours"}
+          onChange={(w) => set("weekdays", w)}
+        />
+      )}
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="bloc-repetition-debut">À partir du</Label>
+        <Input
+          id="bloc-repetition-debut"
+          type="date"
+          value={d.sessionStart}
+          onChange={(e) => set("sessionStart", e.target.value)}
+          required
+        />
+        {unit === "week" && (
+          <p className="text-muted-foreground text-xs">
+            La semaine de cette date compte comme la première.
+          </p>
+        )}
+        {(unit === "month" || unit === "year") && startDay > 28 && (
+          <p className="text-muted-foreground text-xs">
+            Les mois qui n&apos;ont pas de {startDay} : le dernier jour du mois.
+          </p>
+        )}
+      </div>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-sm font-medium">Fin</legend>
+        {END_CHOICES.map(([mode, label]) => (
+          <div key={mode} className="flex min-h-11 items-center gap-2 text-sm">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="bloc-fin-repetition"
+                className="size-4"
+                checked={d.repeatEnd === mode}
+                onChange={() => set("repeatEnd", mode)}
+              />
+              {label}
+            </label>
+            {mode === "date" && (
+              <Input
+                type="date"
+                aria-label="Date de fin"
+                className="w-auto"
+                value={d.sessionEnd}
+                min={d.sessionStart || undefined}
+                disabled={d.repeatEnd !== "date"}
+                onChange={(e) => set("sessionEnd", e.target.value)}
+              />
+            )}
+            {mode === "count" && (
+              <>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  aria-label="Nombre de fois"
+                  className="w-24"
+                  min={1}
+                  max={REPEAT_COUNT_MAX}
+                  step={1}
+                  value={d.repeatCount ?? ""}
+                  disabled={d.repeatEnd !== "count"}
+                  onChange={(e) => set("repeatCount", e.target.value)}
+                />
+                fois
+              </>
+            )}
+          </div>
+        ))}
+      </fieldset>
+
+      {preview && (
+        <p className="bg-muted rounded-md p-3 text-sm" aria-live="polite">
+          {preview}
+        </p>
+      )}
+    </>
   );
 }

@@ -11,6 +11,17 @@ import { addDays, format, getISODay, parseISO } from "date-fns";
 
 import { cleanText } from "@/lib/places/validation";
 
+import {
+  describeEvery,
+  describeRepeat,
+  isValidEvery,
+  nthOccurrence,
+  recursOn,
+  REPEAT_COUNT_MAX,
+  REPEAT_EVERY_MAX,
+  REPEAT_UNITS,
+  type RepeatUnit,
+} from "./recurrence";
 import { assertDay } from "./time";
 import type { DateRange, PlaceId } from "./types";
 
@@ -25,6 +36,15 @@ export const BLOCK_TITLE_MAX = 100;
 
 /** Durée maximale d'une période de validité (session) d'un bloc hebdomadaire, en jours. */
 export const MAX_SESSION_DAYS = 366;
+
+/**
+ * Durée maximale d'une répétition personnalisée qui a une date de fin, en jours (10 ans). Sans
+ * fin (« Jamais »), il n'y a pas de limite : les calculs se font toujours sur une plage bornée.
+ */
+export const MAX_REPEAT_SPAN_DAYS = 3660;
+
+/** Plage parcourue pour savoir si deux répétitions personnalisées tombent un même jour. */
+const OVERLAP_SCAN_DAYS = 731;
 
 /** Jour de la semaine ISO : 1 = lundi … 7 = dimanche. */
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -56,6 +76,12 @@ export const WEEKDAY_LONG: Record<Weekday, string> = {
  * - Hebdomadaire : `weekday` non nul ; il a lieu ce jour-là chaque semaine, du `validFrom` au
  *   `validUntil` inclus (une borne nulle = pas de limite de ce côté).
  * - Ponctuel : `weekday` nul ; il a lieu le jour `validFrom` seulement.
+ * - Répétition personnalisée (story 2) : `repeatUnit` non nul et `repeatEvery` de 1 à 99.
+ *   - « semaine » : `weekday` non nul ; ce jour-là, une semaine sur `repeatEvery`, à compter de
+ *     la semaine de `validFrom` (l'ancrage, toujours présent) ;
+ *   - « jour », « mois », « an » : `weekday` nul ; tous les `repeatEvery` jours / mois / ans à
+ *     partir de `validFrom` (voir `recurrence.ts` pour les mois courts).
+ *   `validUntil` nul = sans fin.
  */
 export interface BlockSpec {
   /** Identifiant (absent pour un bloc pas encore enregistré). */
@@ -70,6 +96,26 @@ export interface BlockSpec {
   weekday: Weekday | null;
   validFrom: string | null;
   validUntil: string | null;
+  /** Unité de la répétition personnalisée ; absente ou nulle = hebdomadaire simple ou ponctuel. */
+  repeatUnit?: RepeatUnit | null;
+  /** « Tous les X » (1 à 99) ; absent = 1. */
+  repeatEvery?: number;
+}
+
+/** Champs d'un bloc qui décident des jours où il a lieu. */
+export type BlockDays = Pick<
+  BlockSpec,
+  "weekday" | "validFrom" | "validUntil" | "repeatUnit" | "repeatEvery"
+>;
+
+/** Vrai si le bloc revient (hebdomadaire ou répétition personnalisée), faux s'il est ponctuel. */
+export function isRecurring(block: Pick<BlockSpec, "weekday" | "repeatUnit">): boolean {
+  return block.weekday != null || block.repeatUnit != null;
+}
+
+/** Vrai pour un bloc « chaque semaine » simple (sans répétition personnalisée). */
+function isSimpleWeekly(block: BlockDays): boolean {
+  return block.weekday != null && block.repeatUnit == null && (block.repeatEvery ?? 1) === 1;
 }
 
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -136,13 +182,36 @@ export function weekDays(monday: string): string[] {
   return WEEKDAYS.map((_, i) => shiftDay(monday, i));
 }
 
-/** Vrai si le bloc a lieu le jour `day`. Un bloc hebdomadaire s'arrête après `validUntil`. */
-export function occursOn(block: BlockSpec, day: string): boolean {
-  if (block.weekday == null) return block.validFrom === day;
-  if (weekdayOf(day) !== block.weekday) return false;
+/**
+ * Vrai si le bloc a lieu le jour `day`. Un bloc qui revient commence à `validFrom` et s'arrête
+ * après `validUntil` ; une répétition « toutes les X … » se compte à partir de `validFrom`.
+ */
+export function occursOn(block: BlockDays, day: string): boolean {
+  if (!isRecurring(block)) return block.validFrom === day;
   if (block.validFrom && day < block.validFrom) return false;
   if (block.validUntil && day > block.validUntil) return false;
-  return true;
+  const every = block.repeatEvery ?? 1;
+  if (block.weekday != null) {
+    if (weekdayOf(day) !== block.weekday) return false;
+    if (every === 1 || !block.validFrom) return true;
+    return recursOn({ unit: "week", every, anchor: block.validFrom, weekday: block.weekday }, day);
+  }
+  const unit = block.repeatUnit;
+  if (!unit || !block.validFrom) return false;
+  return recursOn({ unit, every, anchor: block.validFrom }, day);
+}
+
+/**
+ * Répétition d'un bloc, en mots (minuscules) : « chaque semaine », « toutes les 2 semaines »,
+ * « chaque mois, le 31 (ou le dernier jour du mois) »… `null` pour un bloc ponctuel. Le jour de
+ * semaine d'un bloc hebdomadaire n'est pas inclus (l'interface l'affiche à part).
+ */
+export function repeatLabel(block: BlockDays): string | null {
+  if (!isRecurring(block)) return null;
+  const every = block.repeatEvery ?? 1;
+  if (block.weekday != null) return describeEvery(every, "week");
+  if (!block.repeatUnit || !block.validFrom) return null;
+  return describeRepeat({ unit: block.repeatUnit, every, anchor: block.validFrom });
 }
 
 /** Blocs qui ont lieu le jour `day`, triés par heure de début puis de fin. */
@@ -153,7 +222,7 @@ export function blocksOnDay<T extends BlockSpec>(blocks: readonly T[], day: stri
 }
 
 /** Les jours (`yyyy-MM-dd`) où un bloc a lieu, sur une plage incluse. */
-export function occurrencesIn(block: BlockSpec, range: DateRange): string[] {
+export function occurrencesIn(block: BlockDays, range: DateRange): string[] {
   const days: string[] = [];
   for (let d = range.from; d <= range.to; d = shiftDay(d, 1)) {
     if (occursOn(block, d)) days.push(d);
@@ -164,14 +233,27 @@ export function occurrencesIn(block: BlockSpec, range: DateRange): string[] {
 /**
  * Vrai si deux blocs ont lieu au moins une fois le même jour (les heures ne comptent pas) :
  * même jour de semaine et sessions qui se croisent sur ce jour-là, ou ponctuel qui tombe
- * pendant un hebdomadaire, ou deux ponctuels le même jour.
+ * pendant un hebdomadaire, ou deux ponctuels le même jour. Avec une répétition personnalisée,
+ * on cherche un jour commun dans les deux ans qui suivent le début de la période commune.
  */
-export function shareADay(a: BlockSpec, b: BlockSpec): boolean {
-  if (a.weekday == null || b.weekday == null) {
-    const [once, other] = a.weekday == null ? [a, b] : [b, a];
+export function shareADay(a: BlockDays, b: BlockDays): boolean {
+  if (!isRecurring(a) || !isRecurring(b)) {
+    const [once, other] = !isRecurring(a) ? [a, b] : [b, a];
     return once.validFrom != null && occursOn(other, once.validFrom);
   }
-  if (a.weekday !== b.weekday) return false;
+  if (!isSimpleWeekly(a) || !isSimpleWeekly(b)) {
+    // Une répétition personnalisée a toujours un début : `from` n'est pas nul.
+    const from = maxDay(a.validFrom, b.validFrom);
+    if (from == null) return false;
+    const limit = shiftDay(from, OVERLAP_SCAN_DAYS);
+    const until = minDay(a.validUntil, b.validUntil);
+    const end = until != null && until < limit ? until : limit;
+    for (let d = from; d <= end; d = shiftDay(d, 1)) {
+      if (occursOn(a, d) && occursOn(b, d)) return true;
+    }
+    return false;
+  }
+  if (a.weekday == null || a.weekday !== b.weekday) return false;
   const from = maxDay(a.validFrom, b.validFrom);
   const until = minDay(a.validUntil, b.validUntil);
   // Un côté sans borne : la période commune contient forcément ce jour de semaine.
@@ -214,7 +296,7 @@ export function suggestSession(blocks: readonly BlockSpec[], today: string): Dat
   assertDay(today);
   const counts = new Map<string, { range: DateRange; n: number }>();
   for (const b of blocks) {
-    if (b.weekday == null || !b.validFrom || !b.validUntil || b.validUntil < today) continue;
+    if (!isSimpleWeekly(b) || !b.validFrom || !b.validUntil || b.validUntil < today) continue;
     const key = `${b.validFrom}/${b.validUntil}`;
     const entry = counts.get(key) ?? { range: { from: b.validFrom, to: b.validUntil }, n: 0 };
     entry.n += 1;
@@ -249,6 +331,9 @@ function notAfterThisMonday(from: string, today: string): string {
 
 // ─── Validation des données envoyées par le navigateur ──────────────────────────────────────
 
+/** Fin d'une répétition personnalisée. */
+export type RepeatEnd = "never" | "date" | "count";
+
 /** Données brutes du formulaire « bloc ». */
 export interface BlockFormInput {
   title: string;
@@ -257,14 +342,26 @@ export interface BlockFormInput {
   start: string;
   /** « HH:mm » */
   end: string;
-  kind: "weekly" | "once";
-  /** Jours cochés (hebdomadaire). */
+  /** « Chaque semaine », « Une seule fois » ou « Personnalisée » (tous les X …). */
+  kind: "weekly" | "once" | "custom";
+  /** Jours cochés (hebdomadaire, ou personnalisée en semaines). */
   weekdays: number[];
   /** Jour (ponctuel), `yyyy-MM-dd`. */
   date: string;
-  /** Début et fin de session (hebdomadaire), `yyyy-MM-dd`. */
+  /**
+   * Début et fin de session (hebdomadaire), `yyyy-MM-dd`. Pour une répétition personnalisée :
+   * date de début (ancrage) et date de fin (si `repeatEnd` vaut « date »).
+   */
   sessionStart: string;
   sessionEnd: string;
+  /** Personnalisée : « tous les X » (texte du champ ou nombre). */
+  repeatEvery?: string | number;
+  /** Personnalisée : unité. */
+  repeatUnit?: string;
+  /** Personnalisée : fin (jamais, à une date, après N fois). */
+  repeatEnd?: string;
+  /** Personnalisée : nombre de fois (fin « après N fois »). */
+  repeatCount?: string | number;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -287,7 +384,10 @@ function isDay(raw: unknown): raw is string {
  * - lieu : uuid ou nul (maison) ; la RLS vérifie ensuite que c'est un de mes lieux ;
  * - heures « HH:mm », début < fin, au plus 24:00 (un bloc ne traverse pas minuit) ;
  * - hebdomadaire : au moins un jour, session avec début ≤ fin et au plus 366 jours ;
- * - ponctuel : un jour valide.
+ * - ponctuel : un jour valide ;
+ * - personnalisée : X entier de 1 à 99, unité jour / semaine / mois / an, date de début, au
+ *   moins un jour coché en semaines, fin « jamais », à une date (≥ début, au plus 10 ans) ou
+ *   « après N fois » (1 à 999, transformée en date de fin : la N-ième occurrence).
  * `single` : un seul jour permis (modification d'un bloc existant).
  */
 export function validateBlockForm(
@@ -333,21 +433,12 @@ export function validateBlockForm(
       value: [{ ...base, weekday: null, validFrom: r.date, validUntil: r.date }],
     };
   }
+  if (r.kind === "custom") return validateCustom(r, base, options);
   if (r.kind !== "weekly") return { ok: false, error: "Type de bloc invalide." };
 
-  if (!Array.isArray(r.weekdays) || r.weekdays.length === 0) {
-    return { ok: false, error: "Coche au moins un jour de la semaine." };
-  }
-  const days = new Set<Weekday>();
-  for (const d of r.weekdays) {
-    if (typeof d !== "number" || !(WEEKDAYS as readonly number[]).includes(d)) {
-      return { ok: false, error: "Jour de la semaine invalide." };
-    }
-    days.add(d as Weekday);
-  }
-  if (options.single && days.size !== 1) {
-    return { ok: false, error: "Un bloc modifié a un seul jour de la semaine." };
-  }
+  const parsedDays = parseWeekdays(r.weekdays, options);
+  if (!parsedDays.ok) return parsedDays;
+  const days = parsedDays.value;
   if (!isDay(r.sessionStart) || !isDay(r.sessionEnd)) {
     return { ok: false, error: "Indique le début et la fin de la session." };
   }
@@ -358,11 +449,117 @@ export function validateBlockForm(
     return { ok: false, error: "La session dure plus d'un an : vérifie les dates." };
   }
   const { sessionStart, sessionEnd } = r;
-  const blocks = [...days]
-    .sort((a, b) => a - b)
-    .map((weekday) => ({ ...base, weekday, validFrom: sessionStart, validUntil: sessionEnd }));
+  const blocks = days.map((weekday) => ({
+    ...base,
+    weekday,
+    validFrom: sessionStart,
+    validUntil: sessionEnd,
+  }));
   if (!blocks.some((b) => occurrencesIn(b, { from: sessionStart, to: sessionEnd }).length > 0)) {
     return { ok: false, error: "Aucun de ces jours ne tombe dans la session." };
+  }
+  return { ok: true, value: blocks };
+}
+
+/** Jours de semaine cochés → liste triée sans doublon (un seul si `single`). */
+function parseWeekdays(raw: unknown, options: { single?: boolean }): ValidationResult<Weekday[]> {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return { ok: false, error: "Coche au moins un jour de la semaine." };
+  }
+  const days = new Set<Weekday>();
+  for (const d of raw) {
+    if (typeof d !== "number" || !(WEEKDAYS as readonly number[]).includes(d)) {
+      return { ok: false, error: "Jour de la semaine invalide." };
+    }
+    days.add(d as Weekday);
+  }
+  if (options.single && days.size !== 1) {
+    return { ok: false, error: "Un bloc modifié a un seul jour de la semaine." };
+  }
+  return { ok: true, value: [...days].sort((a, b) => a - b) };
+}
+
+/** Nombre entier saisi (« 2 », 2) ; `null` si vide, négatif, décimal ou autre chose. */
+function parseWhole(raw: unknown): number | null {
+  if (typeof raw === "number") return Number.isInteger(raw) ? raw : null;
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  return /^\d{1,6}$/.test(t) ? Number(t) : null;
+}
+
+function tooLong(): ValidationResult<never> {
+  return {
+    ok: false,
+    error: "La répétition dure plus de 10 ans : choisis « Jamais » ou une fin plus proche.",
+  };
+}
+
+/** Validation d'une répétition personnalisée (« tous les X jours / semaines / mois / ans »). */
+function validateCustom(
+  r: Record<string, unknown>,
+  base: Pick<BlockSpec, "title" | "placeId" | "startMinute" | "endMinute">,
+  options: { single?: boolean },
+): ValidationResult<BlockSpec[]> {
+  const every = parseWhole(r.repeatEvery);
+  if (!isValidEvery(every)) {
+    return {
+      ok: false,
+      error: `Indique un nombre entier de 1 à ${REPEAT_EVERY_MAX} pour « tous les … ».`,
+    };
+  }
+  const unit = r.repeatUnit;
+  if (typeof unit !== "string" || !(REPEAT_UNITS as readonly string[]).includes(unit)) {
+    return { ok: false, error: "Choisis l'unité : jours, semaines, mois ou ans." };
+  }
+  const repeatUnit = unit as RepeatUnit;
+  if (!isDay(r.sessionStart)) return { ok: false, error: "Choisis la date de début." };
+  const start = r.sessionStart;
+
+  let weekdays: Weekday[] = [];
+  if (repeatUnit === "week") {
+    const parsed = parseWeekdays(r.weekdays, options);
+    if (!parsed.ok) return parsed;
+    weekdays = parsed.value;
+  }
+
+  let until: string | null;
+  if (r.repeatEnd === "never") {
+    until = null;
+  } else if (r.repeatEnd === "date") {
+    if (!isDay(r.sessionEnd)) return { ok: false, error: "Choisis la date de fin." };
+    if (r.sessionEnd < start) {
+      return { ok: false, error: "La date de fin doit être après la date de début." };
+    }
+    until = r.sessionEnd;
+  } else if (r.repeatEnd === "count") {
+    const count = parseWhole(r.repeatCount);
+    if (count === null || count < 1 || count > REPEAT_COUNT_MAX) {
+      return {
+        ok: false,
+        error: `Indique un nombre de fois entier de 1 à ${REPEAT_COUNT_MAX}.`,
+      };
+    }
+    // Ordre de grandeur d'abord : 999 fois tous les 99 ans sortirait du calendrier.
+    const periodDays = { day: 1, week: 7, month: 31, year: 366 }[repeatUnit];
+    const periods = repeatUnit === "week" ? Math.ceil(count / weekdays.length) : count;
+    if ((periods - 1) * every * periodDays > MAX_REPEAT_SPAN_DAYS + 366) return tooLong();
+    until = nthOccurrence({ unit: repeatUnit, every, anchor: start }, count, weekdays);
+  } else {
+    return { ok: false, error: "Choisis quand la répétition s'arrête." };
+  }
+  if (until !== null && daysBetween(start, until) >= MAX_REPEAT_SPAN_DAYS) return tooLong();
+
+  const common = { ...base, validFrom: start, validUntil: until, repeatUnit, repeatEvery: every };
+  if (repeatUnit !== "week") return { ok: true, value: [{ ...common, weekday: null }] };
+
+  const blocks = weekdays.map((weekday) => ({ ...common, weekday }));
+  // Au moins un jour coché doit tomber avant la fin (ex. début un vendredi, fin le samedi,
+  // seulement « lundi » coché : rien).
+  const first = weekdays
+    .map((w) => nthOccurrence({ unit: "week", every, anchor: start }, 1, [w]))
+    .sort()[0];
+  if (until !== null && first > until) {
+    return { ok: false, error: "Aucun de ces jours ne tombe avant la date de fin." };
   }
   return { ok: true, value: blocks };
 }

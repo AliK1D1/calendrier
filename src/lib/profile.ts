@@ -72,11 +72,13 @@ export type MyBusyBlock = Pick<
   | "valid_from"
   | "valid_until"
   | "source"
+  | "repeat_unit"
+  | "repeat_every"
 > &
   Partial<Pick<BusyBlockRow, "deadline_id" | "movable">>;
 
 const BLOCK_COLUMNS =
-  "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, source";
+  "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, source, repeat_unit, repeat_every";
 
 /**
  * Mon horaire (tous mes blocs ; la RLS laisse aussi voir ceux de mes groupes : filtre). Avec

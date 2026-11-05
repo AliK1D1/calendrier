@@ -16,6 +16,8 @@ import {
 } from "@/lib/profile";
 import { getOutlookConfig } from "@/lib/outlook/config";
 import { getOutlookStatus } from "@/lib/outlook/supabaseStore";
+import { SUBSCRIPTION_MAX_PER_USER } from "@/lib/scheduling/subscriptions";
+import { getMySubscriptions } from "@/lib/subscriptions/supabaseStore";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -24,6 +26,7 @@ import { OutlookCard } from "./outlook-card";
 import { ProfileForm } from "./profile-form";
 import { QuietHoursForm } from "./quiet-hours-form";
 import { StudyPrefsForm } from "./study-prefs-form";
+import { SubscriptionsCard } from "./subscriptions-card";
 
 export const metadata: Metadata = { title: "Profil · Temps libre commun" };
 export const dynamic = "force-dynamic";
@@ -54,15 +57,19 @@ export default async function Profil({
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/connexion?next=/profil");
 
-  const [profile, places, quietRow, hideTitles, studyPrefs, outlookStatus] = await Promise.all([
-    getMyProfile(supabase, data.user.id),
-    getMyPlaces(supabase, data.user.id),
-    getMyQuietHours(supabase, data.user.id),
-    getMyPrivacy(supabase, data.user.id),
-    getMyStudyPreferences(supabase, data.user.id),
-    getOutlookStatus(supabase, data.user.id),
-  ]);
+  const [profile, places, quietRow, hideTitles, studyPrefs, outlookStatus, subscriptions] =
+    await Promise.all([
+      getMyProfile(supabase, data.user.id),
+      getMyPlaces(supabase, data.user.id),
+      getMyQuietHours(supabase, data.user.id),
+      getMyPrivacy(supabase, data.user.id),
+      getMyStudyPreferences(supabase, data.user.id),
+      getOutlookStatus(supabase, data.user.id),
+      getMySubscriptions(supabase, data.user.id),
+    ]);
   const now = new Date();
+  const ago = (at: string | null) =>
+    at ? formatDistanceStrict(new Date(at), now, { addSuffix: true, locale: frCA }) : null;
   const quiet = quietRow
     ? quietHoursFromDb(quietRow.unavailable_before, quietRow.unavailable_after)
     : null;
@@ -145,6 +152,26 @@ export default async function Profil({
               : null
           }
           returnMessage={typeof outlook === "string" ? (OUTLOOK_RETURN[outlook] ?? null) : null}
+        />
+        <SubscriptionsCard
+          dbReady={subscriptions !== "absent"}
+          items={
+            subscriptions === "absent"
+              ? []
+              : subscriptions.map((s) => ({
+                  id: s.id,
+                  kind: s.kind,
+                  name: s.name,
+                  source: s.source,
+                  countsAsBusy: s.countsAsBusy,
+                  lastSynced: ago(s.lastSyncedAt),
+                  lastSyncError: s.lastSyncError,
+                }))
+          }
+          outlookConnected={
+            getOutlookConfig() !== null && !!outlookStatus && outlookStatus !== "absent"
+          }
+          max={SUBSCRIPTION_MAX_PER_USER}
         />
         <Card id="etude" className="scroll-mt-16">
           <CardHeader>

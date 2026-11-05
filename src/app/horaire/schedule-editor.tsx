@@ -60,6 +60,25 @@ const COLORS = [
 const MEETUP_COLOR = "bg-primary/15 border-primary text-foreground";
 /** Temps occupé lu dans Outlook (lecture seule). */
 const OUTLOOK_COLOR = "bg-muted border-muted-foreground/60 text-foreground";
+/** Calendrier abonné qui compte comme occupé (lecture seule). */
+const SUBSCRIPTION_BUSY_COLOR =
+  "bg-indigo-100 border-indigo-400 text-indigo-950 dark:bg-indigo-950 dark:text-indigo-50";
+/** Calendrier abonné « juste pour voir » : n'occupe pas (bordure pointillée, fond léger). */
+const SUBSCRIPTION_INFO_COLOR =
+  "bg-background/80 border border-dashed border-indigo-400 text-muted-foreground";
+
+/** Couleur d'un bloc en lecture seule (plan, étude, Outlook, abonnement), sinon `fallback`. */
+function sourceColor(b: ScheduleBlock, fallback: string): string {
+  if (b.source === "meetup") return MEETUP_COLOR;
+  if (b.source === "study") return ACCEPTED_STUDY_COLOR;
+  if (b.source === "outlook") return OUTLOOK_COLOR;
+  if (b.source === "subscription") {
+    return b.subscription?.countsAsBusy === false
+      ? SUBSCRIPTION_INFO_COLOR
+      : SUBSCRIPTION_BUSY_COLOR;
+  }
+  return fallback;
+}
 
 const dayLabel = (day: string, pattern: string) => format(parseISO(day), pattern, { locale: frCA });
 
@@ -333,7 +352,7 @@ export function ScheduleEditor({
 
   // Blocs qui reviennent : hebdomadaires (par jour) puis autres répétitions (par début).
   const weekly = blocks
-    .filter((b) => isRecurring(b))
+    .filter((b) => isRecurring(b) && b.source !== "subscription")
     .sort(
       (a, b) =>
         (a.weekday ?? 8) - (b.weekday ?? 8) ||
@@ -344,10 +363,20 @@ export function ScheduleEditor({
   const outlookCount = blocks.filter(
     (b) => b.source === "outlook" && (b.validFrom ?? "") >= today,
   ).length;
+  // Calendriers abonnés : gérés dans Profil, comptés ici (à venir ou en cours).
+  const subscriptionCount = blocks.filter(
+    (b) => b.source === "subscription" && (b.validUntil ?? b.validFrom ?? "") >= today,
+  ).length;
   const once = blocks
     // Revue récurrence 3 : un bloc « tous les X jours / mois / ans » n'a pas de jour de semaine,
     // mais il revient : il est déjà dans la liste du dessus.
-    .filter((b) => !isRecurring(b) && b.source !== "outlook" && (b.validFrom ?? "") >= today)
+    .filter(
+      (b) =>
+        !isRecurring(b) &&
+        b.source !== "outlook" &&
+        b.source !== "subscription" &&
+        (b.validFrom ?? "") >= today,
+    )
     .sort(
       (a, b) =>
         (a.validFrom ?? "").localeCompare(b.validFrom ?? "") || a.startMinute - b.startMinute,
@@ -604,31 +633,29 @@ export function ScheduleEditor({
                           if (b.source === "meetup") router.push("/plans");
                           // Outlook : lecture seule, géré dans Profil.
                           else if (b.source === "outlook") router.push("/profil#outlook");
+                          // Calendrier abonné : lecture seule, géré dans Profil.
+                          else if (b.source === "subscription") router.push("/profil#abonnements");
                           // Séance d'étude : on la gère (retirer, déplaçable) dans « Étude ».
                           else if (b.source === "study") router.push("/etude");
                           else setDraft(editDraft(b, day));
                         }}
                         className={cn(
                           "absolute overflow-hidden rounded-md border-l-4 px-1.5 py-0.5 text-left text-xs leading-tight shadow-sm hover:brightness-95 focus-visible:ring-2 focus-visible:outline-none",
-                          b.source === "meetup"
-                            ? MEETUP_COLOR
-                            : b.source === "study"
-                              ? ACCEPTED_STUDY_COLOR
-                              : b.source === "outlook"
-                                ? OUTLOOK_COLOR
-                                : colorOf(b.placeId),
+                          sourceColor(b, colorOf(b.placeId)),
                           conflictIds.has(b.id) && "ring-destructive ring-2",
                           p.cutTop && "rounded-t-none",
                           p.cutBottom && "rounded-b-none",
                         )}
                         style={style}
-                        title={`${b.title} · ${formatClockFr(b.startMinute)} à ${formatClockFr(b.endMinute)} · ${placeLabel(b.placeId)}${conflictIds.has(b.id) ? " · en conflit" : ""}`}
+                        title={`${b.title} · ${formatClockFr(b.startMinute)} à ${formatClockFr(b.endMinute)} · ${b.subscription ? `${b.subscription.name}${b.subscription.countsAsBusy ? "" : " (ne bloque pas ton temps libre)"}` : placeLabel(b.placeId)}${conflictIds.has(b.id) ? " · en conflit" : ""}`}
                       >
                         <span className="block truncate font-semibold">{b.title}</span>
                         <span className="block truncate">
                           {formatClockFr(b.startMinute)}–{formatClockFr(b.endMinute)}
                         </span>
-                        <span className="block truncate opacity-80">{placeLabel(b.placeId)}</span>
+                        <span className="block truncate opacity-80">
+                          {b.subscription ? b.subscription.name : placeLabel(b.placeId)}
+                        </span>
                       </button>
                     );
                   })}
@@ -709,6 +736,16 @@ export function ScheduleEditor({
             calendrier Outlook (en gris dans la grille).{" "}
             <Link href="/profil#outlook" className="underline underline-offset-2">
               Gérer Outlook
+            </Link>
+          </p>
+        )}
+        {subscriptionCount > 0 && (
+          <p className="text-muted-foreground text-sm">
+            Plus {subscriptionCount} {subscriptionCount > 1 ? "événements" : "événement"} de tes
+            calendriers en ligne (en indigo dans la grille ; bordure pointillée : ne bloque pas ton
+            temps libre).{" "}
+            <Link href="/profil#abonnements" className="underline underline-offset-2">
+              Gérer mes calendriers
             </Link>
           </p>
         )}
@@ -797,16 +834,7 @@ function BlockRow({
   return (
     <li className="bg-card flex items-start gap-3 rounded-lg border p-3">
       <span
-        className={cn(
-          "mt-1 size-3 shrink-0 rounded-full border-2",
-          block.source === "meetup"
-            ? MEETUP_COLOR
-            : block.source === "study"
-              ? ACCEPTED_STUDY_COLOR
-              : block.source === "outlook"
-                ? OUTLOOK_COLOR
-                : color,
-        )}
+        className={cn("mt-1 size-3 shrink-0 rounded-full border-2", sourceColor(block, color))}
         aria-hidden
       />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">

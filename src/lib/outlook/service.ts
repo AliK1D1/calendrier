@@ -85,6 +85,21 @@ function errorOutcome(e: unknown): { status: "error"; message: string; reauth: b
   return { status: "error", message: GENERIC_ERROR, reauth: false };
 }
 
+/**
+ * Jeton d'accès frais pour le compte Outlook connecté (calendriers abonnés lus par Outlook,
+ * story 3). Lève une `OutlookError` si Outlook n'est pas connecté.
+ */
+export async function outlookAccessToken(deps: OutlookDeps): Promise<string> {
+  const conn = await deps.store.readConnection();
+  if (!conn) throw new OutlookError("Outlook n'est plus connecté. Reconnecte Outlook.", "reauth");
+  return accessTokenFrom(deps, conn.refreshTokenEnc);
+}
+
+/** Calendrier choisi dans le connecteur Outlook (`null` : le principal ou pas connecté). */
+export async function outlookSyncedCalendarId(deps: OutlookDeps): Promise<string | null> {
+  return (await deps.store.readConnection())?.calendarId ?? null;
+}
+
 /** Jeton d'accès frais ; enregistre le nouveau jeton de rafraîchissement s'il a changé. */
 async function accessTokenFrom(deps: OutlookDeps, refreshTokenEnc: string): Promise<string> {
   // Revue Outlook 1 : les délais de la BD (1 min, 15 min) se contournent par l'API REST

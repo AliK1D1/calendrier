@@ -112,6 +112,12 @@ export interface IcsOptions {
   horizonDays?: number;
   /** Fuseau de l'app (défaut America/Toronto). */
   timeZone?: string;
+  /**
+   * Garder aussi les événements marqués « disponible » (TRANSP:TRANSPARENT). Calendriers
+   * abonnés (story 3) : la personne choisit elle-même s'ils comptent comme occupés, et
+   * beaucoup de calendriers publics (sports, fêtes) marquent tout « disponible ».
+   */
+  includeTransparent?: boolean;
 }
 
 /** Taille en octets d'un texte (UTF-8). */
@@ -168,6 +174,7 @@ export function parseIcs(text: string, options: IcsOptions): IcsResult {
     work: ICS_MAX_WORK,
     farPastBefore: shiftDay(window.from, -FAR_PAST_MARGIN_DAYS),
     notes: new Notes(),
+    includeTransparent: options.includeTransparent === true,
   };
 
   try {
@@ -251,6 +258,7 @@ interface Ctx {
   /** Début des occurrences « bien avant la fenêtre » (heure flottante, 00:00). */
   farPastBefore: string;
   notes: Notes;
+  includeTransparent: boolean;
 }
 
 /** Morceau d'occurrence dans une journée locale. */
@@ -322,7 +330,7 @@ function readEvent(
   const dtstart = dtstartProp?.getFirstValue();
   if (!dtstartProp || !(dtstart instanceof ICAL.Time)) return ctx.notes.count("noEnd");
   if (dtstart.isDate) return ctx.notes.count("allDay");
-  if (textProp(ev, "transp")?.toUpperCase() === "TRANSPARENT") {
+  if (!ctx.includeTransparent && textProp(ev, "transp")?.toUpperCase() === "TRANSPARENT") {
     return ctx.notes.count("transparent");
   }
 

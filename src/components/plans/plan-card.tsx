@@ -1,12 +1,59 @@
 "use client";
 
-import { CalendarPlus, Check, Clock, MapPin, Repeat, Users, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Bike,
+  Bus,
+  CalendarPlus,
+  Car,
+  Check,
+  Clock,
+  Footprints,
+  MapPin,
+  Repeat,
+  Users,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { LeaveByView } from "@/lib/plans/leaveBy";
 import type { PlanView } from "@/lib/plans/view";
 import { cn } from "@/lib/utils";
+
+const MODE_ICON = { walk: Footprints, bike: Bike, transit: Bus, car: Car } as const;
+
+/** Story 6 : quand partir de mon lieu d'avant (seulement pour moi). */
+function LeaveBy({ leaveBy: l }: { leaveBy: LeaveByView }) {
+  const Icon = MODE_ICON[l.mode];
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-2 rounded-md border px-3 py-2 text-sm",
+        l.warning ? "border-warning/70 bg-warning/10" : "bg-muted/40",
+      )}
+      aria-label="Quand partir"
+    >
+      <Icon className="text-primary mt-0.5 size-4 shrink-0" aria-hidden />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="font-medium break-words">
+          {l.main}
+          {l.detail && <span className="text-muted-foreground font-normal"> · {l.detail}</span>}
+        </p>
+        {l.urgent && <p className="text-primary font-semibold">{l.urgent}</p>}
+        {l.transit && <p className="break-words">{l.transit}</p>}
+        {l.warning && (
+          <p className="flex items-start gap-1.5 font-medium" role="note">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>{l.warning}</span>
+          </p>
+        )}
+        {l.note && <p className="text-muted-foreground text-xs">{l.note}</p>}
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   plan: PlanView;
@@ -75,6 +122,7 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
         <MapPin className="text-muted-foreground size-4 shrink-0" aria-hidden />
         <span className="break-words">{p.where}</span>
       </p>
+      {live && p.leaveBy && <LeaveBy leaveBy={p.leaveBy} />}
       <p className="text-muted-foreground flex items-start gap-2 text-sm">
         <Users className="mt-0.5 size-4 shrink-0" aria-hidden />
         <span>

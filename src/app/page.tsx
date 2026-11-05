@@ -8,6 +8,7 @@ import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMyGroups } from "@/lib/groups/queries";
+import { addLeaveBy } from "@/lib/plans/leaveByQueries";
 import { loadPlans } from "@/lib/plans/queries";
 import { getMyBusyBlocks, getMyProfile, getOnboardingStatus } from "@/lib/profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -87,12 +88,16 @@ export default async function Accueil() {
  * présentation), puis des raccourcis vers ses groupes.
  */
 async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; user: User }) {
+  const now = new Date();
   const [onboarded, profile, blocks, groups, plans] = await Promise.all([
     getOnboardingStatus(supabase),
     getMyProfile(supabase, user.id),
     getMyBusyBlocks(supabase, user.id),
     getMyGroups(supabase, user.id),
-    loadPlans(supabase, user.id, new Date()),
+    loadPlans(supabase, user.id, now).then(async (r) =>
+      // Story 6 : « Pars de … à HH:MM » sur mes prochains plans en personne.
+      r.ok ? { ...r, views: await addLeaveBy(supabase, user.id, r.views, now) } : r,
+    ),
   ]);
   // Plans illisibles (ex. migration absente) : l'accueil s'affiche quand même, sans eux.
   const myPlans = homePlans(plans.ok ? plans.views : []);

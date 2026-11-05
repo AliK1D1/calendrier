@@ -13,6 +13,7 @@ import {
 import { parseClock, formatClockFr, shiftDay } from "@/lib/scheduling/weeklyBlocks";
 import { addMinutesTo, TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
 
+import type { LeaveByView } from "./leaveBy";
 import { PLAN_FALLBACK_TITLE } from "./validation";
 
 /** Ligne de `meetup_plans` lue par l'app. */
@@ -79,6 +80,10 @@ export interface PlanView {
   repeatLabel: string | null;
   /** Story 5 : la série (première fois et répétition), pour le fichier .ics ; sinon `null`. */
   series: PlanSeries | null;
+  /** Lieu enregistré du plan (`null` : appel, ou lieu écrit à la main). */
+  placeId: string | null;
+  /** Story 6 : quand partir pour y être (seulement mes prochains plans en personne). */
+  leaveBy?: LeaveByView;
 }
 
 export interface PlanSeries {
@@ -233,6 +238,7 @@ export function buildPlanViews(
               firstEndsAt: p.ends_at,
             }
           : null,
+        placeId: p.place_id,
       };
     })
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));

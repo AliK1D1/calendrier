@@ -1,18 +1,30 @@
 "use client";
 
-import { CalendarSearch, Clock, LayoutGrid, List, MapPin, Phone, Send } from "lucide-react";
-import { useId, useState, useTransition } from "react";
+import {
+  CalendarSearch,
+  Clock,
+  HelpCircle,
+  LayoutGrid,
+  List,
+  MapPin,
+  Phone,
+  Send,
+} from "lucide-react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { GroupMember } from "@/lib/groups/queries";
 import {
+  type AlmostView,
+  type CompromiseView,
   DEFAULT_BUFFER_MINUTES,
   MAX_BUFFER_MINUTES,
   MEETUP_DURATIONS,
   type MeetupDuration,
   type MeetupSearchView,
   type ProposalView,
+  formatMinutesFr,
 } from "@/lib/meetups/search";
 import type { Result } from "@/lib/places/validation";
 import { MEETUP_PERIOD_LABELS, MEETUP_PERIODS, type MeetupPeriod } from "@/lib/scheduling/period";
@@ -44,11 +56,27 @@ const DURATION_LABELS: Record<MeetupDuration, string> = {
 };
 
 /** « 75 » → « 1 h 15 ». */
-function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, "0")}`;
+const formatDuration = formatMinutesFr;
+
+/** Moment visé par un compromis « Pourquoi pas ? » choisi : on le montre en premier. */
+interface Focus {
+  kind: "in-person" | "call";
+  /** Lieu attendu (`null` : n'importe lequel). */
+  placeId: string | null;
+  start: string;
+  end: string;
+  /** Ce qui a changé, affiché au-dessus du moment (ex. « Durée réduite à 45 min »). */
+  label: string;
+}
+
+/** Vrai si la proposition correspond au moment visé (même type, même lieu, chevauchement). */
+function matchesFocus(p: ProposalView, f: Focus): boolean {
+  return (
+    p.kind === f.kind &&
+    (f.placeId === null || p.placeId === f.placeId) &&
+    p.start < f.end &&
+    p.end > f.start
+  );
 }
 
 export function MeetupFinder({
@@ -61,38 +89,102 @@ export function MeetupFinder({
   const formId = useId();
   const [selected, setSelected] = useState<string[]>(members.map((m) => m.userId));
   const [period, setPeriod] = useState<MeetupPeriod>("this-week");
-  const [duration, setDuration] = useState<MeetupDuration>(60);
+  const [duration, setDuration] = useState<number>(60);
   const [buffer, setBuffer] = useState(String(DEFAULT_BUFFER_MINUTES));
   const [view, setView] = useState<MeetupSearchView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"liste" | "grille">("liste");
   const [pending, startTransition] = useTransition();
   const [resultKey, setResultKey] = useState(0);
+  const [focus, setFocus] = useState<Focus | null>(null);
 
   function toggle(id: string) {
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   }
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  function run(
+    params: { participantIds: string[]; durationMinutes: number },
+    nextFocus: Focus | null,
+  ) {
     setError(null);
     startTransition(async () => {
       const r = await search({
         groupId,
-        participantIds: selected,
+        participantIds: params.participantIds,
         period,
-        durationMinutes: duration,
+        durationMinutes: params.durationMinutes,
         bufferMinutes: Number(buffer),
       });
       if (r.ok) {
         setView(r.value);
+        setFocus(nextFocus);
         setResultKey((k) => k + 1);
       } else {
         setView(null);
+        setFocus(null);
         setError(r.error);
       }
     });
   }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    run({ participantIds: selected, durationMinutes: duration }, null);
+  }
+
+  /**
+   * Compromis « Pourquoi pas ? » : on change le formulaire en conséquence et on relance la
+   * recherche ; le moment obtenu s'affiche en premier, prêt à proposer au groupe.
+   */
+  function applyCompromise(a: AlmostView, c: CompromiseView) {
+    if (c.kind === "call") {
+      setFocus({ kind: "call", placeId: null, start: c.start, end: c.end, label: "Appel" });
+      return;
+    }
+    if (c.kind === "shorten") {
+      setDuration(c.durationMinutes);
+      run(
+        { participantIds: selected, durationMinutes: c.durationMinutes },
+        {
+          kind: "in-person",
+          placeId: a.placeId,
+          start: a.start,
+          end: a.end,
+          label: `Durée réduite à ${formatDuration(c.durationMinutes)}`,
+        },
+      );
+      return;
+    }
+    if (c.kind === "without") {
+      const next = selected.filter((id) => id !== c.personId);
+      setSelected(next);
+      run(
+        { participantIds: next, durationMinutes: duration },
+        {
+          kind: "in-person",
+          placeId: a.placeId,
+          start: c.start,
+          end: c.end,
+          label: `Sans ${c.name}`,
+        },
+      );
+      return;
+    }
+    run(
+      { participantIds: selected, durationMinutes: duration },
+      {
+        kind: "in-person",
+        placeId: c.placeId,
+        start: c.start,
+        end: c.end,
+        label: `À ${c.placeName}`,
+      },
+    );
+  }
+
+  const durations: number[] = MEETUP_DURATIONS.includes(duration as MeetupDuration)
+    ? [...MEETUP_DURATIONS]
+    : [...MEETUP_DURATIONS, duration].sort((a, b) => a - b);
 
   return (
     <section aria-labelledby="se-voir" className="flex flex-col gap-4">
@@ -156,12 +248,12 @@ export function MeetupFinder({
             Au moins
             <select
               value={duration}
-              onChange={(e) => setDuration(Number(e.target.value) as MeetupDuration)}
+              onChange={(e) => setDuration(Number(e.target.value))}
               className="border-input bg-card h-11 rounded-md border px-3 text-base font-normal"
             >
-              {MEETUP_DURATIONS.map((d) => (
+              {durations.map((d) => (
                 <option key={d} value={d}>
-                  {DURATION_LABELS[d]}
+                  {DURATION_LABELS[d as MeetupDuration] ?? formatDuration(d)}
                 </option>
               ))}
             </select>
@@ -208,6 +300,9 @@ export function MeetupFinder({
           view={view}
           mode={mode}
           onMode={setMode}
+          focus={focus}
+          pending={pending}
+          onCompromise={applyCompromise}
           onPropose={
             onPropose
               ? (p) =>
@@ -227,17 +322,28 @@ function MeetupResults({
   view,
   mode,
   onMode,
+  focus,
+  pending,
+  onCompromise,
   onPropose,
 }: {
   view: MeetupSearchView;
   mode: "liste" | "grille";
   onMode: (m: "liste" | "grille") => void;
+  focus: Focus | null;
+  pending: boolean;
+  onCompromise: (a: AlmostView, c: CompromiseView) => void;
   onPropose?: (p: ProposalView) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const enough = view.participants.length >= 2;
   const nothing = view.inPerson.length === 0;
   const firstCall = [...view.calls].sort((a, b) => a.start.localeCompare(b.start))[0];
+  const focused = focus
+    ? (focus.kind === "call" ? view.calls : view.inPerson).find((p) => matchesFocus(p, focus))
+    : undefined;
+  const inPerson = focused ? view.inPerson.filter((p) => p !== focused) : view.inPerson;
+  const calls = focused ? view.calls.filter((p) => p !== focused) : view.calls;
 
   return (
     <div className="flex flex-col gap-3" aria-live="polite">
@@ -291,7 +397,24 @@ function MeetupResults({
             <AvailabilityGridView view={view} />
           ) : (
             <>
-              {nothing && (
+              {focus && !focused && (
+                <p
+                  role="status"
+                  className="border-warning/60 bg-warning/15 rounded-md border p-3 text-sm"
+                >
+                  Ce compromis ne donne finalement pas de moment (l&apos;horaire a peut-être changé
+                  entre-temps).
+                </p>
+              )}
+              {focused && focus && (
+                <div className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold">Avec ton compromis : {focus.label}</h3>
+                  <ol className="flex flex-col gap-3">
+                    <ProposalCard p={focused} onPropose={onPropose} highlight />
+                  </ol>
+                </div>
+              )}
+              {nothing && !focused && view.almost.length === 0 && (
                 <p role="status" className="rounded-md border p-3 text-sm">
                   Pas de moment réaliste en personne sur cette période
                   {firstCall
@@ -299,23 +422,26 @@ function MeetupResults({
                     : ", et pas de trou commun assez long pour un appel. Essaie une durée plus courte ou l'autre semaine."}
                 </p>
               )}
+              {nothing && !focused && view.almost.length > 0 && (
+                <WhyNot almost={view.almost} pending={pending} onCompromise={onCompromise} />
+              )}
               <ol className="flex flex-col gap-3">
-                {(showAll ? view.inPerson : view.inPerson.slice(0, FIRST_CARDS)).map((p) => (
+                {(showAll ? inPerson : inPerson.slice(0, FIRST_CARDS)).map((p) => (
                   <ProposalCard key={p.key} p={p} onPropose={onPropose} />
                 ))}
               </ol>
-              {!showAll && view.inPerson.length > FIRST_CARDS && (
+              {!showAll && inPerson.length > FIRST_CARDS && (
                 <Button type="button" variant="outline" onClick={() => setShowAll(true)}>
-                  Voir les {view.inPerson.length} propositions
+                  Voir les {inPerson.length} propositions
                 </Button>
               )}
-              {view.calls.length > 0 && (
+              {calls.length > 0 && (
                 <>
                   <h3 className="mt-2 text-sm font-semibold">
                     {nothing ? "Appels possibles" : "Les autres jours, un appel"}
                   </h3>
                   <ol className="flex flex-col gap-3">
-                    {view.calls.map((p) => (
+                    {calls.map((p) => (
                       <ProposalCard key={p.key} p={p} onPropose={onPropose} />
                     ))}
                   </ol>
@@ -329,16 +455,93 @@ function MeetupResults({
   );
 }
 
+/**
+ * « Pourquoi pas ? » (story 4) : aucun moment en personne, mais des moments presque assez
+ * longs. Pour chacun : qui le coupe et pourquoi, puis les compromis (le plus petit d'abord).
+ */
+function WhyNot({
+  almost,
+  pending,
+  onCompromise,
+}: {
+  almost: AlmostView[];
+  pending: boolean;
+  onCompromise: (a: AlmostView, c: CompromiseView) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <p role="status" className="rounded-md border p-3 text-sm">
+        Pas de moment assez long en personne sur cette période. Voici ce qui passe presque, et ce
+        qui le débloquerait.
+      </p>
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+        <HelpCircle className="size-4" aria-hidden /> Pourquoi pas ?
+      </h3>
+      <ol className="flex flex-col gap-3">
+        {almost.map((a) => (
+          <li
+            key={a.key}
+            className="bg-card flex flex-col gap-2 rounded-lg border border-dashed p-4"
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <p className="font-semibold first-letter:uppercase">{a.dayLabel}</p>
+              <p className="tabular-nums">{a.timeLabel}</p>
+            </div>
+            <p className="flex items-center gap-1.5 text-sm">
+              <MapPin className="size-4" aria-hidden /> {a.placeName}
+              <Badge variant="outline" className="ml-auto">
+                <Clock aria-hidden /> Il manque {formatDuration(a.missingMinutes)}
+              </Badge>
+            </p>
+            <p className="text-sm">{a.sentence}</p>
+            {a.compromises.length > 0 ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {a.compromises.map((c, i) => (
+                  <Button
+                    key={`${c.kind}-${i}`}
+                    type="button"
+                    variant={i === 0 ? "default" : "outline"}
+                    disabled={pending}
+                    onClick={() => onCompromise(a, c)}
+                    className="h-auto min-h-11 whitespace-normal"
+                  >
+                    {c.label}
+                    {i === 0 && <span className="sr-only"> (le plus simple)</span>}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Aucun petit compromis ne suffit pour ce moment.
+              </p>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function ProposalCard({
   p,
   onPropose,
+  highlight = false,
 }: {
   p: ProposalView;
   onPropose?: (p: ProposalView) => void;
+  /** Moment obtenu par un compromis : mis en évidence et amené à l'écran. */
+  highlight?: boolean;
 }) {
   const call = p.kind === "call";
+  const ref = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (highlight) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [highlight]);
   return (
-    <li className="bg-card flex flex-col gap-2 rounded-lg border p-4">
+    <li
+      ref={ref}
+      className={`bg-card flex flex-col gap-2 rounded-lg border p-4 ${highlight ? "border-primary ring-primary/30 ring-2" : ""}`}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <p className="font-semibold first-letter:uppercase">{p.dayLabel}</p>
         <p className="tabular-nums">{p.timeLabel}</p>

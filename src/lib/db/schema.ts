@@ -251,11 +251,11 @@ export const busyBlocks = pgTable(
       "busy_blocks_repeat_shape",
       sql`(${t.repeat_unit} is null and ${t.repeat_every} = 1) or (${t.repeat_unit} is not null and ((${t.repeat_unit} = 'week' and ${t.weekday} is not null and ${t.valid_from} is not null) or (${t.repeat_unit} in ('day', 'month', 'year') and ${t.weekday} is null and ${t.valid_from} is not null)))`,
     ),
-    // Seuls les blocs saisis à la main ont une répétition personnalisée (pas les séances
-    // d'étude, les plans acceptés, Outlook ni l'import .ics).
+    // Seuls les blocs saisis à la main et les plans récurrents acceptés (story 5) ont une
+    // répétition personnalisée (pas les séances d'étude, Outlook ni l'import .ics).
     check(
       "busy_blocks_repeat_manual",
-      sql`${t.repeat_unit} is null or ${t.source}::text = 'manual'`,
+      sql`${t.repeat_unit} is null or ${t.source}::text in ('manual', 'meetup')`,
     ),
   ],
 );
@@ -327,6 +327,14 @@ export const meetupPlans = pgTable(
     starts_at: timestamp("starts_at", { withTimezone: true, mode: "string" }).notNull(),
     ends_at: timestamp("ends_at", { withTimezone: true, mode: "string" }).notNull(),
     status: planStatusEnum("status").notNull().default("proposed"),
+    /**
+     * Story 5 : plan récurrent (« tous les `repeat_every` `repeat_unit` »), créé par
+     * `propose_recurring_meetup`. `starts_at` / `ends_at` = la première fois. `repeat_until` :
+     * dernier jour possible (heure locale), nul = sans fin. `repeat_unit` nul = une seule fois.
+     */
+    repeat_unit: text("repeat_unit", { enum: ["day", "week", "month", "year"] }),
+    repeat_every: smallint("repeat_every").notNull().default(1),
+    repeat_until: date("repeat_until", { mode: "string" }),
     created_by: uuid("created_by")
       .notNull()
       .default(sql`auth.uid()`)
@@ -346,6 +354,11 @@ export const meetupPlans = pgTable(
       sql`${t.location} !~ '[\\x01-\\x08\\x0b-\\x1f\\x7f-\\x9f]'`,
     ),
     check("meetup_plans_max_duration", sql`${t.ends_at} - ${t.starts_at} <= interval '12 hours'`),
+    check("meetup_plans_repeat_every_range", sql`${t.repeat_every} between 1 and 99`),
+    check(
+      "meetup_plans_repeat_shape",
+      sql`(${t.repeat_unit} is null and ${t.repeat_every} = 1 and ${t.repeat_until} is null) or (${t.repeat_unit} is not null and ${t.repeat_unit} in ('day', 'week', 'month', 'year'))`,
+    ),
   ],
 );
 

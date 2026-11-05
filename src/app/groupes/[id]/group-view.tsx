@@ -8,6 +8,7 @@ import {
   MapPin,
   Plus,
   RefreshCw,
+  Repeat,
   Share2,
   Trash2,
   UserMinus,
@@ -131,6 +132,20 @@ export function GroupView(props: Props) {
       placeId: favorites[0]?.id ?? null,
       location: "",
       inviteeIds: null,
+    });
+  }
+
+  /** Story 5 : activité qui revient (ex. le gym tous les soirs), proposée une seule fois. */
+  function proposeRecurring() {
+    setExtraPlace(null);
+    setProposeDraft({
+      title: "",
+      ...defaultFreeSlot(new Date()),
+      durationMinutes: 90,
+      placeId: favorites[0]?.id ?? null,
+      location: "",
+      inviteeIds: null,
+      repeat: { unit: "day", every: 1, until: null },
     });
   }
 
@@ -295,9 +310,14 @@ export function GroupView(props: Props) {
               <h2 id="propositions" className="scroll-mt-16 text-lg font-semibold">
                 Propositions
               </h2>
-              <Button type="button" variant="outline" size="sm" onClick={proposeFree}>
-                <Plus /> Proposer un moment
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={proposeFree}>
+                  <Plus /> Proposer un moment
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={proposeRecurring}>
+                  <Repeat /> Activité régulière
+                </Button>
+              </div>
             </div>
             {props.plansError ? (
               <p

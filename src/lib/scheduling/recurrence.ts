@@ -233,3 +233,38 @@ export function describeRepeat(rule: Omit<RepeatRule, "weekday">): string {
   }
   return base;
 }
+
+/**
+ * Story 5 : jour de la première occurrence qui tombe le jour `from` ou après (l'ancrage si
+ * `from` le précède), ou `null` si elle dépasse `until` (dernier jour permis, inclus).
+ * Semaines : le jour de semaine de l'ancrage (une seule journée par semaine).
+ */
+export function nextOccurrence(
+  rule: Omit<RepeatRule, "weekday">,
+  from: string,
+  until: string | null = null,
+): string | null {
+  assertRule(rule);
+  const a = ymd(rule.anchor);
+  const f = ymd(from);
+  const aN = dayNumber(a);
+  const fN = dayNumber(f);
+  let day: string;
+  if (fN <= aN) {
+    day = rule.anchor;
+  } else if (rule.unit === "day" || rule.unit === "week") {
+    const step = rule.unit === "day" ? rule.every : rule.every * 7;
+    day = fromDayNumber(aN + Math.ceil((fN - aN) / step) * step);
+  } else {
+    // La période k0 tombe dans le mois (ou l'année) de `from` ou avant ; k0 + 1 tombe après.
+    const elapsed = rule.unit === "month" ? (f.y - a.y) * 12 + (f.m - a.m) : f.y - a.y;
+    const k0 = Math.floor(elapsed / rule.every);
+    const candidate = periodDay(rule, k0);
+    day = candidate >= from ? candidate : periodDay(rule, k0 + 1);
+  }
+  if (until !== null) {
+    assertDay(until);
+    if (day > until) return null;
+  }
+  return day;
+}

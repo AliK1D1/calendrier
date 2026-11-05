@@ -127,6 +127,13 @@
       "when": 1793885482225,
       "tag": "0017_subscribed_calendars",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793907377564,
+      "tag": "0018_story5_recurring_plans",
+      "breakpoints": true
     }
   ]
 }

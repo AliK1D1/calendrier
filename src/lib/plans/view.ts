@@ -4,8 +4,14 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { frCA } from "date-fns/locale";
 
-import { parseClock, formatClockFr } from "@/lib/scheduling/weeklyBlocks";
-import { TIME_ZONE } from "@/lib/scheduling/time";
+import {
+  describeEvery,
+  describeRepeat,
+  nextOccurrence,
+  type RepeatUnit,
+} from "@/lib/scheduling/recurrence";
+import { parseClock, formatClockFr, shiftDay } from "@/lib/scheduling/weeklyBlocks";
+import { addMinutesTo, TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
 
 import { PLAN_FALLBACK_TITLE } from "./validation";
 
@@ -21,6 +27,10 @@ export interface PlanRow {
   status: "proposed" | "confirmed" | "cancelled";
   created_by: string;
   created_at: string;
+  /** Story 5 (migration 0018) : répétition ; nulle ou absente = une seule fois. */
+  repeat_unit?: RepeatUnit | null;
+  repeat_every?: number | null;
+  repeat_until?: string | null;
 }
 
 export interface PlanVoteInput {
@@ -43,7 +53,7 @@ export interface PlanView {
   groupId: string;
   groupName: string;
   title: string;
-  /** « mardi 16 mars » */
+  /** « mardi 16 mars » (plan récurrent : la prochaine fois). */
   dayLabel: string;
   /** « 18 h – 20 h » */
   timeLabel: string;
@@ -62,6 +72,21 @@ export interface PlanView {
   waiting: string[];
   /** Tout le groupe était invité. */
   wholeGroup: boolean;
+  /**
+   * Story 5 : répétition en mots (« Tous les 2 jours », « Chaque semaine, le mardi, jusqu'au
+   * 30 juin 2027 »), `null` pour un plan d'une seule fois.
+   */
+  repeatLabel: string | null;
+  /** Story 5 : la série (première fois et répétition), pour le fichier .ics ; sinon `null`. */
+  series: PlanSeries | null;
+}
+
+export interface PlanSeries {
+  unit: RepeatUnit;
+  every: number;
+  until: string | null;
+  firstStartsAt: string;
+  firstEndsAt: string;
 }
 
 export interface PlanContext {
@@ -74,12 +99,75 @@ export interface PlanContext {
   groupMembers: ReadonlyMap<string, readonly string[]>;
 }
 
+const WEEKDAY_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+
+/** Fait commencer une phrase par une majuscule. */
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Répétition d'un plan en mots, ou `null` (une seule fois). */
+export function planRepeatLabel(
+  p: Pick<PlanRow, "starts_at" | "repeat_unit" | "repeat_every" | "repeat_until">,
+): string | null {
+  if (!p.repeat_unit) return null;
+  const every = p.repeat_every ?? 1;
+  const anchor = formatInTimeZone(new Date(p.starts_at), TIME_ZONE, "yyyy-MM-dd");
+  let label: string;
+  if (p.repeat_unit === "week") {
+    const weekday = Number(formatInTimeZone(new Date(p.starts_at), TIME_ZONE, "i"));
+    label = `${describeEvery(every, "week")}, le ${WEEKDAY_FR[weekday - 1]}`;
+  } else {
+    label = describeRepeat({ unit: p.repeat_unit, every, anchor });
+  }
+  if (p.repeat_until) {
+    const until = formatInTimeZone(zonedTime(p.repeat_until, "12:00"), TIME_ZONE, "d MMMM yyyy", {
+      locale: frCA,
+    });
+    label += `, jusqu'au ${until}`;
+  }
+  return capitalize(label);
+}
+
+/**
+ * Prochaine fois d'un plan (story 5) à l'instant `now` : la première occurrence qui n'est pas
+ * finie, aux mêmes heures locales que la première fois. Plan d'une seule fois : lui-même, ou
+ * `null` s'il est fini. Plan récurrent : `null` si la série est finie (après `repeat_until`).
+ */
+export function nextPlanOccurrence(
+  p: Pick<PlanRow, "starts_at" | "ends_at" | "repeat_unit" | "repeat_every" | "repeat_until">,
+  now: Date,
+): { start: Date; end: Date } | null {
+  const first = { start: new Date(p.starts_at), end: new Date(p.ends_at) };
+  if (!p.repeat_unit) return first.end > now ? first : null;
+  const minutes = Math.round((first.end.getTime() - first.start.getTime()) / 60_000);
+  const rule = {
+    unit: p.repeat_unit,
+    every: p.repeat_every ?? 1,
+    anchor: formatInTimeZone(first.start, TIME_ZONE, "yyyy-MM-dd"),
+  };
+  const startClock = formatInTimeZone(first.start, TIME_ZONE, "HH:mm");
+  const until = p.repeat_until ?? null;
+  // Un plan finit au plus tard à minuit : celle d'hier est finie. On part donc d'aujourd'hui,
+  // puis du lendemain si celle d'aujourd'hui est finie.
+  let from = formatInTimeZone(now, TIME_ZONE, "yyyy-MM-dd");
+  for (let tries = 0; tries < 2; tries += 1) {
+    const day = nextOccurrence(rule, from, until);
+    if (day === null) return null;
+    const start = zonedTime(day, startClock);
+    const end = addMinutesTo(start, minutes);
+    if (end > now) return { start, end };
+    from = shiftDay(day, 1);
+  }
+  return null;
+}
+
 function clock(instant: Date): string {
   const m = parseClock(formatInTimeZone(instant, TIME_ZONE, "HH:mm"));
   return m === null ? "" : formatClockFr(m);
 }
 
-/** Construit les vues des plans (triés par début). */
+/** Construit les vues des plans (triés par début ; plan récurrent : par sa prochaine fois). */
 export function buildPlanViews(
   plans: readonly PlanRow[],
   invitees: readonly PlanInviteeInput[],
@@ -93,11 +181,12 @@ export function buildPlanViews(
   const voteOf = new Map<string, "yes" | "no" | "maybe">();
   for (const v of votes) voteOf.set(`${v.plan_id}:${v.user_id}`, v.vote);
 
-  return [...plans]
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
-    .map((p) => {
-      const start = new Date(p.starts_at);
-      const end = new Date(p.ends_at);
+  return plans
+    .map((p): PlanView => {
+      const next = p.status === "cancelled" ? null : nextPlanOccurrence(p, ctx.now);
+      // Plan fini ou annulé : on montre la première fois (série) ou le plan lui-même.
+      const start = next?.start ?? new Date(p.starts_at);
+      const end = next?.end ?? new Date(p.ends_at);
       const people = invitedBy.get(p.id) ?? [];
       const accepted: string[] = [];
       const declined: string[] = [];
@@ -111,7 +200,7 @@ export function buildPlanViews(
       const mine = voteOf.get(`${p.id}:${ctx.myId}`);
       const members = ctx.groupMembers.get(p.group_id) ?? [];
       const state: PlanState =
-        p.status === "cancelled" ? "cancelled" : end <= ctx.now ? "past" : "upcoming";
+        p.status === "cancelled" ? "cancelled" : next === null ? "past" : "upcoming";
       const placeName = p.place_id ? ctx.placeNames.get(p.place_id) : undefined;
       const endLabel =
         formatInTimeZone(end, TIME_ZONE, "HH:mm") === "00:00" ? "minuit" : clock(end);
@@ -122,8 +211,8 @@ export function buildPlanViews(
         title: p.title.trim() || PLAN_FALLBACK_TITLE,
         dayLabel: formatInTimeZone(start, TIME_ZONE, "EEEE d MMMM", { locale: frCA }),
         timeLabel: `${clock(start)} – ${endLabel}`,
-        startsAt: p.starts_at,
-        endsAt: p.ends_at,
+        startsAt: start.toISOString(),
+        endsAt: end.toISOString(),
         where: placeName || p.location.trim() || (p.place_id ? "Lieu" : "Lieu à préciser"),
         creatorName: name(p.created_by),
         isMine: p.created_by === ctx.myId,
@@ -134,8 +223,19 @@ export function buildPlanViews(
         declined,
         waiting,
         wholeGroup: members.length > 0 && members.every((m) => people.includes(m)),
+        repeatLabel: planRepeatLabel(p),
+        series: p.repeat_unit
+          ? {
+              unit: p.repeat_unit,
+              every: p.repeat_every ?? 1,
+              until: p.repeat_until ?? null,
+              firstStartsAt: p.starts_at,
+              firstEndsAt: p.ends_at,
+            }
+          : null,
       };
-    });
+    })
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
 
 /** Plans qui attendent ma réponse (badge de l'en-tête). */
@@ -166,15 +266,14 @@ export function groupPlans(views: readonly PlanView[]): {
 
 /**
  * Nombre de plans qui attendent ma réponse, à partir de mes invitations (plan encore proposé
- * et pas fini, sans être le créateur) et de mes réponses.
+ * et pas fini, série récurrente pas finie, sans être le créateur) et de mes réponses.
  */
 export function countAwaiting(
-  myInvitations: readonly {
+  myInvitations: readonly ({
     plan_id: string;
     created_by: string;
     status: string;
-    ends_at: string;
-  }[],
+  } & Pick<PlanRow, "starts_at" | "ends_at" | "repeat_unit" | "repeat_every" | "repeat_until">)[],
   myVotes: readonly { plan_id: string }[],
   myId: string,
   now: Date,
@@ -183,7 +282,7 @@ export function countAwaiting(
   return myInvitations.filter(
     (i) =>
       i.status === "proposed" &&
-      new Date(i.ends_at) > now &&
+      nextPlanOccurrence(i, now) !== null &&
       i.created_by !== myId &&
       !answered.has(i.plan_id),
   ).length;

@@ -35,6 +35,7 @@ describe("validatePropose", () => {
         placeId: null,
         location: "",
         inviteeIds: null,
+        repeat: null,
       },
     });
   });
@@ -209,12 +210,14 @@ describe("buildPlanViews / groupPlans", () => {
   });
 
   it("countAwaiting : invitations proposées, à venir, sans réponse, pas les miennes", () => {
+    const at = { starts_at: "2027-03-16T22:00:00Z", ends_at: "2027-03-17T00:00:00Z" };
+    const passed = { starts_at: "2027-02-28T22:00:00Z", ends_at: "2027-03-01T00:00:00Z" };
     const inv = [
-      { plan_id: "a", created_by: A, status: "proposed", ends_at: "2027-03-17T00:00:00Z" },
-      { plan_id: "b", created_by: A, status: "proposed", ends_at: "2027-03-17T00:00:00Z" },
-      { plan_id: "c", created_by: B, status: "proposed", ends_at: "2027-03-17T00:00:00Z" },
-      { plan_id: "d", created_by: A, status: "cancelled", ends_at: "2027-03-17T00:00:00Z" },
-      { plan_id: "e", created_by: A, status: "proposed", ends_at: "2027-03-01T00:00:00Z" },
+      { plan_id: "a", created_by: A, status: "proposed", ...at },
+      { plan_id: "b", created_by: A, status: "proposed", ...at },
+      { plan_id: "c", created_by: B, status: "proposed", ...at },
+      { plan_id: "d", created_by: A, status: "cancelled", ...at },
+      { plan_id: "e", created_by: A, status: "proposed", ...passed },
     ];
     expect(countAwaiting(inv, [{ plan_id: "b" }], B, NOW)).toBe(1);
   });
@@ -274,6 +277,12 @@ describe("buildPlanIcs : titre piégé (revue)", () => {
       "SUMMARY",
       "LOCATION",
       "DESCRIPTION",
+      // Notre rappel (story 5), avec le titre piégé échappé dans sa DESCRIPTION.
+      "BEGIN",
+      "ACTION",
+      "DESCRIPTION",
+      "TRIGGER",
+      "END",
       "END",
       "END",
     ]);

@@ -86,11 +86,26 @@ function requestOnce(
   deadline: number,
   maxBytes: number,
 ): Promise<RawResponse> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolveOnce, rejectOnce) => {
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
     const remaining = deadline - Date.now();
-    if (remaining <= 0) return reject(new FeedError(UNAVAILABLE, "unavailable"));
+    if (remaining <= 0) return rejectOnce(new FeedError(UNAVAILABLE, "unavailable"));
+    // Revue abonnements 1 : `timeout` de node ne compte que l'attente entre deux morceaux.
+    // Un serveur qui envoie un octet de temps en temps gardait la requête ouverte bien après
+    // 10 s (jusqu'à ce que Vercel coupe la fonction). Ce minuteur coupe tout au délai total.
+    const timer = setTimeout(() => {
+      req.destroy();
+      rejectOnce(new FeedError(UNAVAILABLE, "unavailable"));
+    }, remaining);
+    const resolve = (r: RawResponse) => {
+      clearTimeout(timer);
+      resolveOnce(r);
+    };
+    const reject = (e: unknown) => {
+      clearTimeout(timer);
+      rejectOnce(e);
+    };
     const req = lib.request(
       u,
       {

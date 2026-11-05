@@ -345,7 +345,9 @@ export function ScheduleEditor({
     (b) => b.source === "outlook" && (b.validFrom ?? "") >= today,
   ).length;
   const once = blocks
-    .filter((b) => b.weekday == null && b.source !== "outlook" && (b.validFrom ?? "") >= today)
+    // Revue récurrence 3 : un bloc « tous les X jours / mois / ans » n'a pas de jour de semaine,
+    // mais il revient : il est déjà dans la liste du dessus.
+    .filter((b) => !isRecurring(b) && b.source !== "outlook" && (b.validFrom ?? "") >= today)
     .sort(
       (a, b) =>
         (a.validFrom ?? "").localeCompare(b.validFrom ?? "") || a.startMinute - b.startMinute,

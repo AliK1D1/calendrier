@@ -69,6 +69,18 @@
   --border: oklch(0.915 0.008 255);
   --input: oklch(0.87 0.01 255);
   --ring: oklch(0.49 0.13 258);
+  /*
+   * Une teinte par jour de la semaine (lun. = 1) pour la grille de l'horaire : fond très pâle
+   * de la colonne et trait en haut du jour. Même clarté pour toutes, pour qu'aucun jour ne
+   * ressorte plus qu'un autre.
+   */
+  --jour-1: oklch(0.6 0.13 255);
+  --jour-2: oklch(0.6 0.12 165);
+  --jour-3: oklch(0.6 0.14 300);
+  --jour-4: oklch(0.6 0.13 70);
+  --jour-5: oklch(0.6 0.15 25);
+  --jour-6: oklch(0.6 0.1 210);
+  --jour-7: oklch(0.6 0.14 345);
   --gouttiere: 1rem;
   /* Hauteur de la barre d'onglets du bas (téléphone), sans la zone du geste d'accueil. */
   --barre-onglets: 3.75rem;
@@ -116,6 +128,13 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 16%);
     --ring: oklch(0.74 0.11 258);
+    --jour-1: oklch(0.72 0.12 255);
+    --jour-2: oklch(0.72 0.11 165);
+    --jour-3: oklch(0.72 0.13 300);
+    --jour-4: oklch(0.74 0.12 70);
+    --jour-5: oklch(0.72 0.13 25);
+    --jour-6: oklch(0.72 0.09 210);
+    --jour-7: oklch(0.72 0.13 345);
   }
 }
 

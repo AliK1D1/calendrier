@@ -9,6 +9,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { asUser, FAKE_SUPABASE } from "./pgliteHarness";
 
+// Insère environ 1000 lignes dans PGlite : lent quand toute la suite tourne en parallèle.
+const LONG_DB_TEST_MS = 30_000;
+
 const ROOT = join(__dirname, "../../../..");
 const SETUP_SQL = readFileSync(join(ROOT, "supabase/setup.sql"), "utf8");
 const MIGRATION_0009 = readFileSync(join(ROOT, "supabase/migration-0009.sql"), "utf8");
@@ -326,17 +329,23 @@ describe("Segment 12 : proposer un moment", () => {
     await propose(B);
   });
 
-  it("limite de 1000 blocs : accepter échoue avec un message clair, rien n'est enregistré", async () => {
-    const plan = await propose(A);
-    await db.query(
-      `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, valid_from)
+  it(
+    "limite de 1000 blocs : accepter échoue avec un message clair, rien n'est enregistré",
+    async () => {
+      const plan = await propose(A);
+      await db.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, valid_from)
        SELECT $1, 'b', '08:00', '09:00', '2030-01-01'::date + i FROM generate_series(1, 1000) i`,
-      [B],
-    );
-    await expect(respond(B, plan, true)).rejects.toThrow(/Trop de blocs/);
-    expect(await meetupBlocks(B)).toEqual([]);
-    expect(await as(B, () => rows("SELECT * FROM plan_votes WHERE user_id = $1", [B]))).toEqual([]);
-  });
+        [B],
+      );
+      await expect(respond(B, plan, true)).rejects.toThrow(/Trop de blocs/);
+      expect(await meetupBlocks(B)).toEqual([]);
+      expect(await as(B, () => rows("SELECT * FROM plan_votes WHERE user_id = $1", [B]))).toEqual(
+        [],
+      );
+    },
+    LONG_DB_TEST_MS,
+  );
 
   it("quitter le groupe retire ses réponses et les blocs de ses plans", async () => {
     const plan = await propose(A);

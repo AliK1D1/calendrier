@@ -150,20 +150,38 @@ export async function explainNoMeetup(
 
     // Disponibilités de chacun à chaque lieu, puis moment commun à tous.
     const byPlace: Array<{ place: Place; own: PlaceAvailability[][]; shared: Shared[] }> = [];
+    // Revue « Pourquoi pas ? » 1 : on s'arrête dès que les premières personnes n'ont plus
+    // aucun moment commun d'au moins `min * almostRatio` à ce lieu. Ajouter une personne ne
+    // fait que raccourcir les moments communs : ce lieu ne peut donc être ni « presque », ni
+    // un « autre lieu » (qui demande `min`). Le résultat est le même, sans calculer les
+    // trajets et les disponibilités des autres (20 personnes × 80 lieux × 7 jours).
+    const floor = min * almostRatio;
     for (const place of candidates) {
       const own: PlaceAvailability[][] = [];
+      let running: Shared[] | null = null;
+      let hopeless = false;
       for (let k = 0; k < participants.length; k++) {
-        own.push(
-          await availabilitiesAtPlace(
-            participants[k],
-            windowsByPerson[k],
-            place,
-            placeById,
-            request.bufferMinutes,
-            travel,
-          ),
+        const mine = await availabilitiesAtPlace(
+          participants[k],
+          windowsByPerson[k],
+          place,
+          placeById,
+          request.bufferMinutes,
+          travel,
         );
+        own.push(mine);
+        const asShared = mine.map((a) => ({
+          start: a.start,
+          end: a.end,
+          legs: { [a.personId]: a.leg },
+        }));
+        running = running === null ? asShared : intersectIntervals(running, asShared);
+        if (!running.some((s) => minutesBetween(s.start, s.end) >= floor)) {
+          hopeless = true;
+          break;
+        }
       }
+      if (hopeless) continue;
       byPlace.push({ place, own, shared: clip(intersectAll(own), notBefore) });
     }
 

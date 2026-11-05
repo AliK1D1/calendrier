@@ -34,6 +34,7 @@ import {
   type ScheduleLegend,
   scheduleLegend,
 } from "@/lib/ux/scheduleLegend";
+import { dayColorStyle } from "@/lib/ux/dayColors";
 
 import { BlockDialog, type BlockDraft } from "./block-dialog";
 import { IcsImport } from "./ics-import";
@@ -484,8 +485,10 @@ export function ScheduleEditor({
             type="button"
             aria-selected={day === activeDay}
             onClick={() => setSelectedDay(day)}
+            style={dayColorStyle(weekdayOf(day))}
             className={cn(
-              "flex flex-col items-center rounded-md border py-1.5 text-xs",
+              // Trait de la couleur du jour en haut de l'onglet.
+              "flex flex-col items-center rounded-md border border-t-[3px] border-t-(--jour) py-1.5 text-xs",
               day === activeDay && "border-primary bg-primary text-primary-foreground",
               day === today && day !== activeDay && "border-primary",
             )}
@@ -566,10 +569,13 @@ export function ScheduleEditor({
               <div
                 key={day}
                 className={cn("min-w-0 md:border-l", day !== activeDay && "hidden md:block")}
+                style={dayColorStyle(weekdayOf(day))}
               >
                 <div
                   className={cn(
-                    "flex h-8 items-center justify-center gap-1 text-xs md:h-10 md:flex-col md:gap-0",
+                    // Trait de la couleur du jour au-dessus de son nom.
+                    "flex h-8 items-center justify-center gap-1 border-t-[3px] border-t-(--jour) text-xs md:h-10 md:flex-col md:gap-0",
+                    "bg-[color-mix(in_oklab,var(--jour)_14%,transparent)]",
                     isToday && "text-primary font-semibold",
                   )}
                 >
@@ -582,7 +588,10 @@ export function ScheduleEditor({
                   aria-label={`${WEEKDAY_LONG[weekdayOf(day)]} ${dayLabel(day, "d MMMM")}`}
                   className={cn(
                     "relative h-[56rem] cursor-crosshair border-t",
-                    isToday && "bg-primary/5",
+                    // Fond très pâle de la couleur du jour ; aujourd'hui un peu plus marqué.
+                    isToday
+                      ? "bg-[color-mix(in_oklab,var(--jour)_13%,transparent)]"
+                      : "bg-[color-mix(in_oklab,var(--jour)_7%,transparent)] dark:bg-[color-mix(in_oklab,var(--jour)_9%,transparent)]",
                   )}
                   style={{
                     // Une ligne par heure, une ligne pâle par demi-heure.

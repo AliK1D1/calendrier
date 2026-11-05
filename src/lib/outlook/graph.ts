@@ -19,6 +19,11 @@ export interface OutlookCalendar {
   id: string;
   name: string;
   isDefault: boolean;
+  /**
+   * Calendrier en lecture seule (`canEdit` faux) : calendrier abonné (Internet, fêtes,
+   * sports…) ou partagé par quelqu'un d'autre. Mis en avant pour les calendriers abonnés.
+   */
+  readOnly: boolean;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -89,7 +94,7 @@ export async function listCalendars(
   const json = await graphGet(
     fetch,
     accessToken,
-    `${GRAPH_BASE}/me/calendars?$select=id,name,isDefaultCalendar&$top=100`,
+    `${GRAPH_BASE}/me/calendars?$select=id,name,isDefaultCalendar,canEdit&$top=100`,
   );
   const value = Array.isArray(json.value) ? json.value : [];
   const calendars: OutlookCalendar[] = [];
@@ -104,6 +109,7 @@ export async function listCalendars(
         255,
       ),
       isDefault: c.isDefaultCalendar === true,
+      readOnly: c.canEdit === false,
     });
   }
   return calendars.sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
@@ -119,12 +125,18 @@ export function parseGraphUtc(dateTime: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Un élément de `calendarView` → événement occupé, ou `null` (libre, annulé, illisible). */
-export function toBusyEvent(raw: unknown): ExternalBusyEvent | null {
+/**
+ * Un élément de `calendarView` → événement occupé, ou `null` (libre, annulé, illisible).
+ * `includeFree` (calendriers abonnés, story 3) : garder aussi les événements « Disponible »,
+ * la personne choisit elle-même s'ils comptent comme occupés.
+ */
+export function toBusyEvent(
+  raw: unknown,
+  options: { includeFree?: boolean } = {},
+): ExternalBusyEvent | null {
   if (!isRecord(raw)) return null;
-  if (!countsAsBusy(typeof raw.showAs === "string" ? raw.showAs : null, raw.isCancelled === true)) {
-    return null;
-  }
+  const showAs = options.includeFree ? null : typeof raw.showAs === "string" ? raw.showAs : null;
+  if (!countsAsBusy(showAs, raw.isCancelled === true)) return null;
   const start = isRecord(raw.start) ? raw.start : null;
   const end = isRecord(raw.end) ? raw.end : null;
   if (!start || !end) return null;
@@ -150,6 +162,7 @@ export async function getBusyEvents(
   accessToken: string,
   calendarId: string | null,
   range: { start: Date; end: Date },
+  options: { includeFree?: boolean } = {},
 ): Promise<{ events: ExternalBusyEvent[]; truncated: boolean }> {
   const base = calendarId
     ? `${GRAPH_BASE}/me/calendars/${encodeURIComponent(calendarId)}/calendarView`
@@ -165,7 +178,7 @@ export async function getBusyEvents(
   for (let page = 0; url && page < GRAPH_MAX_PAGES; page++) {
     const json = await graphGet(fetch, accessToken, url);
     for (const item of Array.isArray(json.value) ? json.value : []) {
-      const ev = toBusyEvent(item);
+      const ev = toBusyEvent(item, options);
       if (ev) events.push(ev);
     }
     const next = json["@odata.nextLink"];

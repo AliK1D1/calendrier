@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0016.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0017.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -131,6 +131,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0014.sql",
       "supabase/migration-0015.sql",
       "supabase/migration-0016.sql",
+      "supabase/migration-0017.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -286,13 +287,13 @@ describe("migrations (supabase/setup.sql)", () => {
       const { rows: policies } = await vide.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public'",
       );
-      expect(policies[0].n).toBe(36);
+      expect(policies[0].n).toBe(40);
     } finally {
       await vide.close();
     }
   }, 60_000);
 
-  it("s'applique sur une base vide et crée les 12 tables avec RLS activé", async () => {
+  it("s'applique sur une base vide et crée les 14 tables avec RLS activé", async () => {
     const tables = await rows<{ relname: string; relrowsecurity: boolean }>(
       `SELECT c.relname, c.relrowsecurity FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -301,6 +302,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(tables.map((t) => t.relname)).toEqual([
       "availability_slots",
       "busy_blocks",
+      "calendar_subscriptions",
       "deadlines",
       "group_members",
       "groups",
@@ -311,6 +313,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "plan_votes",
       "profiles",
       "study_preferences",
+      "subscription_events",
     ]);
     expect(tables.every((t) => t.relrowsecurity)).toBe(true);
   });
@@ -2548,4 +2551,227 @@ describe("Revue récurrence 2 : migration 0015 sur une vieille base avec un bloc
       await ancienne.close();
     }
   }, 60_000);
+});
+
+describe("Calendriers abonnés (migration 0017) : privés, occupé au choix, retrait", () => {
+  const F1 = "https://example.com/f1.ics";
+  const EVENTS = JSON.stringify([
+    { title: "GP du Mexique", start: "15:00", end: "17:00", weekday: null, from: "2026-11-08" },
+    {
+      title: "Essais libres",
+      start: "12:30",
+      end: "13:30",
+      weekday: 5,
+      from: "2026-11-06",
+      until: "2026-11-20",
+    },
+  ]);
+
+  async function subscribe(uid: string, busy: boolean, url = F1): Promise<string> {
+    const [{ id }] = await as(uid, () =>
+      rows<{ id: string }>(
+        "INSERT INTO calendar_subscriptions (owner_id, kind, name, url, counts_as_busy) VALUES ($1, 'ics', 'F1', $2, $3) RETURNING id",
+        [uid, url, busy],
+      ),
+    );
+    return id;
+  }
+
+  const busyRows = (uid: string) =>
+    as(uid, () =>
+      rows<{ title: string; weekday: number | null }>(
+        "SELECT title, weekday FROM busy_blocks WHERE source = 'subscription' ORDER BY valid_from",
+      ),
+    );
+
+  it("l'abonnement et ses événements ne sont visibles que par la personne", async () => {
+    const id = await subscribe(A, false);
+    await as(A, () =>
+      rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [id, EVENTS]),
+    );
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    expect(await as(A, () => rows("SELECT url FROM calendar_subscriptions"))).toEqual([
+      { url: F1 },
+    ]);
+    expect(
+      await as(A, () => rows("SELECT title FROM subscription_events ORDER BY valid_from")),
+    ).toEqual([{ title: "Essais libres" }, { title: "GP du Mexique" }]);
+    expect(await as(B, () => rows("SELECT * FROM calendar_subscriptions"))).toEqual([]);
+    expect(await as(B, () => rows("SELECT * FROM subscription_events"))).toEqual([]);
+    // B ne peut pas écrire les événements de A.
+    await expect(
+      as(B, () => rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [id, EVENTS])),
+    ).rejects.toThrow(/introuvable/);
+    await expect(as(null, () => rows("SELECT * FROM calendar_subscriptions"))).rejects.toThrow();
+  });
+
+  it("ne compte pas comme occupé : aucun bloc ; occupé : blocs « Occupé » pour le groupe", async () => {
+    const id = await subscribe(A, false);
+    await as(A, () =>
+      rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [id, EVENTS]),
+    );
+    expect(await busyRows(A)).toEqual([]);
+    await as(A, () => rows("SELECT public.set_subscription_busy($1, true)", [id]));
+    expect(await busyRows(A)).toEqual([
+      { title: "Essais libres", weekday: 5 },
+      { title: "GP du Mexique", weekday: null },
+    ]);
+    const g = await createGroup(A, "Le cégep");
+    await join_(B, g.code);
+    await as(A, () => rows("UPDATE profiles SET hide_block_titles = false WHERE id = $1", [A]));
+    expect(
+      await as(B, () =>
+        rows(
+          "SELECT DISTINCT title, title_hidden FROM public.group_busy_blocks($1) WHERE owner_id = $2",
+          [g.id, A],
+        ),
+      ),
+    ).toEqual([{ title: "Occupé", title_hidden: true }]);
+    // Une nouvelle version remplace aussi les blocs.
+    await as(A, () =>
+      rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [
+        id,
+        JSON.stringify([
+          { title: "GP du Brésil", start: "13:00", end: "15:00", from: "2026-11-15" },
+        ]),
+      ]),
+    );
+    expect(await busyRows(A)).toEqual([{ title: "GP du Brésil", weekday: null }]);
+    await as(A, () => rows("SELECT public.set_subscription_busy($1, false)", [id]));
+    expect(await busyRows(A)).toEqual([]);
+    expect(await as(A, () => rows("SELECT title FROM subscription_events"))).toEqual([
+      { title: "GP du Brésil" },
+    ]);
+  });
+
+  it("personne ne modifie un abonnement ni ses blocs à la main", async () => {
+    const id = await subscribe(A, true);
+    await as(A, () =>
+      rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [id, EVENTS]),
+    );
+    await expect(
+      as(A, () => rows("UPDATE calendar_subscriptions SET url = 'http://169.254.169.254/'")),
+    ).rejects.toThrow();
+    await expect(
+      as(A, () => rows("UPDATE calendar_subscriptions SET last_attempt_at = NULL")),
+    ).rejects.toThrow();
+    await expect(
+      as(A, () =>
+        rows(
+          "INSERT INTO subscription_events (subscription_id, owner_id, start_time, end_time, valid_from) VALUES ($1, $2, '08:00', '09:00', '2026-11-07')",
+          [id, A],
+        ),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      as(A, () =>
+        rows(
+          "INSERT INTO busy_blocks (title, start_time, end_time, valid_from, source) VALUES ('x', '08:00', '09:00', '2026-11-07', 'subscription')",
+        ),
+      ),
+    ).rejects.toThrow();
+    const maj = await as(
+      A,
+      async () =>
+        (await db.query("UPDATE busy_blocks SET title = 'x' WHERE source = 'subscription'"))
+          .affectedRows,
+    );
+    const del = await as(
+      A,
+      async () =>
+        (await db.query("DELETE FROM busy_blocks WHERE source = 'subscription'")).affectedRows,
+    );
+    expect([maj, del]).toEqual([0, 0]);
+    // L'adresse doit être en http(s) (la BD le vérifie aussi).
+    await expect(subscribe(A, true, "file:///etc/passwd")).rejects.toThrow(
+      /calendar_subscriptions_url_format/,
+    );
+  });
+
+  it("retirer l'abonnement retire ses événements et ses blocs", async () => {
+    const id = await subscribe(A, true);
+    await as(A, () =>
+      rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [id, EVENTS]),
+    );
+    await as(A, () => rows("DELETE FROM calendar_subscriptions WHERE id = $1", [id]));
+    expect(await busyRows(A)).toEqual([]);
+    expect(await rows("SELECT * FROM subscription_events")).toEqual([]);
+  });
+
+  it("une version refusée garde la dernière version connue et note l'erreur", async () => {
+    const id = await subscribe(A, true);
+    await as(A, () =>
+      rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [id, EVENTS]),
+    );
+    await expect(
+      as(A, () =>
+        rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [
+          id,
+          JSON.stringify([{ title: "x", start: "10:00", end: "09:00", from: "2026-11-10" }]),
+        ]),
+      ),
+    ).rejects.toThrow();
+    const trop = JSON.stringify(
+      Array.from({ length: 301 }, () => ({ start: "10:00", end: "11:00", from: "2026-11-10" })),
+    );
+    await expect(
+      as(A, () => rows("SELECT public.replace_subscription_events($1, $2::jsonb)", [id, trop])),
+    ).rejects.toThrow(/300/);
+    expect(await busyRows(A)).toHaveLength(2);
+    await as(A, () => rows("SELECT public.fail_subscription_sync($1, 'Lien brisé.')", [id]));
+    expect(
+      await as(A, () =>
+        rows(
+          "SELECT last_sync_error, last_synced_at IS NOT NULL AS ok FROM calendar_subscriptions",
+        ),
+      ),
+    ).toEqual([{ last_sync_error: "Lien brisé.", ok: true }]);
+    expect(await busyRows(A)).toHaveLength(2);
+  });
+
+  it("claim_subscription_syncs réserve les abonnements dus, une fois", async () => {
+    const id = await subscribe(A, false);
+    const claim = (min: number, only: string | null = null) =>
+      as(A, () =>
+        rows<{ r: { id: string; kind: string; url: string }[] }>(
+          "SELECT public.claim_subscription_syncs($1, $2) AS r",
+          [min, only],
+        ),
+      );
+    const [{ r }] = await claim(360);
+    expect(r).toEqual([{ id, kind: "ics", url: F1, outlook_calendar_id: null }]);
+    // Verrou posé (synchro en cours) : rien ; et B ne voit jamais les abonnements de A.
+    expect((await claim(1))[0].r).toEqual([]);
+    expect(await as(B, () => rows("SELECT public.claim_subscription_syncs(1, NULL) AS r"))).toEqual(
+      [{ r: [] }],
+    );
+    // Fin de la synchro : trop tôt pour recommencer.
+    await as(A, () => rows("SELECT public.replace_subscription_events($1, '[]'::jsonb)", [id]));
+    expect((await claim(360, id))[0].r).toEqual([]);
+  });
+
+  it("au plus 10 abonnements ; déconnecter Outlook retire ceux lus par Outlook", async () => {
+    for (let i = 0; i < 10; i++) await subscribe(A, false, `https://example.com/${i}.ics`);
+    await expect(subscribe(A, false, "https://example.com/11.ics")).rejects.toThrow(
+      /10 au maximum/,
+    );
+    await as(A, () => rows("DELETE FROM calendar_subscriptions"));
+    await as(A, () =>
+      rows("INSERT INTO outlook_connections (owner_id, refresh_token_enc) VALUES ($1, 'v1.x')", [
+        A,
+      ]),
+    );
+    await as(A, () =>
+      rows(
+        "INSERT INTO calendar_subscriptions (owner_id, kind, name, outlook_calendar_id, counts_as_busy) VALUES ($1, 'outlook', 'Fériés', 'AAA', true)",
+        [A],
+      ),
+    );
+    await subscribe(A, false);
+    await as(A, () => rows("SELECT public.disconnect_outlook()"));
+    expect(await as(A, () => rows("SELECT kind FROM calendar_subscriptions"))).toEqual([
+      { kind: "ics" },
+    ]);
+  });
 });

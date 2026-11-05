@@ -74,6 +74,7 @@ manquent, chacune dans une nouvelle requête du SQL Editor :
 | `supabase/migration-0010.sql` | Revue du segment 12 : caractères de contrôle refusés, titre d'un plan gardé dans son groupe       |
 | `supabase/migration-0011.sql` | Segments 13-14 : examens et travaux, séances d'étude dans l'horaire, préférences d'étude          |
 | `supabase/migration-0012.sql` | Segment 18 : disponibilités ponctuelles (table `availability_slots`, `group_availability_slots`)  |
+| `supabase/migration-0017.sql` | Story 3 : calendriers en ligne abonnés (`calendar_subscriptions`, `subscription_events`)          |
 
 Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
 (« already exists »).
@@ -597,6 +598,41 @@ Sécurité et confidentialité (`src/lib/outlook/`, migration 0014) :
 Logique pure et tests : `src/lib/scheduling/outlookBusy.ts` (découpage par jour local, minuit,
 heure avancée, fusion), `src/lib/outlook/__tests__/` (OAuth, Graph, synchro avec `fetch`
 simulé), `rls.test.ts` (RLS, fonctions, migration 0014 sur une base existante).
+
+## Calendriers en ligne abonnés (story 3)
+
+**Profil → Calendriers en ligne** : coller le lien d'un calendrier qui se met à jour tout seul
+(horaire de la Formule 1, d'une équipe, fêtes…), ou choisir un calendrier du compte Outlook
+connecté (les calendriers abonnés dans Outlook y apparaissent, marqués « abonné »). Demande la
+migration `supabase/migration-0017.sql`. Aucune variable d'environnement de plus.
+
+Choix :
+
+- **Formats** : iCalendar (`.ics`) en `https://`, `http://`, `webcal://` ou `webcals://`
+  (changé en `https://`). Événements à heures précises (comme l'import .ics) ; ceux d'une
+  journée entière sont ignorés. Les événements marqués « disponible » sont gardés : c'est la
+  personne qui choisit.
+- **Comptes** : Outlook seulement (le connecteur existant). Google n'a pas de connecteur ; on
+  colle son « adresse secrète au format iCal ».
+- **Compte comme occupé** : aucune valeur par défaut, la personne choisit à l'ajout (et peut
+  changer ensuite). Non : affiché dans « Mon horaire » (bordure pointillée), ne bloque rien.
+- **Visibilité** : personne d'autre ne voit le calendrier ni son lien. S'il compte comme
+  occupé, les membres des groupes voient « Occupé » à ces heures (jamais le titre).
+- **Mise à jour** : 8 semaines à partir de la semaine en cours, aux 6 h quand l'app est ouverte
+  (comme Outlook, pas de synchro app fermée sans `service_role`) et avec « Actualiser »
+  (2 min au plus). Au plus 10 calendriers, 300 événements chacun.
+- **Lien brisé** : on garde la dernière version connue et on affiche l'erreur. Un lien qui ne
+  marche pas à l'ajout n'est pas ajouté.
+- **Retrait** : les événements et les blocs partent avec le calendrier.
+
+Sécurité (le lien vient de la personne : risque de SSRF) : `src/lib/subscriptions/url.ts`
+refuse les ports inhabituels, les identifiants, les noms internes et les IP privées ;
+`safeFetch.ts` vérifie **chaque** adresse IP résolue au moment de la connexion (contre le
+« DNS rebinding »), revérifie chaque redirection (3 au plus, jamais https → http), coupe à
+1 Mo et 10 s, sans décompression. 20 téléchargements par minute et par personne. Tables
+`calendar_subscriptions` et `subscription_events` : RLS, propriétaire seulement ; personne ne
+les modifie directement (fonctions `claim_subscription_syncs`, `replace_subscription_events`,
+`fail_subscription_sync`, `set_subscription_busy`).
 
 ## Déploiement (Vercel) et vérification automatique (segment 17)
 

@@ -25,10 +25,26 @@ function remember(at: number) {
   }
 }
 
+/** Appelle une route de synchro ; vrai si de nouvelles données sont arrivées. */
+async function pull(path: string): Promise<boolean> {
+  try {
+    const res = await fetch(path, { method: "POST", cache: "no-store" });
+    if (!res.ok) return false;
+    const body: unknown = await res.json();
+    return (
+      typeof body === "object" && body !== null && (body as { changed?: unknown }).changed === true
+    );
+  } catch {
+    // Hors ligne : on réessaiera au prochain tour.
+    return false;
+  }
+}
+
 /**
- * Synchronisation Outlook en arrière-plan quand l'app est ouverte : au chargement d'une page
- * (au plus aux 5 min par onglet), puis aux 15 min. Si de nouvelles données arrivent, la page
- * est rechargée. Ne fait rien de visible ; sans Outlook connecté, le serveur répond « rien ».
+ * Synchronisation Outlook et calendriers abonnés (story 3) en arrière-plan quand l'app est
+ * ouverte : au chargement d'une page (au plus aux 5 min par onglet), puis aux 15 min. Le
+ * serveur décide de ce qui est dû (Outlook : 15 min ; calendriers abonnés : 6 h). Si de
+ * nouvelles données arrivent, la page est rechargée. Ne fait rien de visible.
  */
 export function OutlookAutoSync() {
   const router = useRouter();
@@ -39,20 +55,8 @@ export function OutlookAutoSync() {
       const now = Date.now();
       if (!force && now - lastCall() < MIN_GAP_MS) return;
       remember(now);
-      try {
-        const res = await fetch("/api/outlook/sync", { method: "POST", cache: "no-store" });
-        if (!res.ok || stopped) return;
-        const body: unknown = await res.json();
-        if (
-          typeof body === "object" &&
-          body !== null &&
-          (body as { changed?: unknown }).changed === true
-        ) {
-          router.refresh();
-        }
-      } catch {
-        // Hors ligne : on réessaiera au prochain tour.
-      }
+      const changed = await Promise.all([pull("/api/outlook/sync"), pull("/api/abonnements/sync")]);
+      if (!stopped && changed.some(Boolean)) router.refresh();
     };
     void tick(false);
     const id = window.setInterval(() => void tick(true), INTERVAL_MS);

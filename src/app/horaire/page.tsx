@@ -15,6 +15,7 @@ import { parseClock, shiftDay } from "@/lib/scheduling/weeklyBlocks";
 import { getTravelProvider } from "@/lib/travel/server";
 import { type ConflictView, myStudyConflicts } from "@/lib/study/service";
 import { supabaseStudyStore } from "@/lib/study/supabaseStore";
+import { getMySubscriptionEvents, getMySubscriptions } from "@/lib/subscriptions/supabaseStore";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
@@ -47,18 +48,42 @@ export default async function MonHoraire({
   if (!data.user) redirect("/connexion?next=/horaire");
   const userId = data.user.id;
 
-  const [profile, places, rows, quietRow] = await Promise.all([
+  const [profile, places, rows, quietRow, subs, subEvents] = await Promise.all([
     getMyProfile(supabase, userId),
     getMyPlaces(supabase, userId),
     getMyBusyBlocks(supabase, userId),
     getMyQuietHours(supabase, userId),
+    getMySubscriptions(supabase, userId).catch((e: unknown) => {
+      console.error("Calendriers abonnés :", e);
+      return "absent" as const;
+    }),
+    getMySubscriptionEvents(supabase, userId),
   ]);
-  const blocks: ScheduleBlock[] = rows.map((r) => ({
-    ...toBlockSpec(r),
-    id: r.id,
-    source: r.source,
-    movable: r.movable,
-  }));
+  // Calendriers abonnés (story 3) : on affiche leurs événements (source de vérité), qu'ils
+  // comptent comme occupés ou non ; leur copie dans busy_blocks n'est pas affichée en double.
+  const subById = new Map(subs === "absent" ? [] : subs.map((s) => [s.id, s]));
+  const blocks: ScheduleBlock[] = [
+    ...rows
+      .filter((r) => r.source !== "subscription")
+      .map((r) => ({
+        ...toBlockSpec(r),
+        id: r.id,
+        source: r.source,
+        movable: r.movable,
+      })),
+    ...subEvents.flatMap((e): ScheduleBlock[] => {
+      const sub = subById.get(e.subscription_id);
+      if (!sub) return [];
+      return [
+        {
+          ...toBlockSpec({ ...e, owner_id: userId, place_id: null }),
+          id: `abonnement-${e.id}`,
+          source: "subscription",
+          subscription: { name: sub.name, countsAsBusy: sub.countsAsBusy },
+        },
+      ];
+    }),
+  ];
   // Séances d'étude acceptées et déplaçables sur lesquelles tombe autre chose (segment 14).
   let conflicts: ConflictView[] = [];
   if (rows.some((r) => r.source === "study" && r.movable)) {

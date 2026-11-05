@@ -43,6 +43,9 @@ export const travelModeEnum = pgEnum("travel_mode", ["walk", "bike", "transit", 
  * `outlook` : temps occupé lu dans le calendrier Outlook de la personne (connecteur Outlook) ;
  * bloc ponctuel sans titre ni lieu, remplacé à chaque synchronisation
  * (`replace_outlook_blocks`, migration 0014).
+ * `subscription` : événement d'un calendrier en ligne abonné (story 3) qui compte comme
+ * occupé ; copie de `subscription_events`, écrite seulement par la BD
+ * (`replace_subscription_events`, `set_subscription_busy`, migration 0017).
  */
 export const blockSourceEnum = pgEnum("block_source", [
   "manual",
@@ -51,6 +54,7 @@ export const blockSourceEnum = pgEnum("block_source", [
   "study",
   "meetup",
   "outlook",
+  "subscription",
 ]);
 
 /** Rôle dans un groupe. */
@@ -182,12 +186,18 @@ export const busyBlocks = pgTable(
     }),
     /** Séance d'étude déplaçable : l'app propose de la replacer si autre chose tombe dessus. */
     movable: boolean("movable").notNull().default(false),
+    /** Calendrier abonné qui a produit ce bloc (`source = 'subscription'`, story 3), sinon nul. */
+    subscription_id: uuid("subscription_id").references(
+      (): AnyPgColumn => calendarSubscriptions.id,
+      { onDelete: "cascade" },
+    ),
     created_at: createdAt(),
   },
   (t) => [
     index("busy_blocks_owner_idx").on(t.owner_id),
     uniqueIndex("busy_blocks_meetup_plan_owner_key").on(t.meetup_plan_id, t.owner_id),
     index("busy_blocks_deadline_idx").on(t.deadline_id),
+    index("busy_blocks_subscription_idx").on(t.subscription_id),
     // Comparaison en texte : la valeur 'meetup' est ajoutée dans la même transaction.
     check(
       "busy_blocks_meetup_link",
@@ -204,6 +214,15 @@ export const busyBlocks = pgTable(
     check(
       "busy_blocks_outlook_one_off",
       sql`${t.source}::text <> 'outlook' or (${t.weekday} is null and ${t.place_id} is null)`,
+    ),
+    // Story 3 : un bloc d'abonnement vient d'un calendrier abonné, sans lieu (la maison).
+    check(
+      "busy_blocks_subscription_link",
+      sql`(${t.source}::text = 'subscription') = (${t.subscription_id} is not null)`,
+    ),
+    check(
+      "busy_blocks_subscription_no_place",
+      sql`${t.source}::text <> 'subscription' or ${t.place_id} is null`,
     ),
     check("busy_blocks_time_order", sql`${t.end_time} > ${t.start_time}`),
     check("busy_blocks_weekday_range", sql`${t.weekday} is null or ${t.weekday} between 1 and 7`),
@@ -542,6 +561,101 @@ export const outlookConnections = pgTable(
   ],
 );
 
+/**
+ * Calendrier en ligne abonné (story 3) : lien iCalendar (`kind = 'ics'`, `url` en http(s) ;
+ * « webcal:// » est changé en « https:// » par l'app) ou calendrier du compte Outlook connecté
+ * (`kind = 'outlook'`, `outlook_calendar_id`). Au plus 10 par personne. Visible et
+ * supprimable **seulement** par son propriétaire (RLS, migration 0017) ; personne ne le
+ * modifie directement : l'état de synchro et « compte comme occupé » passent par les
+ * fonctions de la BD.
+ *
+ * `counts_as_busy` n'a pas de valeur par défaut : la personne choisit à l'ajout. Vrai : les
+ * événements sont aussi copiés dans `busy_blocks` (« Occupé » pour les autres). Faux : ils
+ * sont seulement affichés dans son horaire, à titre indicatif.
+ */
+export const calendarSubscriptions = pgTable(
+  "calendar_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    owner_id: uuid("owner_id")
+      .notNull()
+      .default(sql`auth.uid()`)
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["ics", "outlook"] }).notNull(),
+    name: text("name").notNull(),
+    url: text("url"),
+    outlook_calendar_id: text("outlook_calendar_id"),
+    counts_as_busy: boolean("counts_as_busy").notNull(),
+    last_attempt_at: timestamp("last_attempt_at", { withTimezone: true, mode: "string" }),
+    last_synced_at: timestamp("last_synced_at", { withTimezone: true, mode: "string" }),
+    last_sync_error: text("last_sync_error").notNull().default(""),
+    sync_started_at: timestamp("sync_started_at", { withTimezone: true, mode: "string" }),
+    created_at: createdAt(),
+  },
+  (t) => [
+    index("calendar_subscriptions_owner_idx").on(t.owner_id),
+    uniqueIndex("calendar_subscriptions_owner_url_key").on(t.owner_id, t.url),
+    uniqueIndex("calendar_subscriptions_owner_outlook_key").on(t.owner_id, t.outlook_calendar_id),
+    check("calendar_subscriptions_kind", sql`${t.kind} in ('ics', 'outlook')`),
+    check(
+      "calendar_subscriptions_shape",
+      sql`(${t.kind} = 'ics' and ${t.url} is not null and ${t.outlook_calendar_id} is null) or (${t.kind} = 'outlook' and ${t.url} is null and ${t.outlook_calendar_id} is not null)`,
+    ),
+    check(
+      "calendar_subscriptions_url_format",
+      sql`${t.url} is null or (length(${t.url}) <= 2000 and ${t.url} ~ '^https?://')`,
+    ),
+    check(
+      "calendar_subscriptions_outlook_id_length",
+      sql`${t.outlook_calendar_id} is null or length(${t.outlook_calendar_id}) between 1 and 1024`,
+    ),
+    check("calendar_subscriptions_name_length", sql`length(${t.name}) between 1 and 100`),
+    check("calendar_subscriptions_error_length", sql`length(${t.last_sync_error}) <= 300`),
+  ],
+);
+
+/**
+ * Événement d'un calendrier abonné (story 3), tel que lu à la dernière synchro réussie : même
+ * forme qu'un bloc (`busy_blocks`) hebdomadaire ou ponctuel, sans lieu. Lecture seule pour la
+ * personne ; écrit seulement par `replace_subscription_events` (au plus 300 par calendrier).
+ */
+export const subscriptionEvents = pgTable(
+  "subscription_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subscription_id: uuid("subscription_id")
+      .notNull()
+      .references(() => calendarSubscriptions.id, { onDelete: "cascade" }),
+    owner_id: uuid("owner_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default(""),
+    start_time: time("start_time").notNull(),
+    end_time: time("end_time").notNull(),
+    weekday: smallint("weekday"),
+    valid_from: date("valid_from", { mode: "string" }).notNull(),
+    valid_until: date("valid_until", { mode: "string" }),
+  },
+  (t) => [
+    index("subscription_events_subscription_idx").on(t.subscription_id),
+    index("subscription_events_owner_idx").on(t.owner_id),
+    check("subscription_events_time_order", sql`${t.end_time} > ${t.start_time}`),
+    check(
+      "subscription_events_weekday_range",
+      sql`${t.weekday} is null or ${t.weekday} between 1 and 7`,
+    ),
+    check(
+      "subscription_events_validity",
+      sql`${t.valid_until} is null or (${t.valid_until} >= ${t.valid_from} and ${t.valid_until} - ${t.valid_from} < 366)`,
+    ),
+    check(
+      "subscription_events_one_off",
+      sql`${t.weekday} is not null or ${t.valid_until} is null or ${t.valid_until} = ${t.valid_from}`,
+    ),
+    check("subscription_events_title_length", sql`length(${t.title}) <= 100`),
+  ],
+);
+
 export type ProfileRow = typeof profiles.$inferSelect;
 export type PlaceRow = typeof places.$inferSelect;
 export type BusyBlockRow = typeof busyBlocks.$inferSelect;
@@ -554,3 +668,5 @@ export type DeadlineRow = typeof deadlines.$inferSelect;
 export type StudyPreferencesRow = typeof studyPreferences.$inferSelect;
 export type AvailabilitySlotRow = typeof availabilitySlots.$inferSelect;
 export type OutlookConnectionRow = typeof outlookConnections.$inferSelect;
+export type CalendarSubscriptionRow = typeof calendarSubscriptions.$inferSelect;
+export type SubscriptionEventRow = typeof subscriptionEvents.$inferSelect;

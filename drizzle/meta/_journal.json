@@ -120,6 +120,13 @@
       "when": 1793845947186,
       "tag": "0016_review_repeat_weight",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793885482225,
+      "tag": "0017_subscribed_calendars",
+      "breakpoints": true
     }
   ]
 }

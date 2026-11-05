@@ -267,20 +267,37 @@ describe("Graph", () => {
     ).toBe(true);
   });
 
-  it("liste les calendriers, le principal d'abord", async () => {
+  it("liste les calendriers, le principal d'abord ; les abonnés sont en lecture seule", async () => {
     const net = fakeFetch(() =>
       json({
         value: [
           { id: "b", name: "Travail", isDefaultCalendar: false },
-          { id: "a", name: "Calendrier", isDefaultCalendar: true },
+          { id: "a", name: "Calendrier", isDefaultCalendar: true, canEdit: true },
+          { id: "f", name: "Formula 1", isDefaultCalendar: false, canEdit: false },
           { id: "", name: "vide" },
         ],
       }),
     );
     expect(await listCalendars(net.fetch, "acces")).toEqual([
-      { id: "a", name: "Calendrier", isDefault: true },
-      { id: "b", name: "Travail", isDefault: false },
+      { id: "a", name: "Calendrier", isDefault: true, readOnly: false },
+      { id: "b", name: "Travail", isDefault: false, readOnly: false },
+      { id: "f", name: "Formula 1", isDefault: false, readOnly: true },
     ]);
+    expect(net.calls[0].url).toContain("canEdit");
+  });
+
+  it("calendrier abonné : garde aussi les événements « Disponible », jamais les annulés", () => {
+    const base = {
+      start: { dateTime: "2026-11-08T19:00:00.0000000", timeZone: "UTC" },
+      end: { dateTime: "2026-11-08T21:00:00.0000000", timeZone: "UTC" },
+    };
+    expect(toBusyEvent({ ...base, showAs: "free" })).toBeNull();
+    expect(toBusyEvent({ ...base, showAs: "free" }, { includeFree: true })).toMatchObject({
+      kind: "timed",
+    });
+    expect(
+      toBusyEvent({ ...base, showAs: "free", isCancelled: true }, { includeFree: true }),
+    ).toBeNull();
   });
 
   it("401 → reconnexion ; 404 → calendrier disparu", async () => {

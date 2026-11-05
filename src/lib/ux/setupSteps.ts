@@ -47,7 +47,7 @@ export function setupSteps(input: SetupInput): SetupPlan {
     {
       id: "horaire",
       title: "Ton horaire",
-      hint: "Tes cours et ton travail (à la main ou par fichier .ics).",
+      hint: "Tes cours et ton travail : à la main, par fichier, ou en connectant ton calendrier.",
       href: "/horaire",
       done: input.blockCount > 0,
     },

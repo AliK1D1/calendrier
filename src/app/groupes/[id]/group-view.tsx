@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 import { type Flash, FlashMessage } from "@/components/flash-message";
+import { PageSections } from "@/components/page-sections";
 import { AddressSearch } from "@/components/places/address-search";
 import { type MapPoint, PlaceMapLazy } from "@/components/places/place-map-lazy";
 import { type PlanActions, PlanList } from "@/components/plans/plan-list";
@@ -295,6 +296,21 @@ export function GroupView(props: Props) {
         </p>
       </header>
 
+      <PageSections
+        items={[
+          ...(alone
+            ? [{ id: "inviter", label: "Inviter" }]
+            : [
+                { id: "propositions", label: "Plans" },
+                { id: "se-voir", label: "Trouver un moment" },
+                { id: "inviter", label: "Inviter" },
+              ]),
+          { id: "membres", label: "Membres" },
+          { id: "lieux-groupe", label: "Lieux" },
+          { id: "horaires", label: "Horaires" },
+        ]}
+      />
+
       {alone ? (
         <>
           {invite}
@@ -308,7 +324,7 @@ export function GroupView(props: Props) {
           <section aria-labelledby="propositions" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="propositions" className="scroll-mt-16 text-lg font-semibold">
-                Propositions
+                Plans du groupe
               </h2>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={proposeFree}>
@@ -328,8 +344,8 @@ export function GroupView(props: Props) {
               </p>
             ) : !props.plans || props.plans.length === 0 ? (
               <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
-                Aucune proposition à venir. Trouve un moment ci-dessous et touche « Proposer ce
-                moment », ou propose ton propre moment.
+                Aucun plan à venir. Cherche un moment ci-dessous (« Quand on peut se voir ») et
+                touche « Proposer ce moment », ou propose ton propre moment.
               </p>
             ) : (
               <PlanList plans={props.plans} actions={planActions} />
@@ -387,7 +403,7 @@ export function GroupView(props: Props) {
 
       <FlashMessage message={message} onClose={clearMessage} />
       <section aria-labelledby="membres" className="flex flex-col gap-3">
-        <h2 id="membres" className="text-lg font-semibold">
+        <h2 id="membres" className="scroll-mt-16 text-lg font-semibold">
           Membres
         </h2>
         <ul className="flex flex-col gap-2">
@@ -446,7 +462,7 @@ export function GroupView(props: Props) {
       </section>
 
       <section aria-labelledby="lieux-groupe" className="flex flex-col gap-3">
-        <h2 id="lieux-groupe" className="text-lg font-semibold">
+        <h2 id="lieux-groupe" className="scroll-mt-16 text-lg font-semibold">
           Lieux favoris du groupe
         </h2>
         <p className="text-muted-foreground text-sm">
@@ -557,7 +573,7 @@ export function GroupView(props: Props) {
       </section>
 
       <section aria-labelledby="horaires" className="flex flex-col gap-3">
-        <h2 id="horaires" className="text-lg font-semibold">
+        <h2 id="horaires" className="scroll-mt-16 text-lg font-semibold">
           Quand chacun est occupé
         </h2>
         <p className="text-muted-foreground text-sm">

@@ -28,6 +28,12 @@ import {
   weekStart,
 } from "@/lib/scheduling/weeklyBlocks";
 import { cn } from "@/lib/utils";
+import {
+  type LegendKind,
+  legendIsEmpty,
+  type ScheduleLegend,
+  scheduleLegend,
+} from "@/lib/ux/scheduleLegend";
 
 import { BlockDialog, type BlockDraft } from "./block-dialog";
 import { IcsImport } from "./ics-import";
@@ -504,6 +510,18 @@ export function ScheduleEditor({
         bloc pour le modifier.
       </p>
 
+      <WeekLegend
+        legend={scheduleLegend(
+          days.flatMap((day) => blocksOnDay(blocks, day)),
+          {
+            quiet: quiet?.before != null || quiet?.after != null,
+            proposedStudy: proposals.some((p) => days.includes(p.day)),
+          },
+        )}
+        colorOf={colorOf}
+        placeLabel={placeLabel}
+      />
+
       {/* Grille */}
       <div
         id="grille-horaire"
@@ -783,6 +801,73 @@ export function ScheduleEditor({
         }}
       />
     </div>
+  );
+}
+
+/** Pastille et texte d'une entrée de la légende. */
+const LEGEND_KINDS: Record<LegendKind, { swatch: string; label: string }> = {
+  plan: { swatch: MEETUP_COLOR, label: "Plan de groupe accepté" },
+  etude: { swatch: ACCEPTED_STUDY_COLOR, label: "Séance d'étude" },
+  outlook: { swatch: OUTLOOK_COLOR, label: "Occupé dans Outlook" },
+  abonnement: { swatch: SUBSCRIPTION_BUSY_COLOR, label: "Calendrier en ligne" },
+  "abonnement-libre": {
+    swatch: SUBSCRIPTION_INFO_COLOR,
+    label: "Calendrier en ligne, ne bloque pas ton temps libre",
+  },
+};
+
+/** Ce que veulent dire les couleurs de la grille (seulement ce qui est dans la semaine). */
+function WeekLegend({
+  legend,
+  colorOf,
+  placeLabel,
+}: {
+  legend: ScheduleLegend;
+  colorOf: (placeId: string | null) => string;
+  placeLabel: (placeId: string | null) => string;
+}) {
+  if (legendIsEmpty(legend)) return null;
+  const items: { key: string; swatch: string; label: string }[] = [
+    ...legend.places.map((id) => ({
+      key: `lieu-${id ?? "maison"}`,
+      swatch: colorOf(id),
+      label: placeLabel(id),
+    })),
+    ...legend.kinds.map((k) => ({ key: k, ...LEGEND_KINDS[k] })),
+    ...(legend.proposedStudy
+      ? [
+          {
+            key: "proposee",
+            swatch: PROPOSED_STUDY_COLOR,
+            label: "Séance proposée (pas encore acceptée)",
+          },
+        ]
+      : []),
+  ];
+  return (
+    <ul
+      aria-label="Légende des couleurs"
+      className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1.5 text-xs"
+    >
+      {items.map((i) => (
+        <li key={i.key} className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className={cn("h-3.5 w-4 shrink-0 rounded-[3px] border border-l-[3px]", i.swatch)}
+          />
+          {i.label}
+        </li>
+      ))}
+      {legend.quiet && (
+        <li className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="h-3.5 w-4 shrink-0 rounded-[3px] border bg-[repeating-linear-gradient(135deg,transparent_0_2px,color-mix(in_oklab,var(--muted-foreground)_45%,transparent)_2px_3px)]"
+          />
+          Tu ne sors pas (réglé dans le profil)
+        </li>
+      )}
+    </ul>
   );
 }
 

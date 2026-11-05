@@ -6,7 +6,8 @@ import { formatInTimeZone } from "date-fns-tz";
 
 import { validateUuid } from "@/lib/groups/validation";
 import { cleanText, type Result } from "@/lib/places/validation";
-import { addMinutesTo, TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
+import { isValidEvery, REPEAT_UNITS, type RepeatUnit } from "@/lib/scheduling/recurrence";
+import { addMinutesTo, assertDay, TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
 import { formatClock, parseClock, shiftDay } from "@/lib/scheduling/weeklyBlocks";
 
 export const PLAN_TITLE_MAX = 80;
@@ -22,7 +23,20 @@ export const PLAN_FALLBACK_TITLE = "Plan de groupe";
 const CONTROL_CHARS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Ce que le formulaire envoie. `inviteeIds` nul = tout le groupe. */
+/**
+ * Story 5 : un plan récurrent se termine au plus tard 10 ans (moins un jour) après la première
+ * fois : le bloc « plan » de l'horaire a la même limite que la répétition de la story 2.
+ */
+export const PLAN_REPEAT_MAX_DAYS = 3650;
+
+/** Répétition d'un plan (story 5). `until` : dernier jour (`yyyy-MM-dd`), nul = sans fin. */
+export interface PlanRepeat {
+  unit: RepeatUnit;
+  every: number;
+  until: string | null;
+}
+
+/** Ce que le formulaire envoie. `inviteeIds` nul = tout le groupe ; `repeat` nul = une fois. */
 export interface ProposeFormInput {
   groupId: string;
   title: string;
@@ -34,9 +48,10 @@ export interface ProposeFormInput {
   placeId: string | null;
   location: string;
   inviteeIds: string[] | null;
+  repeat?: PlanRepeat | null;
 }
 
-/** Proposition validée, prête pour `propose_meetup`. */
+/** Proposition validée, prête pour `propose_meetup` (ou `propose_recurring_meetup`). */
 export interface ProposeInput {
   groupId: string;
   title: string;
@@ -45,6 +60,38 @@ export interface ProposeInput {
   placeId: string | null;
   location: string;
   inviteeIds: string[] | null;
+  repeat: PlanRepeat | null;
+}
+
+/** Valide la répétition (story 5) : unité, « tous les X » (1-99), fin après le premier jour. */
+export function validateRepeat(raw: unknown, firstDay: string): Result<PlanRepeat | null> {
+  if (raw === null || raw === undefined) return { ok: true, value: null };
+  if (typeof raw !== "object") return { ok: false, error: "Répétition invalide." };
+  const r = raw as Record<string, unknown>;
+  if (typeof r.unit !== "string" || !REPEAT_UNITS.includes(r.unit as RepeatUnit)) {
+    return { ok: false, error: "Répétition invalide." };
+  }
+  const every = Number(r.every);
+  if (!isValidEvery(every)) return { ok: false, error: "La répétition va de 1 à 99." };
+  let until: string | null = null;
+  if (r.until !== null && r.until !== undefined && r.until !== "") {
+    if (typeof r.until !== "string" || !DAY_RE.test(r.until)) {
+      return { ok: false, error: "Date de fin invalide." };
+    }
+    try {
+      assertDay(r.until);
+    } catch {
+      return { ok: false, error: "Date de fin invalide." };
+    }
+    if (r.until < firstDay) {
+      return { ok: false, error: "La fin doit être après la première fois." };
+    }
+    if (r.until >= shiftDay(firstDay, PLAN_REPEAT_MAX_DAYS)) {
+      return { ok: false, error: "La fin doit être dans moins de 10 ans." };
+    }
+    until = r.until;
+  }
+  return { ok: true, value: { unit: r.unit as RepeatUnit, every, until } };
 }
 
 function text(raw: unknown, max: number, label: string, required: boolean): Result<string> {
@@ -129,6 +176,8 @@ export function validatePropose(raw: unknown, now: Date): Result<ProposeInput> {
   if (endDay !== startDay && endClock !== "00:00") {
     return { ok: false, error: "Un plan finit le même jour (au plus tard à minuit)." };
   }
+  const repeat = validateRepeat(r.repeat, startDay);
+  if (!repeat.ok) return repeat;
 
   return {
     ok: true,
@@ -140,6 +189,7 @@ export function validatePropose(raw: unknown, now: Date): Result<ProposeInput> {
       placeId,
       location: location.value,
       inviteeIds,
+      repeat: repeat.value,
     },
   };
 }

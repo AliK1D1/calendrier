@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarPlus, Check, Clock, MapPin, Users, X } from "lucide-react";
+import { CalendarPlus, Check, Clock, MapPin, Repeat, Users, X } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,17 @@ interface Props {
 }
 
 function status(p: PlanView): { label: string; className: string } {
+  const series = p.repeatLabel !== null;
   if (p.state === "cancelled")
-    return { label: "Annulé", className: "bg-muted text-muted-foreground" };
-  if (p.state === "past") return { label: "Passé", className: "bg-muted text-muted-foreground" };
+    return {
+      label: series ? "Série arrêtée" : "Annulé",
+      className: "bg-muted text-muted-foreground",
+    };
+  if (p.state === "past")
+    return {
+      label: series ? "Série terminée" : "Passé",
+      className: "bg-muted text-muted-foreground",
+    };
   if (p.isMine) return { label: "Ta proposition", className: "bg-primary/10 text-primary" };
   if (!p.invited) return { label: "Pour info", className: "bg-muted text-muted-foreground" };
   if (p.myResponse === "yes") return { label: "Accepté", className: "bg-success/15 text-success" };
@@ -35,6 +43,7 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
   const live = p.state === "upcoming";
   const awaiting = live && p.invited && !p.isMine && p.myResponse === null;
   const going = live && (p.myResponse === "yes" || p.isMine);
+  const series = p.repeatLabel !== null;
   return (
     <li
       className={cn(
@@ -49,9 +58,17 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
         </p>
         <Badge className={cn("border-transparent", s.className)}>{s.label}</Badge>
       </div>
+      {p.repeatLabel && (
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <Repeat className="text-primary size-4 shrink-0" aria-hidden />
+          <span>{p.repeatLabel}</span>
+        </p>
+      )}
       <p className="flex flex-wrap items-center gap-x-2 text-sm">
         <Clock className="text-muted-foreground size-4" aria-hidden />
-        <span className="first-letter:uppercase">{p.dayLabel}</span>
+        <span className="first-letter:uppercase">
+          {p.repeatLabel && live ? `Prochaine fois : ${p.dayLabel}` : p.dayLabel}
+        </span>
         <span className="tabular-nums">· {p.timeLabel}</span>
       </p>
       <p className="flex items-center gap-2 text-sm">
@@ -105,7 +122,8 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
             disabled={pending}
             onClick={() => onRespond(true)}
           >
-            <Check /> {p.myResponse === "yes" ? "Accepté" : "Accepter"}
+            <Check />{" "}
+            {p.myResponse === "yes" ? "Accepté" : series ? "Accepter la série" : "Accepter"}
           </Button>
           <Button
             type="button"
@@ -114,7 +132,12 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
             disabled={pending}
             onClick={() => onRespond(false)}
           >
-            <X /> {p.myResponse === "no" ? "Refusé" : "Refuser"}
+            <X />{" "}
+            {p.myResponse === "no"
+              ? "Refusé"
+              : series && p.myResponse === "yes"
+                ? "Quitter la série"
+                : "Refuser"}
           </Button>
         </div>
       )}
@@ -124,7 +147,17 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
         </p>
       )}
       {live && p.myResponse === "yes" && !p.isMine && (
-        <p className="text-muted-foreground text-xs">Ce moment est dans ton horaire.</p>
+        <p className="text-muted-foreground text-xs">
+          {series
+            ? "Chaque fois est dans ton horaire. « Quitter la série » la retire de ton horaire seulement."
+            : "Ce moment est dans ton horaire."}
+        </p>
+      )}
+      {going && series && (
+        <p className="text-muted-foreground text-xs">
+          « Ajouter à mon agenda » met toute la série dans le calendrier de ton téléphone, avec un
+          rappel 30 min avant chaque fois.
+        </p>
       )}
       {(going || (live && p.isMine)) && (
         <div className="flex flex-wrap gap-2 pt-1">
@@ -135,7 +168,7 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
               </a>
             </Button>
           )}
-          {p.isMine && (
+          {(p.isMine || (series && going)) && (
             <Button
               type="button"
               variant="ghost"
@@ -144,7 +177,7 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
               disabled={pending}
               onClick={onCancel}
             >
-              <X /> Annuler le plan
+              <X /> {series ? "Arrêter la série" : "Annuler le plan"}
             </Button>
           )}
         </div>

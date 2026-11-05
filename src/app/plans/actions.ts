@@ -41,7 +41,7 @@ export async function proposerMoment(raw: unknown): Promise<ProposeResult> {
   const ctx = await requireUser();
   if (!ctx.ok) return ctx;
   const v = input.value;
-  const { data, error } = await ctx.supabase.rpc("propose_meetup", {
+  const common = {
     p_group: v.groupId,
     p_starts_at: v.startsAt,
     p_ends_at: v.endsAt,
@@ -49,8 +49,27 @@ export async function proposerMoment(raw: unknown): Promise<ProposeResult> {
     p_place: v.placeId,
     p_location: v.location,
     p_invitees: v.inviteeIds,
-  });
-  if (error) return { ok: false, error: planError("Proposer un moment", error) };
+  };
+  // Story 5 : un plan qui se répète passe par propose_recurring_meetup (migration 0018).
+  const { data, error } = v.repeat
+    ? await ctx.supabase.rpc("propose_recurring_meetup", {
+        ...common,
+        p_repeat_unit: v.repeat.unit,
+        p_repeat_every: v.repeat.every,
+        p_repeat_until: v.repeat.until,
+      })
+    : await ctx.supabase.rpc("propose_meetup", common);
+  if (error) {
+    if (v.repeat && (error.code === "PGRST202" || error.code === "42883")) {
+      console.error("Proposer une série :", error.code, error.message);
+      return {
+        ok: false,
+        error:
+          "La base de données n'est pas à jour : applique supabase/migration-0018.sql (voir README).",
+      };
+    }
+    return { ok: false, error: planError("Proposer un moment", error) };
+  }
   if (typeof data !== "string") return { ok: false, error: "La proposition n'a pas fonctionné." };
   refresh(v.groupId);
   return { ok: true, id: data };
@@ -77,7 +96,10 @@ export async function repondrePlan(
   return { ok: true };
 }
 
-/** Le créateur annule son plan (retiré de l'horaire de tout le monde). */
+/**
+ * Le créateur annule son plan (retiré de l'horaire de tout le monde). Plan récurrent : le
+ * créateur ou une personne qui l'a accepté arrête la série pour tout le monde (story 5).
+ */
 export async function annulerPlan(planId: unknown, groupId?: unknown): Promise<ActionResult> {
   const pid = validateUuid(planId, "Plan introuvable.");
   if (!pid.ok) return fail(pid.error);

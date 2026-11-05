@@ -54,17 +54,28 @@ export function PlanList({
                 p.id,
                 () => actions.repondre(p.id, accept, p.groupId),
                 accept
-                  ? `« ${p.title} » est ajouté à ton horaire.`
-                  : `Tu as refusé « ${p.title} ». Il n'est pas dans ton horaire.`,
+                  ? p.repeatLabel
+                    ? `« ${p.title} » est ajouté à ton horaire, chaque fois.`
+                    : `« ${p.title} » est ajouté à ton horaire.`
+                  : p.repeatLabel
+                    ? `Tu ne fais plus partie de « ${p.title} ». La série n'est plus dans ton horaire.`
+                    : `Tu as refusé « ${p.title} ». Il n'est pas dans ton horaire.`,
               )
             }
             onCancel={() => {
+              const series = p.repeatLabel !== null;
               if (
                 window.confirm(
-                  `Annuler « ${p.title} » ? Il sera retiré de l'horaire de tous ceux qui l'avaient accepté.`,
+                  series
+                    ? `Arrêter la série « ${p.title} » pour tout le monde ? Elle sera retirée de l'horaire de tous ceux qui l'avaient acceptée. (Pour la quitter toi seul·e, touche plutôt « Quitter la série ».)`
+                    : `Annuler « ${p.title} » ? Il sera retiré de l'horaire de tous ceux qui l'avaient accepté.`,
                 )
               ) {
-                run(p.id, () => actions.annuler(p.id, p.groupId), "Plan annulé.");
+                run(
+                  p.id,
+                  () => actions.annuler(p.id, p.groupId),
+                  series ? "Série arrêtée pour tout le monde." : "Plan annulé.",
+                );
               }
             }}
           />

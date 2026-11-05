@@ -10,8 +10,10 @@ import {
   PLAN_DURATIONS,
   PLAN_LOCATION_MAX,
   PLAN_TITLE_MAX,
+  type PlanRepeat,
   type ProposeFormInput,
 } from "@/lib/plans/validation";
+import { REPEAT_EVERY_MAX, type RepeatUnit } from "@/lib/scheduling/recurrence";
 import { cn } from "@/lib/utils";
 
 /** Valeurs de départ du formulaire (`inviteeIds` nul = tout le groupe). */
@@ -38,6 +40,31 @@ interface Props {
 const SELECT =
   "border-input bg-card focus-visible:ring-ring/50 h-11 w-full rounded-md border px-3 text-base outline-none focus-visible:ring-[3px]";
 
+/** Choix rapides de « Répéter » (story 5) ; « custom » ouvre « tous les X … ». */
+type RepeatChoice = "none" | "day1" | "day2" | "week1" | "custom";
+
+const REPEAT_CHOICES: { value: RepeatChoice; label: string }[] = [
+  { value: "none", label: "Une seule fois" },
+  { value: "day1", label: "Tous les jours" },
+  { value: "day2", label: "Tous les 2 jours" },
+  { value: "week1", label: "Chaque semaine" },
+  { value: "custom", label: "Personnalisé…" },
+];
+
+const CUSTOM_UNITS: { value: RepeatUnit; label: string }[] = [
+  { value: "day", label: "jour(s)" },
+  { value: "week", label: "semaine(s)" },
+  { value: "month", label: "mois" },
+];
+
+function choiceOf(r: PlanRepeat | null | undefined): RepeatChoice {
+  if (!r) return "none";
+  if (r.unit === "day" && r.every === 1) return "day1";
+  if (r.unit === "day" && r.every === 2) return "day2";
+  if (r.unit === "week" && r.every === 1) return "week1";
+  return "custom";
+}
+
 function durationLabel(m: number): string {
   if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);
@@ -62,7 +89,7 @@ export function ProposeDialog({ draft, ...rest }: Props) {
     >
       {draft && (
         <ProposeForm
-          key={`${draft.date}-${draft.start}-${draft.placeId ?? ""}-${draft.durationMinutes}`}
+          key={`${draft.date}-${draft.start}-${draft.placeId ?? ""}-${draft.durationMinutes}-${choiceOf(draft.repeat)}`}
           initial={draft}
           {...rest}
         />
@@ -93,8 +120,29 @@ function ProposeForm({
   const [chosen, setChosen] = useState<string[]>(
     (initial.inviteeIds ?? others.map((m) => m.userId)).filter((x) => x !== myId),
   );
+  const [repeatChoice, setRepeatChoice] = useState<RepeatChoice>(choiceOf(initial.repeat));
+  const [customEvery, setCustomEvery] = useState(initial.repeat?.every ?? 3);
+  const [customUnit, setCustomUnit] = useState<RepeatUnit>(initial.repeat?.unit ?? "day");
+  const [until, setUntil] = useState(initial.repeat?.until ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  function repeatValue(): PlanRepeat | null {
+    const end = until || null;
+    switch (repeatChoice) {
+      case "none":
+        return null;
+      case "day1":
+        return { unit: "day", every: 1, until: end };
+      case "day2":
+        return { unit: "day", every: 2, until: end };
+      case "week1":
+        return { unit: "week", every: 1, until: end };
+      case "custom":
+        return { unit: customUnit, every: customEvery, until: end };
+    }
+  }
+  const recurring = repeatChoice !== "none";
   const durations = PLAN_DURATIONS.includes(duration as (typeof PLAN_DURATIONS)[number])
     ? [...PLAN_DURATIONS]
     : [...PLAN_DURATIONS, duration].sort((a, b) => a - b);
@@ -116,12 +164,15 @@ function ProposeForm({
         placeId: placeId || null,
         location: placeId ? "" : location,
         inviteeIds: everyone ? null : chosen,
+        repeat: repeatValue(),
       } satisfies ProposeFormInput);
       if (r.ok) {
+        const what = recurring ? "Série" : "Proposition";
+        const where = recurring ? "Elle se répète dans ton horaire." : "Elle est dans ton horaire.";
         onDone(
           everyone
-            ? "Proposition envoyée à tout le groupe. Elle est dans ton horaire."
-            : `Proposition envoyée (${chosen.length} invité${chosen.length > 1 ? "s" : ""}). Elle est dans ton horaire.`,
+            ? `${what} envoyée à tout le groupe. ${where}`
+            : `${what} envoyée (${chosen.length} invité${chosen.length > 1 ? "s" : ""}). ${where}`,
         );
       } else {
         setError(r.error);
@@ -134,7 +185,7 @@ function ProposeForm({
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 id="proposer-titre" className="text-lg font-semibold">
-            Proposer un moment
+            {recurring ? "Proposer une activité régulière" : "Proposer un moment"}
           </h2>
           {initial.fromSlot && (
             <p className="text-muted-foreground text-sm first-letter:uppercase">
@@ -154,7 +205,9 @@ function ProposeForm({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={PLAN_TITLE_MAX}
-          placeholder="ex. Étude à la bibli, souper, cinéma"
+          placeholder={
+            recurring ? "ex. Gym, course, étude à la bibli" : "ex. Étude à la bibli, souper, cinéma"
+          }
           required
         />
       </div>
@@ -198,6 +251,68 @@ function ProposeForm({
             ))}
           </select>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${id}-repeter`}>Répéter</Label>
+        <select
+          id={`${id}-repeter`}
+          value={repeatChoice}
+          onChange={(e) => setRepeatChoice(e.target.value as RepeatChoice)}
+          className={SELECT}
+        >
+          {REPEAT_CHOICES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        {repeatChoice === "custom" && (
+          <div className="flex items-center gap-2 text-sm">
+            <span>Tous les</span>
+            <Input
+              aria-label="Nombre"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={REPEAT_EVERY_MAX}
+              value={customEvery}
+              onChange={(e) => setCustomEvery(Number(e.target.value))}
+              className="h-11 w-20"
+              required
+            />
+            <select
+              aria-label="Unité"
+              value={customUnit}
+              onChange={(e) => setCustomUnit(e.target.value as RepeatUnit)}
+              className={cn(SELECT, "w-auto flex-1")}
+            >
+              {CUSTOM_UNITS.map((u) => (
+                <option key={u.value} value={u.value}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {recurring && (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`${id}-fin`}>Jusqu&apos;au (facultatif)</Label>
+            <Input
+              id={`${id}-fin`}
+              type="date"
+              min={date}
+              value={until}
+              onChange={(e) => setUntil(e.target.value)}
+              className="h-11"
+            />
+            <p className="text-muted-foreground text-xs">
+              Laisse vide pour une série sans fin. Le jour choisi plus haut est la première fois.
+              Chaque invité accepte une seule fois pour toute la série, et chacun peut la quitter ou
+              l&apos;arrêter quand il veut.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

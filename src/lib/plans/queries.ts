@@ -20,10 +20,23 @@ export type PlansResult =
   { ok: true; views: PlanView[] } | { ok: false; error: string; outdated: boolean };
 
 const PLAN_COLUMNS =
-  "id, group_id, title, location, place_id, starts_at, ends_at, status, created_by, created_at";
+  "id, group_id, title, location, place_id, starts_at, ends_at, status, created_by, created_at, repeat_unit, repeat_every, repeat_until";
+
+/**
+ * Filtre PostgREST « pas encore fini à `since` » : plan qui finit après `since`, ou série
+ * récurrente sans fin, ou dont le dernier jour n'est pas passé (story 5).
+ */
+function notOverFilter(since: Date): string {
+  const day = since.toISOString().slice(0, 10);
+  // Jour UTC un jour plus tôt : couvre le jour local America/Toronto (en retard sur UTC).
+  const dayBefore = new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return `ends_at.gt.${since.toISOString()},and(repeat_unit.not.is.null,repeat_until.is.null),repeat_until.gte.${dayBefore}`;
+}
 
 function isOutdated(error: { code?: string }): boolean {
-  // Colonne ou table absente : la migration 0009 n'est pas appliquée.
+  // Colonne ou table absente : une migration (0009, 0018…) n'est pas appliquée.
   return (
     error.code === "42703" ||
     error.code === "42P01" ||
@@ -48,9 +61,9 @@ export async function loadPlans(
   if (opts.planId) {
     query = query.eq("id", opts.planId);
   } else if (opts.groupId) {
-    query = query.eq("group_id", opts.groupId).gt("ends_at", now.toISOString());
+    query = query.eq("group_id", opts.groupId).or(notOverFilter(now));
   } else {
-    query = query.gt("ends_at", new Date(now.getTime() - PAST_DAYS * 86_400_000).toISOString());
+    query = query.or(notOverFilter(new Date(now.getTime() - PAST_DAYS * 86_400_000)));
   }
   const plans = await query
     .order("starts_at", { ascending: true })
@@ -63,7 +76,7 @@ export async function loadPlans(
       ok: false,
       outdated,
       error: outdated
-        ? "La base de données n'est pas à jour : applique supabase/migration-0009.sql (voir README)."
+        ? "La base de données n'est pas à jour : applique supabase/migration-0018.sql (et les précédentes, voir README)."
         : "Impossible de lire les plans. Réessaie.",
     };
   }
@@ -164,13 +177,27 @@ export async function countAwaitingPlans(
 ): Promise<number> {
   const inv = await supabase
     .from("plan_invitees")
-    .select("plan_id, meetup_plans!inner(created_by, status, ends_at)")
+    .select(
+      "plan_id, meetup_plans!inner(created_by, status, starts_at, ends_at, repeat_unit, repeat_every, repeat_until)",
+    )
     .eq("user_id", myId)
     .eq("meetup_plans.status", "proposed")
-    .gt("meetup_plans.ends_at", now.toISOString())
+    .or(notOverFilter(now), { referencedTable: "meetup_plans" })
     .limit(200)
     .returns<
-      { plan_id: string; meetup_plans: { created_by: string; status: string; ends_at: string } }[]
+      {
+        plan_id: string;
+        meetup_plans: Pick<
+          PlanRow,
+          | "created_by"
+          | "status"
+          | "starts_at"
+          | "ends_at"
+          | "repeat_unit"
+          | "repeat_every"
+          | "repeat_until"
+        >;
+      }[]
     >();
   if (inv.error || !inv.data?.length) return 0;
   const ids = inv.data.map((i) => i.plan_id);

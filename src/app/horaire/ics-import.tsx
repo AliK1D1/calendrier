@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { AddressSearch } from "@/components/places/address-search";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ImportedBlock, IcsPreview } from "@/lib/import/ics";
@@ -248,15 +248,38 @@ function ImportFlow({
           </ul>
           <div className="flex flex-col gap-2">
             <Label htmlFor="ics-fichier">Fichier .ics (1 Mo au maximum)</Label>
-            <Input
-              id="ics-fichier"
-              type="file"
-              accept=".ics,text/calendar"
-              onChange={(e) => {
-                setError(null);
-                setFile(e.target.files?.[0] ?? null);
-              }}
-            />
+            {/*
+              Le bouton natif dit « Choose File / No file chosen » (langue du navigateur) : on
+              le cache visuellement et on montre un bouton et un texte en français. Le champ
+              reste au clavier et au lecteur d'écran.
+            */}
+            <div className="flex min-w-0 items-center gap-3">
+              <label
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "has-[:focus-visible]:border-ring has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-[3px]",
+                )}
+              >
+                <FileUp aria-hidden />
+                Choisir un fichier
+                <input
+                  id="ics-fichier"
+                  type="file"
+                  accept=".ics,text/calendar"
+                  className="sr-only"
+                  onChange={(e) => {
+                    setError(null);
+                    setFile(e.target.files?.[0] ?? null);
+                  }}
+                />
+              </label>
+              <span
+                className={cn("truncate text-sm", !file && "text-muted-foreground")}
+                aria-live="polite"
+              >
+                {file ? file.name : "Aucun fichier choisi"}
+              </span>
+            </div>
           </div>
           {error && (
             <p role="alert" className="text-destructive text-sm">

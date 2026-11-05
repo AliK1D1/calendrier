@@ -59,12 +59,15 @@ export function NavLinks({ plansBadge }: { plansBadge?: ReactNode }) {
             href={l.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "hover:text-foreground h-full items-center border-b-2 border-transparent",
+              "hover:text-foreground items-center rounded-md transition-colors sm:h-8 sm:px-2.5",
               // Téléphone : seulement les liens secondaires, avec une zone de 44 px de large.
               secondaire
                 ? "flex gap-1.5 max-sm:min-w-11 max-sm:justify-center max-sm:px-1"
                 : "hidden sm:flex",
-              active ? "border-primary text-foreground font-medium" : "text-muted-foreground",
+              "max-sm:h-full",
+              active
+                ? "text-foreground sm:bg-accent sm:text-accent-foreground font-medium"
+                : "text-muted-foreground sm:hover:bg-accent/60",
             )}
           >
             <Icon className="size-5 sm:hidden" aria-hidden />

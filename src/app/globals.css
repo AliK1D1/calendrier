@@ -46,7 +46,7 @@
  */
 :root {
   color-scheme: light;
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --background: oklch(0.982 0.003 250);
   --foreground: oklch(0.22 0.02 260);
   --card: oklch(1 0 0);

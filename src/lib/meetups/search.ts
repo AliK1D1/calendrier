@@ -27,6 +27,13 @@ import {
 } from "@/lib/db/convert";
 import { type Result } from "@/lib/places/validation";
 import { availabilityGrid } from "@/lib/scheduling/availabilityGrid";
+import {
+  type AlmostMeetup,
+  type Compromise,
+  MIN_SHORTENED_MINUTES,
+  explainNoMeetup,
+  explainSentence,
+} from "@/lib/scheduling/explainNoMeetup";
 import { findMeetups } from "@/lib/scheduling/findMeetups";
 import {
   ceilToMinutes,
@@ -43,6 +50,23 @@ import { formatClockFr, parseClock } from "@/lib/scheduling/weeklyBlocks";
 /** Durées minimales proposées, en minutes. */
 export const MEETUP_DURATIONS = [30, 45, 60, 90, 120] as const;
 export type MeetupDuration = (typeof MEETUP_DURATIONS)[number];
+
+/**
+ * Durée la plus longue acceptée. En plus des durées du menu, une durée réduite par un
+ * compromis « Pourquoi pas ? » (multiple de 5, au moins 15 min) est acceptée.
+ */
+export const MAX_MEETUP_DURATION = 120;
+
+/** Durée acceptée : une du menu, ou un multiple de 5 min entre 15 min et 2 h. */
+export function isValidMeetupDuration(d: unknown): d is number {
+  return (
+    typeof d === "number" &&
+    Number.isInteger(d) &&
+    d >= MIN_SHORTENED_MINUTES &&
+    d <= MAX_MEETUP_DURATION &&
+    d % 5 === 0
+  );
+}
 
 /** Marge par défaut ajoutée à chaque trajet, en minutes. */
 export const DEFAULT_BUFFER_MINUTES = 5;
@@ -74,7 +98,8 @@ export interface MeetupSearchInput {
   groupId: string;
   participantIds: string[];
   period: MeetupPeriod;
-  durationMinutes: MeetupDuration;
+  /** Durée du menu, ou durée réduite par un compromis (voir `isValidMeetupDuration`). */
+  durationMinutes: number;
   bufferMinutes: number;
 }
 
@@ -105,8 +130,8 @@ export function validateMeetupSearch(raw: unknown): Result<MeetupSearchInput> {
   if (typeof r.period !== "string" || !MEETUP_PERIODS.includes(r.period as MeetupPeriod)) {
     return { ok: false, error: "Période invalide." };
   }
-  if (!MEETUP_DURATIONS.includes(r.durationMinutes as MeetupDuration)) {
-    return { ok: false, error: "Durée invalide (30, 45, 60, 90 ou 120 min)." };
+  if (!isValidMeetupDuration(r.durationMinutes)) {
+    return { ok: false, error: "Durée invalide (entre 15 min et 2 h, par tranches de 5 min)." };
   }
   const buffer = r.bufferMinutes ?? DEFAULT_BUFFER_MINUTES;
   if (
@@ -123,7 +148,7 @@ export function validateMeetupSearch(raw: unknown): Result<MeetupSearchInput> {
       groupId: r.groupId.toLowerCase(),
       participantIds: ids,
       period: r.period as MeetupPeriod,
-      durationMinutes: r.durationMinutes as MeetupDuration,
+      durationMinutes: r.durationMinutes,
       bufferMinutes: buffer,
     },
   };
@@ -202,6 +227,40 @@ export interface ExcludedView {
   reason: string;
 }
 
+/** Compromis « Pourquoi pas ? » prêt à afficher (sérialisable). */
+export type CompromiseView =
+  | { kind: "shorten"; label: string; durationMinutes: number }
+  | {
+      kind: "other-place";
+      label: string;
+      placeId: string;
+      placeName: string;
+      start: string;
+      end: string;
+    }
+  | { kind: "without"; label: string; personId: string; name: string; start: string; end: string }
+  | { kind: "call"; label: string; start: string; end: string };
+
+/**
+ * « Presque » : moment commun trop court, avec la phrase qui explique pourquoi et les
+ * compromis, du plus petit au plus grand. Jamais de titre de bloc ni de lieu d'avant/après.
+ */
+export interface AlmostView {
+  key: string;
+  placeId: string;
+  placeName: string;
+  start: string;
+  end: string;
+  dayLabel: string;
+  timeLabel: string;
+  sharedMinutes: number;
+  missingMinutes: number;
+  /** Nom de la personne qui coupe le plus le moment (`null` si personne en particulier). */
+  limitingName: string | null;
+  sentence: string;
+  compromises: CompromiseView[];
+}
+
 export interface MeetupSearchView {
   range: DateRange;
   participants: { id: string; name: string }[];
@@ -210,6 +269,11 @@ export interface MeetupSearchView {
   inPerson: ProposalView[];
   /** Appels proposés les jours sans rencontre en personne possible. */
   calls: ProposalView[];
+  /**
+   * « Pourquoi pas ? » (story 4) : seulement quand il n'y a aucune rencontre en personne, au
+   * plus 3 moments presque possibles. Vide sinon.
+   */
+  almost: AlmostView[];
   /** Blocs dont le lieu n'est pas visible (supposés à la maison), par nom de personne. */
   hiddenPlaceBlocks: { name: string; count: number }[];
   grid: GridDayView[];
@@ -312,6 +376,7 @@ export async function searchGroupMeetups(
     excluded,
     inPerson: [],
     calls: [],
+    almost: [],
     hiddenPlaceBlocks: [...hiddenCount]
       .filter(([id]) => displayName.has(id))
       .map(([id, count]) => ({ name: displayName.get(id) ?? "Membre", count })),
@@ -334,21 +399,24 @@ export async function searchGroupMeetups(
 
   const clock = deps.clock ?? (() => performance.now());
   const t0 = clock();
-  const proposals = await findMeetups(
-    people,
-    {
-      personIds: people.map((p) => p.id),
-      dates: range,
-      minDurationMinutes: input.durationMinutes,
-      bufferMinutes: input.bufferMinutes,
-      favoritePlaces,
-      candidatePlaceIds,
-      dayHours: deps.dayHours,
-      notBefore: ceilToMinutes(deps.now, 15),
-    },
-    deps.travel,
-    { maxPerDay: MAX_PROPOSALS_PER_DAY },
-  );
+  const meetupRequest = {
+    personIds: people.map((p) => p.id),
+    dates: range,
+    minDurationMinutes: input.durationMinutes,
+    bufferMinutes: input.bufferMinutes,
+    favoritePlaces,
+    candidatePlaceIds,
+    dayHours: deps.dayHours,
+    notBefore: ceilToMinutes(deps.now, 15),
+  };
+  const proposals = await findMeetups(people, meetupRequest, deps.travel, {
+    maxPerDay: MAX_PROPOSALS_PER_DAY,
+  });
+  // « Pourquoi pas ? » : seulement sans rencontre en personne. Mêmes paires de lieux que la
+  // recherche, déjà préparées : aucun appel d'API de trajet de plus.
+  const almost = proposals.some((p) => p.kind === "in-person")
+    ? []
+    : await explainNoMeetup(people, meetupRequest, deps.travel);
   const grid = availabilityGrid(people, range, { dayHours: deps.dayHours });
   const computeMs = clock() - t0;
 
@@ -360,6 +428,7 @@ export async function searchGroupMeetups(
       ...base,
       inPerson: views.filter((v) => v.kind === "in-person"),
       calls: views.filter((v) => v.kind === "call"),
+      almost: almost.map((a, i) => toAlmostView(a, i, placeName, displayName)),
       grid: grid.map((d) => ({
         day: d.day,
         dayLabel: dayLabel(d.slots[0]?.start ?? new Date(`${d.day}T12:00:00Z`)),
@@ -458,4 +527,82 @@ function toView(
     })),
     score: Math.round(p.score * 100) / 100,
   };
+}
+
+function compromiseView(
+  c: Compromise,
+  placeName: ReadonlyMap<string, string>,
+  displayName: ReadonlyMap<PersonId, string>,
+): CompromiseView {
+  const duration = (start: Date, end: Date) => formatMinutesFr(minutesBetween(start, end));
+  switch (c.kind) {
+    case "shorten":
+      return {
+        kind: "shorten",
+        label: `Réduire à ${formatMinutesFr(c.durationMinutes)}`,
+        durationMinutes: c.durationMinutes,
+      };
+    case "other-place": {
+      const name = placeName.get(c.placeId) ?? "Lieu";
+      return {
+        kind: "other-place",
+        label: `Se voir à ${name} (${clockLabel(c.start)}, ${duration(c.start, c.end)})`,
+        placeId: c.placeId,
+        placeName: name,
+        start: c.start.toISOString(),
+        end: c.end.toISOString(),
+      };
+    }
+    case "without": {
+      const name = displayName.get(c.personId) ?? "cette personne";
+      return {
+        kind: "without",
+        label: `Se voir sans ${name} (${duration(c.start, c.end)})`,
+        personId: c.personId,
+        name,
+        start: c.start.toISOString(),
+        end: c.end.toISOString(),
+      };
+    }
+    case "call":
+      return {
+        kind: "call",
+        label: `Faire un appel (${clockLabel(c.start)} – ${clockLabel(c.end)})`,
+        start: c.start.toISOString(),
+        end: c.end.toISOString(),
+      };
+  }
+}
+
+function toAlmostView(
+  a: AlmostMeetup,
+  index: number,
+  placeName: ReadonlyMap<string, string>,
+  displayName: ReadonlyMap<PersonId, string>,
+): AlmostView {
+  const place = placeName.get(a.placeId) ?? "Lieu";
+  const limitingName = a.limiting ? (displayName.get(a.limiting.personId) ?? null) : null;
+  return {
+    key: `presque-${a.placeId}-${a.start.toISOString()}-${index}`,
+    placeId: a.placeId,
+    placeName: place,
+    start: a.start.toISOString(),
+    end: a.end.toISOString(),
+    dayLabel: dayLabel(a.start),
+    timeLabel: `${clockLabel(a.start)} – ${clockLabel(a.end)}`,
+    sharedMinutes: a.sharedMinutes,
+    missingMinutes: a.missingMinutes,
+    limitingName,
+    sentence: explainSentence(a, limitingName, place),
+    compromises: a.compromises.map((c) => compromiseView(c, placeName, displayName)),
+  };
+}
+
+/** « 75 » → « 1 h 15 » ; « 40 » → « 40 min ». */
+export function formatMinutesFr(minutes: number): string {
+  const total = Math.floor(minutes);
+  if (total < 60) return `${total} min`;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, "0")}`;
 }

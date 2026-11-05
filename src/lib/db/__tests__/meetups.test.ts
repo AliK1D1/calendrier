@@ -305,6 +305,45 @@ describe("Quand on peut se voir : cas « ali » de bout en bout (BD → proposit
   });
 });
 
+describe("Pourquoi pas ? (story 4) : de la BD à l'explication", () => {
+  it("rien en personne sur 45 min : 3 « presque » au plus, sans titre de bloc ; réduire relance et trouve", async () => {
+    await seedPerson(ALI, ali);
+    await seedPerson(SAM, sam);
+    const gid = await createGroupWith(ALI, [SAM]);
+    const hours = { start: "11:30", end: "13:00" };
+    const v = await search(SAM, input(gid, [ALI, SAM], { durationMinutes: 45 }), hours);
+    expect(v.inPerson).toEqual([]);
+    expect(v.almost).toHaveLength(3);
+    const missing = v.almost.map((a) => a.missingMinutes);
+    expect(missing).toEqual([...missing].sort((a, b) => a - b));
+    for (const a of v.almost) {
+      expect(a.missingMinutes).toBe(45 - a.sharedMinutes);
+      expect(a.sharedMinutes).toBeGreaterThanOrEqual(23);
+      expect(a.limitingName === null || ["ali", "Sam"].includes(a.limitingName)).toBe(true);
+    }
+    // Jamais de titre de bloc (les cours des fixtures) dans l'explication.
+    const json = JSON.stringify(v.almost);
+    for (const b of [...ali.busyBlocks, ...sam.busyBlocks]) expect(json).not.toContain(b.title);
+
+    // Le plus petit compromis (réduire la durée) appliqué : le moment apparaît, prêt à proposer.
+    const first = v.almost[0];
+    const shorten = first.compromises[0];
+    expect(shorten.kind).toBe("shorten");
+    if (shorten.kind !== "shorten") return;
+    const again = await search(
+      SAM,
+      input(gid, [ALI, SAM], { durationMinutes: shorten.durationMinutes }),
+      hours,
+    );
+    expect(
+      again.inPerson.some(
+        (p) => p.placeId === first.placeId && p.start < first.end && p.end > first.start,
+      ),
+    ).toBe(true);
+    expect(again.almost).toEqual([]);
+  });
+});
+
 describe("Quand on peut se voir : fixtures du segment 4 lues depuis la BD", () => {
   it("ali, Sam, Maya et Léo sur la semaine : mêmes propositions que findMeetups sur les fixtures", async () => {
     await seedPerson(ALI, ali);
@@ -541,7 +580,10 @@ describe("validateMeetupSearch", () => {
   });
   it("refuse durée, période, marge, participants ou groupe invalides", () => {
     const bad = (x: Record<string, unknown>) => validateMeetupSearch({ ...ok, ...x }).ok;
-    expect(bad({ durationMinutes: 50 })).toBe(false);
+    expect(bad({ durationMinutes: 50 })).toBe(true); // durée réduite par un compromis : OK
+    expect(bad({ durationMinutes: 10 })).toBe(false);
+    expect(bad({ durationMinutes: 47 })).toBe(false);
+    expect(bad({ durationMinutes: 125 })).toBe(false);
     expect(bad({ durationMinutes: "60" })).toBe(false);
     expect(bad({ period: "demain" })).toBe(false);
     expect(bad({ bufferMinutes: -1 })).toBe(false);

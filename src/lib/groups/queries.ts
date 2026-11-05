@@ -39,6 +39,9 @@ export interface GroupBusyBlock {
   weekday: number | null;
   valid_from: string | null;
   valid_until: string | null;
+  /** Répétition personnalisée (migration 0015 ; absente avant). */
+  repeat_unit?: "day" | "week" | "month" | "year" | null;
+  repeat_every?: number;
 }
 
 export interface GroupDetail {

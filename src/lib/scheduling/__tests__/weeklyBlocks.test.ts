@@ -11,6 +11,7 @@ import {
   occurrencesIn,
   occursOn,
   parseClock,
+  repeatLabel,
   shareADay,
   suggestSession,
   validateBlockForm,
@@ -334,5 +335,212 @@ describe("validateBlockForm", () => {
   it("validateBlockId", () => {
     expect(validateBlockId(PLACE.toUpperCase())).toEqual({ ok: true, value: PLACE });
     expect(validateBlockId("1; drop table")).toMatchObject({ ok: false });
+  });
+});
+
+// ─── Story 2 : répétition personnalisée ────────────────────────────────────────────────────
+
+describe("répétition personnalisée (tous les X jours / semaines / mois / ans)", () => {
+  const form = (partial: Record<string, unknown>) => ({
+    title: "Club",
+    placeId: null,
+    start: "18:00",
+    end: "20:00",
+    kind: "custom",
+    weekdays: [2],
+    date: "2026-11-05",
+    sessionStart: "2026-11-05",
+    sessionEnd: "",
+    repeatEvery: "2",
+    repeatUnit: "week",
+    repeatEnd: "never",
+    repeatCount: "10",
+    ...partial,
+  });
+
+  it("refuse 0, un nombre négatif, vide, décimal ou plus de 99, sans rien créer", () => {
+    for (const repeatEvery of ["0", "-1", "", "  ", "2.5", "100", "abc", 0, -3]) {
+      const r = validateBlockForm(form({ repeatEvery }));
+      expect(r.ok, String(repeatEvery)).toBe(false);
+      if (!r.ok) expect(r.error).toMatch(/1 à 99/);
+    }
+    expect(validateBlockForm(form({ repeatEvery: "99" })).ok).toBe(true);
+  });
+
+  it("refuse une unité inconnue, une date de début manquante, aucun jour en semaines", () => {
+    expect(validateBlockForm(form({ repeatUnit: "siècle" })).ok).toBe(false);
+    expect(validateBlockForm(form({ sessionStart: "" })).ok).toBe(false);
+    expect(validateBlockForm(form({ weekdays: [] })).ok).toBe(false);
+    // Les jours cochés ne servent pas pour les mois.
+    expect(validateBlockForm(form({ repeatUnit: "month", weekdays: [] })).ok).toBe(true);
+  });
+
+  it("toutes les 2 semaines le mardi et le jeudi, sans fin : un bloc par jour, même ancrage", () => {
+    const r = validateBlockForm(form({ weekdays: [4, 2] }));
+    expect(r.ok && r.value).toEqual([
+      expect.objectContaining({
+        weekday: 2,
+        validFrom: "2026-11-05",
+        validUntil: null,
+        repeatUnit: "week",
+        repeatEvery: 2,
+      }),
+      expect.objectContaining({ weekday: 4, validFrom: "2026-11-05", repeatEvery: 2 }),
+    ]);
+    if (!r.ok) return;
+    const range = { from: "2026-11-01", to: "2026-11-30" };
+    expect(r.value.flatMap((b) => occurrencesIn(b, range)).sort()).toEqual([
+      "2026-11-05",
+      "2026-11-17",
+      "2026-11-19",
+    ]);
+  });
+
+  it("tous les mois à partir du 31 : un seul bloc ponctuel répété, dernier jour des mois courts", () => {
+    const r = validateBlockForm(
+      form({ repeatUnit: "month", repeatEvery: 1, sessionStart: "2027-01-31" }),
+    );
+    expect(r.ok && r.value).toEqual([
+      expect.objectContaining({ weekday: null, repeatUnit: "month", validFrom: "2027-01-31" }),
+    ]);
+    if (!r.ok) return;
+    expect(occurrencesIn(r.value[0], { from: "2027-01-01", to: "2027-04-30" })).toEqual([
+      "2027-01-31",
+      "2027-02-28",
+      "2027-03-31",
+      "2027-04-30",
+    ]);
+  });
+
+  it("fin à une date : après le début, au plus 10 ans", () => {
+    const ok = validateBlockForm(form({ repeatEnd: "date", sessionEnd: "2027-06-30" }));
+    expect(ok.ok && ok.value[0].validUntil).toBe("2027-06-30");
+    expect(validateBlockForm(form({ repeatEnd: "date", sessionEnd: "2026-11-01" })).ok).toBe(false);
+    expect(validateBlockForm(form({ repeatEnd: "date", sessionEnd: "" })).ok).toBe(false);
+    expect(validateBlockForm(form({ repeatEnd: "date", sessionEnd: "2037-01-01" })).ok).toBe(false);
+    // Aucun jour coché ne tombe avant la fin : refusé.
+    expect(
+      validateBlockForm(form({ weekdays: [1], repeatEnd: "date", sessionEnd: "2026-11-07" })).ok,
+    ).toBe(false);
+  });
+
+  it("fin après N fois : devient la date de la N-ième occurrence", () => {
+    const r = validateBlockForm(form({ weekdays: [2, 4], repeatEnd: "count", repeatCount: "4" }));
+    expect(r.ok && r.value.map((b) => b.validUntil)).toEqual(["2026-12-01", "2026-12-01"]);
+    const mois = validateBlockForm(
+      form({ repeatUnit: "month", repeatEvery: "3", repeatEnd: "count", repeatCount: 2 }),
+    );
+    expect(mois.ok && mois.value[0].validUntil).toBe("2027-02-05");
+    for (const repeatCount of ["0", "", "1000", "-2"]) {
+      expect(validateBlockForm(form({ repeatEnd: "count", repeatCount })).ok).toBe(false);
+    }
+    // Trop loin : 999 fois tous les 99 ans.
+    expect(
+      validateBlockForm(
+        form({ repeatUnit: "year", repeatEvery: 99, repeatEnd: "count", repeatCount: 999 }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("refuse une fin inconnue et, en modification, plusieurs jours", () => {
+    expect(validateBlockForm(form({ repeatEnd: "parfois" })).ok).toBe(false);
+    expect(validateBlockForm(form({ weekdays: [2, 4] }), { single: true }).ok).toBe(false);
+  });
+
+  it("les options « Chaque semaine » et « Une seule fois » restent comme avant", () => {
+    const hebdo = validateBlockForm(
+      form({ kind: "weekly", weekdays: [1], sessionStart: "2025-08-25", sessionEnd: "2025-12-19" }),
+    );
+    expect(hebdo.ok && hebdo.value[0].repeatUnit).toBeUndefined();
+    const une = validateBlockForm(form({ kind: "once" }));
+    expect(une.ok && une.value[0]).toMatchObject({ weekday: null, validFrom: "2026-11-05" });
+  });
+
+  it("occursOn et blocksOnDay : un bloc aux 2 semaines n'apparaît qu'une semaine sur deux", () => {
+    const b = bloc({
+      weekday: 2,
+      validFrom: "2026-11-03",
+      validUntil: null,
+      repeatUnit: "week",
+      repeatEvery: 2,
+    });
+    expect(occursOn(b, "2026-11-03")).toBe(true);
+    expect(occursOn(b, "2026-11-10")).toBe(false);
+    expect(occursOn(b, "2026-11-17")).toBe(true);
+    expect(blocksOnDay([b], "2026-11-10")).toEqual([]);
+  });
+
+  it("chevauchements : tient compte de l'alternance et des mois", () => {
+    const pair = bloc({
+      id: "p",
+      weekday: 2,
+      validFrom: "2026-11-03",
+      validUntil: null,
+      repeatUnit: "week",
+      repeatEvery: 2,
+    });
+    const impair = bloc({
+      id: "i",
+      weekday: 2,
+      validFrom: "2026-11-10",
+      validUntil: null,
+      repeatUnit: "week",
+      repeatEvery: 2,
+    });
+    expect(shareADay(pair, impair)).toBe(false);
+    const hebdo = bloc({ id: "h", weekday: 2, ...AUTOMNE });
+    expect(shareADay(pair, hebdo)).toBe(false); // l'automne 2025 est fini avant le début
+    const hebdo2026 = bloc({
+      id: "h2",
+      weekday: 2,
+      validFrom: "2026-11-01",
+      validUntil: "2026-12-20",
+    });
+    expect(shareADay(pair, hebdo2026)).toBe(true);
+    // Le 31 de chaque mois (dernier jour) et un ponctuel le 30 avril 2027.
+    const mensuel = bloc({
+      id: "m",
+      weekday: null,
+      validFrom: "2027-01-31",
+      validUntil: null,
+      repeatUnit: "month",
+      repeatEvery: 1,
+    });
+    expect(
+      shareADay(
+        mensuel,
+        bloc({ weekday: null, validFrom: "2027-04-30", validUntil: "2027-04-30" }),
+      ),
+    ).toBe(true);
+    expect(
+      shareADay(
+        mensuel,
+        bloc({ weekday: null, validFrom: "2027-04-29", validUntil: "2027-04-29" }),
+      ),
+    ).toBe(false);
+    expect(findOverlaps({ ...pair, id: undefined }, [impair, hebdo2026])).toEqual([hebdo2026]);
+  });
+
+  it("suggestSession ignore les répétitions personnalisées", () => {
+    const perso = bloc({
+      weekday: 1,
+      validFrom: "2026-11-02",
+      validUntil: "2027-03-01",
+      repeatUnit: "week",
+      repeatEvery: 2,
+    });
+    expect(suggestSession([perso], "2026-11-05")).toEqual({ from: "2026-11-02", to: "2026-12-20" });
+  });
+
+  it("repeatLabel : en mots", () => {
+    expect(repeatLabel(bloc({ weekday: 1, ...AUTOMNE }))).toBe("chaque semaine");
+    expect(
+      repeatLabel(
+        bloc({ weekday: 1, validFrom: "2026-11-02", repeatUnit: "week", repeatEvery: 2 }),
+      ),
+    ).toBe("toutes les 2 semaines");
+    expect(
+      repeatLabel(bloc({ weekday: null, validFrom: "2026-11-05", validUntil: "2026-11-05" })),
+    ).toBeNull();
   });
 });

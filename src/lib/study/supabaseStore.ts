@@ -54,7 +54,7 @@ export function supabaseStudyStore(supabase: SupabaseClient, userId: string): St
       const { data, error } = await supabase
         .from("busy_blocks")
         .select(
-          "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, source, deadline_id, movable",
+          "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, repeat_unit, repeat_every, source, deadline_id, movable",
         )
         .eq("owner_id", userId)
         .returns<StudyBlockInput[]>();

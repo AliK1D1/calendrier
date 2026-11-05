@@ -113,7 +113,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0014.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0016.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -129,6 +129,8 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0012.sql",
       "supabase/migration-0013.sql",
       "supabase/migration-0014.sql",
+      "supabase/migration-0015.sql",
+      "supabase/migration-0016.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -2316,6 +2318,232 @@ describe("Connecteur Outlook (migration 0014) : jeton privé, blocs « Occupé �
         "SELECT has_function_privilege('anon', 'public.replace_outlook_blocks(jsonb)', 'EXECUTE') AS ok",
       );
       expect(droits).toEqual([{ ok: false }]);
+    } finally {
+      await ancienne.close();
+    }
+  }, 60_000);
+});
+
+describe("Répétition personnalisée (story 2, migration 0015)", () => {
+  it("j'enregistre « toutes les 2 semaines » et « chaque mois » ; le groupe reçoit la répétition", async () => {
+    await as(A, () =>
+      rows(
+        `INSERT INTO busy_blocks (title, start_time, end_time, weekday, valid_from, repeat_unit, repeat_every)
+         VALUES ('Club', '18:00', '20:00', 2, '2026-11-05', 'week', 2),
+                ('Loyer', '09:00', '10:00', NULL, '2026-01-31', 'month', 1)`,
+      ),
+    );
+    await as(A, () =>
+      rows("UPDATE busy_blocks SET repeat_every = 3 WHERE title = 'Club' AND owner_id = $1", [A]),
+    );
+    const g = await createGroup(A, "Gang");
+    await join_(B, g.code);
+    const vus = await as(B, () =>
+      rows<{ repeat_unit: string | null; repeat_every: number; valid_until: string | null }>(
+        `SELECT repeat_unit, repeat_every, valid_until FROM public.group_busy_blocks($1)
+         WHERE owner_id = $2 ORDER BY repeat_unit`,
+        [g.id, A],
+      ),
+    );
+    expect(vus).toEqual([
+      { repeat_unit: "month", repeat_every: 1, valid_until: null },
+      { repeat_unit: "week", repeat_every: 3, valid_until: null },
+    ]);
+  });
+
+  it("la base refuse un X hors 1..99, une forme incohérente et une répétition hors « manuel »", async () => {
+    const insert = (cols: string, vals: string) =>
+      db.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, ${cols})
+                VALUES ($1, 'x', '10:00', '11:00', ${vals})`,
+        [A],
+      );
+    await expect(
+      insert("weekday, valid_from, repeat_unit, repeat_every", "1, '2026-11-02', 'week', 0"),
+    ).rejects.toThrow(/busy_blocks_repeat_every_range/);
+    await expect(
+      insert("weekday, valid_from, repeat_unit, repeat_every", "1, '2026-11-02', 'week', 100"),
+    ).rejects.toThrow(/busy_blocks_repeat_every_range/);
+    // Intervalle sans unité, « mois » avec un jour de semaine, « semaine » sans début.
+    await expect(insert("weekday, valid_from, repeat_every", "1, '2026-11-02', 2")).rejects.toThrow(
+      /busy_blocks_repeat_shape/,
+    );
+    await expect(
+      insert("weekday, valid_from, repeat_unit", "1, '2026-11-02', 'month'"),
+    ).rejects.toThrow(/busy_blocks_repeat_shape/);
+    await expect(insert("weekday, repeat_unit", "1, 'week'")).rejects.toThrow(
+      /busy_blocks_repeat_shape/,
+    );
+    await expect(insert("valid_from, repeat_unit", "'2026-11-02', 'siècle'")).rejects.toThrow(
+      /busy_blocks_repeat_shape/,
+    );
+    await expect(
+      insert("weekday, valid_from, repeat_unit, source", "1, '2026-11-02', 'week', 'ics'"),
+    ).rejects.toThrow(/busy_blocks_repeat_manual/);
+    // 10 ans au plus avec une date de fin ; un hebdomadaire simple garde la limite d'un an.
+    await expect(
+      insert("valid_from, valid_until, repeat_unit", "'2026-11-02', '2036-12-01', 'month'"),
+    ).rejects.toThrow(/busy_blocks_validity_span/);
+    await insert("valid_from, valid_until, repeat_unit", "'2026-11-02', '2030-11-02', 'month'");
+    await expect(
+      insert("weekday, valid_from, valid_until", "1, '2026-11-02', '2028-11-02'"),
+    ).rejects.toThrow(/busy_blocks_validity_span/);
+  });
+
+  it("migration 0015 seule sur une base en 0014 avec des données", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      for (const tag of [
+        "0000_schema",
+        "0001_rls_triggers",
+        "0002_review_hardening",
+        "0003_onboarding",
+        "0004_quiet_hours",
+        "0005_review_limits",
+        "0006_groups",
+        "0007_review_kick_new_code",
+        "0008_review_row_limits",
+        "0009_segment12_meetup_invites",
+        "0010_review_plan_privacy",
+        "0011_segment13_study_planner",
+        "0012_segment18_availability_slots",
+        "0013_review_availability_limit",
+        "0014_outlook_connector",
+      ]) {
+        await ancienne.exec(drizzleSql(tag));
+      }
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      await ancienne.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday, valid_from, valid_until)
+         VALUES ($1, 'Chimie', '10:00', '12:00', 1, '2026-08-24', '2026-12-18'),
+                ($1, 'Dentiste', '09:00', '10:00', NULL, '2026-11-20', '2026-11-20')`,
+        [A],
+      );
+      await ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0015.sql"), "utf8"));
+      const { rows: blocs } = await ancienne.query(
+        "SELECT title, repeat_unit, repeat_every FROM busy_blocks ORDER BY title",
+      );
+      expect(blocs).toEqual([
+        { title: "Chimie", repeat_unit: null, repeat_every: 1 },
+        { title: "Dentiste", repeat_unit: null, repeat_every: 1 },
+      ]);
+      const { rows: droits } = await ancienne.query<{ ok: boolean }>(
+        "SELECT has_function_privilege('anon', 'public.group_busy_blocks(uuid)', 'EXECUTE') AS ok",
+      );
+      expect(droits).toEqual([{ ok: false }]);
+    } finally {
+      await ancienne.close();
+    }
+  }, 60_000);
+});
+
+describe("Revue récurrence 1 : un bloc « tous les jours » compte pour 7 dans les 1000 blocs", () => {
+  /** `n` blocs « tous les `every` jours » (ou hebdomadaires si `every` est nul) pour `uid`. */
+  async function blocs(uid: string, n: number, every: number | null) {
+    return as(uid, () =>
+      rows(
+        every === null
+          ? `INSERT INTO busy_blocks (title, start_time, end_time, weekday, valid_from, valid_until)
+             SELECT 'Cours', '10:00', '11:00', 1 + g % 7, '2026-08-25', '2026-12-20'
+             FROM generate_series(1, $1::int) g`
+          : `INSERT INTO busy_blocks (title, start_time, end_time, valid_from, repeat_unit, repeat_every)
+             SELECT 'Job', '10:00', '11:00', '2026-08-25', 'day', $2::int
+             FROM generate_series(1, $1::int) g`,
+        every === null ? [n] : [n, every],
+      ),
+    );
+  }
+
+  it("avant : 1000 « tous les jours » donnaient 7000 blocs par semaine ; maintenant au plus 1000", async () => {
+    // 142 blocs « tous les jours » = 994 ; il reste de la place pour 6 blocs hebdomadaires.
+    await blocs(A, 142, 1);
+    await blocs(A, 6, null);
+    await expect(blocs(A, 1, null)).rejects.toThrow(/Trop de blocs dans l'horaire/);
+    await expect(blocs(A, 1, 1)).rejects.toThrow(/Trop de blocs dans l'horaire/);
+    // « Tous les 7 jours » ou plus compte pour 1, comme un bloc hebdomadaire.
+    await as(A, () =>
+      rows(
+        "DELETE FROM busy_blocks WHERE ctid IN (SELECT ctid FROM busy_blocks WHERE repeat_unit = 'day' LIMIT 1)",
+      ),
+    );
+    await blocs(A, 1, 7);
+    await blocs(A, 6, null);
+    await expect(blocs(A, 1, 30)).rejects.toThrow(/Trop de blocs dans l'horaire/);
+    // Les autres ne sont pas touchés.
+    await blocs(B, 3, 1);
+  });
+
+  it("changer un bloc en « tous les jours » compte aussi ; le reste des modifications marche", async () => {
+    await blocs(A, 996, null);
+    const [id] = await as(A, () =>
+      rows<{ id: string }>("SELECT id FROM busy_blocks WHERE owner_id = $1 LIMIT 1", [A]),
+    );
+    await as(A, () =>
+      rows(
+        "UPDATE busy_blocks SET weekday = NULL, repeat_unit = 'day', repeat_every = 2 WHERE id = $1",
+        [id.id],
+      ),
+    ); // 995 + 4 = 999
+    await expect(
+      as(A, () => rows("UPDATE busy_blocks SET repeat_every = 1 WHERE id = $1", [id.id])),
+    ).rejects.toThrow(/Trop de blocs dans l'horaire/); // 995 + 7 = 1002
+    // Changer le titre, les heures, ou espacer la répétition reste permis.
+    await as(A, () =>
+      rows(
+        "UPDATE busy_blocks SET title = 'Job', start_time = '09:00', repeat_every = 3 WHERE id = $1",
+        [id.id],
+      ),
+    );
+  });
+});
+
+describe("Revue récurrence 2 : migration 0015 sur une vieille base avec un bloc d'avant la revue 8", () => {
+  it("s'applique même si un vieux bloc hebdomadaire dure plus d'un an (contrainte NOT VALID)", async () => {
+    const ancienne = new PGlite();
+    try {
+      await ancienne.exec(FAKE_SUPABASE);
+      const tags = [
+        "0000_schema",
+        "0001_rls_triggers",
+        "0002_review_hardening",
+        "0003_onboarding",
+        "0004_quiet_hours",
+        "0005_review_limits",
+        "0006_groups",
+        "0007_review_kick_new_code",
+        "0008_review_row_limits",
+        "0009_segment12_meetup_invites",
+        "0010_review_plan_privacy",
+        "0011_segment13_study_planner",
+        "0012_segment18_availability_slots",
+        "0013_review_availability_limit",
+        "0014_outlook_connector",
+      ];
+      for (const tag of tags.slice(0, 5)) await ancienne.exec(drizzleSql(tag));
+      await ancienne.query("INSERT INTO auth.users (id, email) VALUES ($1, 'ali@example.com')", [
+        A,
+      ]);
+      // Écrit avant la migration 0005 (qui a ajouté la limite d'un an en NOT VALID).
+      await ancienne.query(
+        `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday, valid_from, valid_until)
+         VALUES ($1, 'Vieux cours', '10:00', '12:00', 1, '2024-08-26', '2026-05-20')`,
+        [A],
+      );
+      for (const tag of tags.slice(5)) await ancienne.exec(drizzleSql(tag));
+      await ancienne.exec(readFileSync(join(ROOT, "supabase/migration-0015.sql"), "utf8"));
+      const { rows: blocs } = await ancienne.query("SELECT title, repeat_every FROM busy_blocks");
+      expect(blocs).toEqual([{ title: "Vieux cours", repeat_every: 1 }]);
+      // La règle s'applique toujours aux nouveaux blocs.
+      await expect(
+        ancienne.query(
+          `INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday, valid_from, valid_until)
+           VALUES ($1, 'Trop long', '10:00', '12:00', 1, '2026-08-25', '2027-09-01')`,
+          [A],
+        ),
+      ).rejects.toThrow(/busy_blocks_validity_span/);
     } finally {
       await ancienne.close();
     }

@@ -2029,4 +2029,123 @@ REVOKE EXECUTE ON FUNCTION public.group_busy_blocks(uuid) FROM PUBLIC, anon;
 
 GRANT EXECUTE ON FUNCTION public.group_busy_blocks(uuid) TO authenticated;
 
+-- ─── Migration 0015_custom_recurrence ────────────────────────────────────────────────
+
+ALTER TABLE "busy_blocks" DROP CONSTRAINT "busy_blocks_validity_span";
+ALTER TABLE "busy_blocks" DROP CONSTRAINT "busy_blocks_one_off_has_day";
+ALTER TABLE "busy_blocks" ADD COLUMN "repeat_unit" text;
+ALTER TABLE "busy_blocks" ADD COLUMN "repeat_every" smallint DEFAULT 1 NOT NULL;
+ALTER TABLE "busy_blocks" ADD CONSTRAINT "busy_blocks_repeat_every_range" CHECK ("busy_blocks"."repeat_every" between 1 and 99);
+ALTER TABLE "busy_blocks" ADD CONSTRAINT "busy_blocks_repeat_shape" CHECK (("busy_blocks"."repeat_unit" is null and "busy_blocks"."repeat_every" = 1) or ("busy_blocks"."repeat_unit" is not null and (("busy_blocks"."repeat_unit" = 'week' and "busy_blocks"."weekday" is not null and "busy_blocks"."valid_from" is not null) or ("busy_blocks"."repeat_unit" in ('day', 'month', 'year') and "busy_blocks"."weekday" is null and "busy_blocks"."valid_from" is not null))));
+ALTER TABLE "busy_blocks" ADD CONSTRAINT "busy_blocks_repeat_manual" CHECK ("busy_blocks"."repeat_unit" is null or "busy_blocks"."source"::text = 'manual');
+ALTER TABLE "busy_blocks" ADD CONSTRAINT "busy_blocks_validity_span" CHECK ("busy_blocks"."valid_from" is null or "busy_blocks"."valid_until" is null or "busy_blocks"."valid_until" - "busy_blocks"."valid_from" < (case when "busy_blocks"."repeat_unit" is null then 366 else 3660 end)) NOT VALID;
+ALTER TABLE "busy_blocks" ADD CONSTRAINT "busy_blocks_one_off_has_day" CHECK ("busy_blocks"."weekday" is not null or "busy_blocks"."repeat_unit" is not null or ("busy_blocks"."valid_from" is not null and ("busy_blocks"."valid_until" is null or "busy_blocks"."valid_until" = "busy_blocks"."valid_from")));
+
+-- ─── Story 2 : répétition personnalisée (« tous les X jours / semaines / mois / ans ») ────
+-- Droits par colonne (migration 0009) : la personne peut écrire la répétition de ses blocs.
+GRANT INSERT (repeat_unit, repeat_every), UPDATE (repeat_unit, repeat_every)
+  ON public.busy_blocks TO authenticated;
+
+
+-- L'horaire du groupe renvoie aussi la répétition (sinon un bloc « toutes les 2 semaines »
+-- compterait chaque semaine pour les autres). Le type de retour change : on recrée la
+-- fonction. Le reste est inchangé (migration 0014).
+DROP FUNCTION public.group_busy_blocks(uuid);
+
+CREATE FUNCTION public.group_busy_blocks(gid uuid)
+RETURNS TABLE (
+  id uuid,
+  owner_id uuid,
+  title text,
+  title_hidden boolean,
+  place_id uuid,
+  start_time time,
+  end_time time,
+  weekday smallint,
+  valid_from date,
+  valid_until date,
+  repeat_unit text,
+  repeat_every smallint
+)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $$
+  SELECT
+    b.id,
+    b.owner_id,
+    CASE WHEN b.owner_id = (SELECT auth.uid())
+        OR NOT (p.hide_block_titles OR b.source::text IN ('study', 'outlook')
+          OR coalesce(mp.group_id <> gid, false))
+      THEN b.title ELSE 'Occupé' END,
+    b.owner_id <> (SELECT auth.uid())
+      AND (p.hide_block_titles OR b.source::text IN ('study', 'outlook')
+        OR coalesce(mp.group_id <> gid, false)),
+    b.place_id,
+    b.start_time,
+    b.end_time,
+    b.weekday,
+    b.valid_from,
+    b.valid_until,
+    b.repeat_unit,
+    b.repeat_every
+  FROM public.busy_blocks b
+  JOIN public.group_members m ON m.user_id = b.owner_id AND m.group_id = gid
+  JOIN public.profiles p ON p.id = b.owner_id
+  LEFT JOIN public.meetup_plans mp ON mp.id = b.meetup_plan_id
+  WHERE public.is_group_member(gid)
+  ORDER BY b.owner_id, b.weekday NULLS LAST, b.valid_from, b.start_time;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.group_busy_blocks(uuid) FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.group_busy_blocks(uuid) TO authenticated;
+
+-- ─── Migration 0016_review_repeat_weight ─────────────────────────────────────────────
+
+-- Migration de la revue sécurité (story 2, répétition personnalisée).
+--
+-- 1. Un bloc « tous les jours » compte pour 7 dans la limite de 1000 blocs (migration 0008).
+--    La limite comptait les lignes. Un bloc hebdomadaire revient une fois par semaine, mais un
+--    bloc « tous les jours » revient 7 fois : 1000 blocs « tous les jours » donnaient
+--    7000 blocs par semaine à déplier pour chaque membre de ses groupes (recherche de moments,
+--    « Je suis libre maintenant », 2,6 s → 6,6 s). Maintenant, un bloc « tous les X jours »
+--    compte pour ceil(7 / X) : au plus 1000 blocs par semaine, comme avant. Sans bloc
+--    « tous les jours », rien ne change (tous les poids valent 1).
+CREATE OR REPLACE FUNCTION public.busy_block_weight(unit text, every integer)
+RETURNS integer
+LANGUAGE sql IMMUTABLE SET search_path = ''
+AS $$
+  SELECT CASE WHEN unit = 'day' THEN ceil(7.0 / greatest(coalesce(every, 1), 1))::integer ELSE 1 END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.enforce_repeat_weight()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  w integer := public.busy_block_weight(NEW.repeat_unit, NEW.repeat_every);
+BEGIN
+  IF TG_OP = 'UPDATE' AND w <= public.busy_block_weight(OLD.repeat_unit, OLD.repeat_every) THEN
+    RETURN NEW;
+  END IF;
+  IF w + (
+    SELECT coalesce(sum(public.busy_block_weight(b.repeat_unit, b.repeat_every)), 0)
+    FROM public.busy_blocks b
+    WHERE b.owner_id = NEW.owner_id AND (TG_OP = 'INSERT' OR b.id <> NEW.id)
+  ) > 1000 THEN
+    RAISE EXCEPTION 'Trop de blocs dans l''horaire (1000 au maximum ; un bloc « tous les jours » compte pour 7)'
+      USING ERRCODE = '54000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS busy_blocks_repeat_weight ON public.busy_blocks;
+
+CREATE TRIGGER busy_blocks_repeat_weight
+  BEFORE INSERT OR UPDATE OF repeat_unit, repeat_every ON public.busy_blocks
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_repeat_weight();
+
+REVOKE EXECUTE ON FUNCTION public.enforce_repeat_weight(), public.busy_block_weight(text, integer)
+  FROM PUBLIC, anon, authenticated;
+
 COMMIT;

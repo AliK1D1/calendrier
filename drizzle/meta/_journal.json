@@ -134,6 +134,13 @@
       "when": 1793907377564,
       "tag": "0018_story5_recurring_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793908781342,
+      "tag": "0019_review_series_limit",
+      "breakpoints": true
     }
   ]
 }

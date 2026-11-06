@@ -47,6 +47,10 @@
  */
 :root {
   color-scheme: light;
+  /* Accent par défaut (bleu) : sans data-accent, ou avant que le script d'apparence ait
+     tourné. Les autres accents sont plus bas (`[data-accent=…]`). */
+  --teinte: 258;
+  --chroma: 0.13;
   --radius: 0.75rem;
   --background: oklch(0.982 0.003 250);
   --foreground: oklch(0.22 0.02 260);

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { safeNextPath } from "@/lib/auth/paths";
+import { authErrorMessage } from "@/lib/i18n/lookup";
 import { getI18n } from "@/lib/i18n/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentUser } from "@/lib/supabase/server";
@@ -29,7 +30,7 @@ export default async function Connexion({ searchParams }: { searchParams: Search
   const next = safeNextPath(first(params.next));
   const configured = isSupabaseConfigured();
   const erreurCode = configured ? first(params.erreur) : "config";
-  const erreur = erreurCode ? t.auth.errors[erreurCode] : undefined;
+  const erreur = authErrorMessage(t, erreurCode);
   const envoye = first(params.envoye) === "1";
 
   if (configured && (await getCurrentUser())) redirect(next);

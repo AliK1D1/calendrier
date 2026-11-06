@@ -5,12 +5,13 @@
  * Un message absent du catalogue reste en français (jamais de texte vide).
  */
 import type { Locale } from "./config";
+import { ownText } from "./lookup";
 import { EN_PATTERNS, EN_TEXTS } from "./serverText.en";
 
 /** Message serveur dans la langue voulue (inchangé en français). */
 export function translateServerText(text: string, locale: Locale): string {
   if (locale === "fr") return text;
-  const exact = EN_TEXTS[text];
+  const exact = ownText(EN_TEXTS, text);
   if (exact !== undefined) return exact;
   for (const [re, to] of EN_PATTERNS) {
     const m = re.exec(text);

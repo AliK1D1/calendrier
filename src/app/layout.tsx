@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { COULEUR_BARRE, SCRIPT_APPARENCE } from "@/lib/ux/apparence";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,14 +27,17 @@ export const metadata: Metadata = {
   },
 };
 
-/** Couleur de la barre du navigateur sur téléphone, assortie au fond (clair ou sombre). */
+/**
+ * Couleur de la barre du navigateur sur téléphone, assortie au fond (clair ou sombre). Si la
+ * personne force un thème (Profil > Apparence), le script du <head> remplace ces couleurs.
+ */
 export const viewport: Viewport = {
   // Le contenu va jusqu'aux bords (encoche, geste d'accueil) ; les marges sûres sont gérées
   // avec `env(safe-area-inset-*)` dans l'en-tête, la barre d'onglets et les messages.
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f8f9fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f1218" },
+    { media: "(prefers-color-scheme: light)", color: COULEUR_BARRE.clair },
+    { media: "(prefers-color-scheme: dark)", color: COULEUR_BARRE.sombre },
   ],
 };
 
@@ -42,7 +47,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr-CA">
+    // Le script d'apparence ajoute data-theme et data-accent à <html> avant React : React ne
+    // doit pas s'en plaindre à l'hydratation (seulement sur cette balise).
+    <html lang="fr-CA" suppressHydrationWarning>
+      <head>
+        {/* Texte fixe écrit par nous (aucune donnée de l'utilisateur) : sans risque d'injection. */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_APPARENCE }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
     </html>
   );

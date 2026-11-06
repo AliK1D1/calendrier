@@ -26,6 +26,7 @@ function plan(id: string, startsAt: string, over: Partial<PlanView> = {}): PlanV
     wholeGroup: true,
     repeatLabel: null,
     series: null,
+    placeId: null,
     ...over,
   };
 }

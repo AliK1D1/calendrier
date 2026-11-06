@@ -427,10 +427,10 @@ Sans clé d'API, rien ne change : les trajets sont **estimés** (vol d'oiseau ×
 mode, voir plus bas). Avec une clé, « Quand on peut se voir » et le planificateur d'étude
 utilisent les vrais temps de trajet.
 
-| Variable              | Modes               | Service                                                   |
-| --------------------- | ------------------- | --------------------------------------------------------- |
-| `ORS_API_KEY`         | marche, vélo, auto  | [OpenRouteService](https://openrouteservice.org), gratuit |
-| `GOOGLE_MAPS_API_KEY` | transport en commun | Google **Routes API** (Compute Route Matrix), facultatif  |
+| Variable              | Modes               | Service                                                          |
+| --------------------- | ------------------- | ---------------------------------------------------------------- |
+| `ORS_API_KEY`         | marche, vélo, auto  | [OpenRouteService](https://openrouteservice.org), gratuit        |
+| `GOOGLE_MAPS_API_KEY` | transport en commun | Google **Routes API** (Route Matrix, Compute Routes), facultatif |
 
 **Obtenir une clé OpenRouteService (gratuite)** :
 
@@ -634,6 +634,33 @@ refuse les ports inhabituels, les identifiants, les noms internes et les IP priv
 les modifie directement (fonctions `claim_subscription_syncs`, `replace_subscription_events`,
 `fail_subscription_sync`, `set_subscription_busy`).
 
+## Heure de départ (story 6)
+
+Sur « Mes plans » et l'accueil, chacun de mes prochains plans **en personne** (proposé par moi,
+ou où je suis invité·e sans avoir refusé) affiche : « Pars de « Cégep » à 15 h 42 · Arrivée
+prévue 16 h 05 ». Rien pour un appel ou un lieu écrit à la main (pas de coordonnées).
+
+- **Lieu d'avant** : le dernier bloc de MON horaire qui commence avant le plan le même jour (même
+  règle que le « lieu avant » de `getFreeWindows`) ; sinon la maison (« de chez toi »). Le bloc
+  créé par ce plan quand je l'ai accepté ne compte pas.
+- **Marche, vélo, auto** : départ = début − trajet − marge (5 min, la marge par défaut de la
+  recherche). Trajet par l'API (segment 15) si configurée, sinon estimé et dit « Estimation ».
+- **Transport en commun** : avec `GOOGLE_MAPS_API_KEY`, Google **Compute Routes** (même clé,
+  même Routes API) donne le vrai trajet pour la date du plan : « Bus 51 à 15 h 42 (arrêt …) ».
+  On demande d'arriver au plus tard au début du plan moins la marge ; si je ne peux pas être à
+  l'heure, le premier trajet qui part à la fin de mon bloc. Plans dans les 7 prochains jours
+  seulement ; sinon, estimation.
+- **En retard** : si l'heure de départ tombe avant la fin de mon bloc, l'app dit « Pars dès
+  14 h 50 » et « Tu arriveras vers 15 h 07, 7 min en retard. » au lieu d'une heure impossible.
+- **Bornes** : au plus 6 plans par page ; chaque appel Compute Routes compte dans la limite de
+  40 appels d'API par personne et par jour et dans les limites globales de Google ; 3 s par
+  appel ; cache en mémoire de 6 h **par personne**. Tout ce qui échoue est estimé.
+- **Vie privée** : seuls MES blocs et mes lieux servent, le résultat n'est montré qu'à moi ; le
+  lieu d'avant des autres n'est jamais lu. Aucune table ni migration.
+- Code : `src/lib/scheduling/leaveBy.ts` (logique pure), `src/lib/travel/googleRoutes.ts` et
+  `transitRouter.ts` (API), `src/lib/plans/leaveBy.ts` (assemblage et phrases),
+  `leaveByQueries.ts` (lectures).
+
 ## Déploiement (Vercel) et vérification automatique (segment 17)
 
 L'app est en ligne : <https://calendrier-opal.vercel.app>. Le projet Vercel est relié au dépôt
@@ -738,6 +765,7 @@ Logique pure (sans BD ni React), entièrement testée avec Vitest (`__tests__/`)
 | `time.ts`         | Heures locales `America/Toronto` (heure avancée comprise), jours `yyyy-MM-dd`                  |
 | `freeWindows.ts`  | `getFreeWindows(person, dayStart, dayEnd, options)` : trous libres + lieu avant/après          |
 | `travel.ts`       | `TravelTimeProvider` et `EstimatedTravelProvider` (haversine × 1,3, vitesse par mode, cache)   |
+| `leaveBy.ts`      | Story 6 : `previousStop`, `transitQueryFor`, `leaveByTime` (heure de départ d'un plan)         |
 | `findMeetups.ts`  | `findMeetupCandidates` (algorithme de la section 3) et `findMeetups` (classé, appels)          |
 | `score.ts`        | `scoreProposal(p, weights)` et `DEFAULT_WEIGHTS`                                               |
 | `weeklyBlocks.ts` | Horaire saisi : validation, récurrence hebdomadaire, chevauchements, semaines                  |

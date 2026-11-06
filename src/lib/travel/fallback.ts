@@ -218,6 +218,27 @@ export class FallbackTravelProvider implements TravelTimeProvider {
     );
   }
 
+  /**
+   * Réserve un appel hors matrice (story 6 : `computeRoutes` de Google) : mêmes règles que les
+   * matrices (API mise de côté, limite de la personne, limites par minute et par jour). Vrai si
+   * l'appel est permis (et compté).
+   */
+  tryReserveCall(sourceName: string, budgetKey: string): boolean {
+    const source = this.sources.find((s) => s.name === sourceName);
+    return source !== undefined && this.mayCall(source, budgetKey);
+  }
+
+  /** Signale l'échec d'un appel hors matrice : l'API est mise de côté comme pour une matrice. */
+  reportFailure(sourceName: string, error: unknown): void {
+    this.disabledUntil.set(sourceName, this.now() + this.cooldownMs);
+    this.onError(error);
+  }
+
+  /** Vrai si le trajet vient d'une API (en cache), faux s'il serait estimé. */
+  isMeasured(from: Place, to: Place, mode: TravelMode): boolean {
+    return this.cache.get(travelCacheKey(from, to, mode)) !== undefined;
+  }
+
   /** L'API n'est pas mise de côté, et les limites par minute et par jour le permettent. */
   private mayCall(source: TravelMatrixSource, budgetKey?: string): boolean {
     if ((this.disabledUntil.get(source.name) ?? 0) > this.now()) return false;

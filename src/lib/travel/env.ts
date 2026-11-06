@@ -10,9 +10,11 @@
 import { EstimatedTravelProvider, type TravelTimeProvider } from "@/lib/scheduling/travel";
 
 import { FallbackTravelProvider } from "./fallback";
+import { GoogleRoutesClient } from "./googleRoutes";
 import { GoogleTransitProvider } from "./googleTransit";
 import type { FetchLike, TravelMatrixSource } from "./matrix";
 import { OpenRouteServiceProvider } from "./openRouteService";
+import { CachedTransitRouter, type TransitRouter } from "./transitRouter";
 
 export interface TravelEnv {
   ORS_API_KEY?: string;
@@ -27,4 +29,23 @@ export function createTravelProvider(env: TravelEnv, fetch: FetchLike): TravelTi
   if (google) sources.push(new GoogleTransitProvider({ apiKey: google, fetch }));
   if (sources.length === 0) return new EstimatedTravelProvider();
   return new FallbackTravelProvider({ sources });
+}
+
+/**
+ * Story 6 : trajets réels en transport en commun (heure de départ d'un plan), ou `null` sans
+ * `GOOGLE_MAPS_API_KEY`. Chaque appel est compté par `travel` (limite de la personne et
+ * limites globales de Google) ; sans ces limites (fournisseur estimé seulement), aucun appel.
+ */
+export function createTransitRouter(
+  env: TravelEnv,
+  fetch: FetchLike,
+  travel: TravelTimeProvider,
+): TransitRouter | null {
+  const google = env.GOOGLE_MAPS_API_KEY?.trim();
+  if (!google || !(travel instanceof FallbackTravelProvider)) return null;
+  return new CachedTransitRouter({
+    client: new GoogleRoutesClient({ apiKey: google, fetch }),
+    reserve: (budgetKey) => travel.tryReserveCall("google", budgetKey),
+    onError: (e) => travel.reportFailure("google", e),
+  });
 }

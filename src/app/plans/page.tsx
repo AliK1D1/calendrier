@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { SiteHeader } from "@/components/site-header";
+import { addLeaveBy } from "@/lib/plans/leaveByQueries";
 import { loadPlans } from "@/lib/plans/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -16,7 +17,10 @@ export default async function MesPlans() {
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/connexion?next=/plans");
 
-  const plans = await loadPlans(supabase, data.user.id, new Date());
+  const now = new Date();
+  const plans = await loadPlans(supabase, data.user.id, now);
+  // Story 6 : « Pars de … à HH:MM » sur mes prochains plans en personne.
+  const views = plans.ok ? await addLeaveBy(supabase, data.user.id, plans.views, now) : [];
 
   return (
     <>
@@ -30,7 +34,7 @@ export default async function MesPlans() {
           </p>
         </header>
         {plans.ok ? (
-          <PlansView plans={plans.views} />
+          <PlansView plans={views} />
         ) : (
           <p
             role="alert"

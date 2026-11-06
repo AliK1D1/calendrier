@@ -157,3 +157,22 @@ describe("textes", () => {
     expect(daysInMonth(2026, 4)).toBe(30);
   });
 });
+
+describe("describeEvery / describeRepeat en anglais", () => {
+  it("décrit la répétition en anglais", () => {
+    expect(describeEvery(1, "day", "en")).toBe("every day");
+    expect(describeEvery(2, "week", "en")).toBe("every 2 weeks");
+    expect(describeRepeat({ unit: "month", every: 1, anchor: "2026-01-31" }, "en")).toBe(
+      "every month, on the 31st (or the last day of the month)",
+    );
+    expect(describeRepeat({ unit: "month", every: 1, anchor: "2026-01-02" }, "en")).toBe(
+      "every month, on the 2nd",
+    );
+    expect(describeRepeat({ unit: "year", every: 1, anchor: "2026-02-14" }, "en")).toBe(
+      "every year, on February 14",
+    );
+  });
+  it("garde le français par défaut", () => {
+    expect(describeEvery(2, "week")).toBe("toutes les 2 semaines");
+  });
+});

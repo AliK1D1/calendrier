@@ -6,6 +6,7 @@ import L from "leaflet";
 import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
 
 export interface MapPoint {
   id: string;
@@ -43,6 +44,7 @@ const DEFAULT_CENTER: L.LatLngExpression = [45.5017, -73.5673];
  * place-map-lazy.tsx) : Leaflet touche `window` dès l'import.
  */
 export default function PlaceMap({ points, onPick, className }: PlaceMapProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
@@ -102,7 +104,7 @@ export default function PlaceMap({ points, onPick, className }: PlaceMapProps) {
     <div
       ref={containerRef}
       role="region"
-      aria-label="Carte"
+      aria-label={t.places.map}
       className={cn("z-0 h-64 w-full overflow-hidden rounded-lg border", className)}
     />
   );

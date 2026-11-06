@@ -1,0 +1,96 @@
+/** Recherche de moments (« Quand on peut se voir ») et « Je suis libre maintenant ». */
+export const meetups = {
+  // Textes calculés côté serveur
+  place: "Lieu",
+  member: "Membre",
+  noName: "Sans nom",
+  thisPerson: "cette personne",
+  unreadableProfile: "profil illisible",
+  noHome: "n'a pas encore choisi son lieu « maison »",
+  shortenTo: (d: string) => `Réduire à ${d}`,
+  meetAt: (place: string, clock: string, d: string) => `Se voir à ${place} (${clock}, ${d})`,
+  meetWithout: (name: string, d: string) => `Se voir sans ${name} (${d})`,
+  makeCall: (from: string, to: string) => `Faire un appel (${from} – ${to})`,
+  // Formulaire
+  title: "Quand on peut se voir",
+  help: "Des moments où tout le monde peut vraiment être là, trajets compris.",
+  who: "Qui participe ?",
+  you: " (toi)",
+  period: "Période",
+  periods: { "this-week": "Cette semaine", "next-week": "La semaine prochaine" },
+  atLeast: "Au moins",
+  buffer: "Marge par trajet (min)",
+  bufferHint:
+    "Minutes ajoutées à chaque trajet pour les imprévus (attendre le bus, trouver où se garer).",
+  computing: "Calcul en cours…",
+  find: "Trouver des moments",
+  pickTwo: "Choisis au moins deux participants.",
+  // Compromis
+  call: "Appel",
+  shortened: (d: string) => `Durée réduite à ${d}`,
+  without: (name: string) => `Sans ${name}`,
+  at: (place: string) => `À ${place}`,
+  // Résultats
+  excluded: (list: string) => `Pas dans le calcul : ${list}.`,
+  hiddenBefore: "Certains lieux ne te sont pas visibles (",
+  hiddenItem: (name: string, n: number) => `${name} : ${n} bloc${n >= 2 ? "s" : ""}`,
+  hiddenAfter: ") : on compte ces moments comme occupés, à la maison de la personne.",
+  needTwo: "Il faut au moins deux participants prêts pour chercher un moment.",
+  inPersonCount: (n: number) => `${n} moment${n >= 2 ? "s" : ""} en personne`,
+  callCount: (n: number) => ` · ${n} appel${n >= 2 ? "s" : ""}`,
+  display: "Affichage",
+  list: "Liste",
+  grid: "Grille",
+  compromiseFailed:
+    "Ce compromis ne donne finalement pas de moment (l'horaire a peut-être changé entre-temps).",
+  withCompromise: (label: string) => `Avec ton compromis : ${label}`,
+  nothingWithCall: (day: string, clock: string) =>
+    `Pas de moment réaliste en personne sur cette période, voici un appel possible ${day} à ${clock}.`,
+  nothing:
+    "Pas de moment réaliste en personne sur cette période, et pas de trou commun assez long pour un appel. Essaie une durée plus courte ou l'autre semaine.",
+  seeAll: (n: number) => `Voir les ${n} propositions`,
+  possibleCalls: "Appels possibles",
+  otherDaysCall: "Les autres jours, un appel",
+  almostIntro:
+    "Pas de moment assez long en personne sur cette période. Voici ce qui passe presque, et ce qui le débloquerait.",
+  whyNot: "Pourquoi pas ?",
+  missing: (d: string) => `Il manque ${d}`,
+  simplest: " (le plus simple)",
+  noCompromise: "Aucun petit compromis ne suffit pour ce moment.",
+  callOrVideo: "Appel ou visio",
+  travel: "Trajet :",
+  back: (n: number) => ` (retour ${n} min)`,
+  propose: "Proposer ce moment",
+  gridHelp:
+    "Qui est libre, par demi-heure (sans compter les trajets). Touche une case pour voir qui.",
+  legend: "Légende",
+  everyone: "Tout le monde",
+  halfOrMore: "La moitié ou plus",
+  lessThanHalf: "Moins de la moitié",
+  nobody: "Personne",
+  nobodyLower: "personne",
+  slotFree: (label: string, n: number, total: number) => `${label} : ${n} sur ${total} libres`,
+  slotNobody: "personne n'est libre.",
+  slotEveryone: "tout le monde est libre.",
+  slotSome: (names: string) => `libres : ${names}.`,
+  // Je suis libre maintenant
+  freeNow: {
+    title: "Je suis libre maintenant",
+    inGroup: "Qui, dans ce groupe, peut te voir d'ici 2 heures ?",
+    inGroups: "Qui, dans tes groupes, peut te voir d'ici 2 heures ?",
+    searching: "Recherche…",
+    whoIsFree: "Qui est libre ?",
+    noHome: (names: string) => `Sans lieu « maison », donc pas comptés : ${names}.`,
+    truncated: "Seuls les 10 premiers groupes et 40 membres ont été vérifiés.",
+    nobodyToCheck: "Personne d'autre à vérifier pour l'instant : invite des amis dans un groupe.",
+    nobodyFree: (window: string) =>
+      `Personne n'est libre en même temps que toi entre ${window} (au moins 30 min, trajets compris).`,
+    count: (n: number, checked: number, window: string) =>
+      `${n} personne${n >= 2 ? "s" : ""} sur ${checked} entre ${window} :`,
+    call: "Appel",
+    inPerson: "En personne",
+    tooFar: "Trop loin pour se rejoindre à temps : un appel ou une visio.",
+    travel: (place: string, mine: number, theirs: number) =>
+      `${place} · ton trajet ${mine} min, le sien ${theirs} min`,
+  },
+};

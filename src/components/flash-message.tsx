@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect } from "react";
 
+import { useI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 export type Flash = { type: "ok" | "erreur"; text: string } | null;
@@ -16,6 +17,7 @@ const OK_MS = 6000;
  * bouton cliqué était plus bas (supprimer un lieu favori, retirer un membre…).
  */
 export function FlashMessage({ message, onClose }: { message: Flash; onClose: () => void }) {
+  const { t, tr } = useI18n();
   useEffect(() => {
     if (message?.type !== "ok") return;
     const t = setTimeout(onClose, OK_MS);
@@ -37,11 +39,11 @@ export function FlashMessage({ message, onClose }: { message: Flash; onClose: ()
               : "border-success/60",
           )}
         >
-          <span className="flex-1">{message.text}</span>
+          <span className="flex-1">{tr(message.text)}</span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fermer le message"
+            aria-label={t.common.closeMessage}
             className="text-muted-foreground hover:text-foreground -my-2.5 -mr-2 flex size-10 shrink-0 items-center justify-center rounded-md"
           >
             <X className="size-4" />

@@ -13,26 +13,33 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
+import { useI18n } from "@/lib/i18n/client";
+import type { Messages } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
+
+type NavKey = keyof Pick<
+  Messages["common"]["nav"],
+  "groups" | "plans" | "schedule" | "study" | "places" | "profile"
+>;
 
 interface Lien {
   href: string;
-  label: string;
+  label: NavKey;
   icon: LucideIcon;
 }
 
 /** Les 4 onglets du bas au téléphone (une colonne chacun de la grille à 4 colonnes). */
 const PRINCIPAUX: Lien[] = [
-  { href: "/groupes", label: "Groupes", icon: Users },
-  { href: "/plans", label: "Plans", icon: CalendarCheck },
-  { href: "/horaire", label: "Horaire", icon: CalendarDays },
-  { href: "/etude", label: "Étude", icon: BookOpen },
+  { href: "/groupes", label: "groups", icon: Users },
+  { href: "/plans", label: "plans", icon: CalendarCheck },
+  { href: "/horaire", label: "schedule", icon: CalendarDays },
+  { href: "/etude", label: "study", icon: BookOpen },
 ];
 
 /** Réglages, en haut à droite au téléphone. */
 const SECONDAIRES: Lien[] = [
-  { href: "/lieux", label: "Lieux", icon: MapPin },
-  { href: "/profil", label: "Profil", icon: CircleUser },
+  { href: "/lieux", label: "places", icon: MapPin },
+  { href: "/profil", label: "profile", icon: CircleUser },
 ];
 
 function useActive() {
@@ -47,6 +54,7 @@ function useActive() {
  */
 export function NavLinks({ plansBadge }: { plansBadge?: ReactNode }) {
   const isActive = useActive();
+  const { t } = useI18n();
   return (
     <>
       {[...PRINCIPAUX, ...SECONDAIRES].map((l) => {
@@ -71,7 +79,7 @@ export function NavLinks({ plansBadge }: { plansBadge?: ReactNode }) {
             )}
           >
             <Icon className="size-5 sm:hidden" aria-hidden />
-            {l.label}
+            {t.common.nav[l.label]}
             {l.href === "/plans" && plansBadge}
           </Link>
         );
@@ -87,9 +95,10 @@ export function NavLinks({ plansBadge }: { plansBadge?: ReactNode }) {
  */
 export function BottomTabs({ plansBadge }: { plansBadge?: ReactNode }) {
   const isActive = useActive();
+  const { t } = useI18n();
   return (
     <nav
-      aria-label="Onglets"
+      aria-label={t.common.nav.tabs}
       data-barre-onglets
       className="bg-card/95 fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
     >
@@ -118,7 +127,7 @@ export function BottomTabs({ plansBadge }: { plansBadge?: ReactNode }) {
                     <span className="absolute -top-1 left-1/2 ml-1">{plansBadge}</span>
                   )}
                 </span>
-                {l.label}
+                {t.common.nav[l.label]}
               </Link>
             </li>
           );

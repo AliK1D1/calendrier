@@ -15,8 +15,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { GroupView, type MemberSchedule } from "./group-view";
 import { scheduleLines } from "./schedule-lines";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Groupe · Temps libre commun" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.groups.groupMetaTitle };
+}
 export const dynamic = "force-dynamic";
 
 /** Jours d'avance pour lesquels on montre les blocs ponctuels. */
@@ -39,7 +43,8 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
   if (!group) notFound();
 
   const now = new Date();
-  const plans = await loadPlans(supabase, userId, now, { groupId: group.id });
+  const { locale, t, tr } = await getI18n();
+  const plans = await loadPlans(supabase, userId, now, { groupId: group.id, locale });
   const today = formatInTimeZone(now, TIME_ZONE, "yyyy-MM-dd");
   const schedules: MemberSchedule[] = group.members.map((m) => ({
     userId: m.userId,
@@ -53,6 +58,7 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
         })),
       group.placeNames,
       { from: today, to: shiftDay(today, ONE_OFF_DAYS) },
+      locale,
     ),
   }));
 
@@ -60,9 +66,9 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
     <>
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
-        <nav aria-label="Fil d'Ariane" className="text-muted-foreground text-sm">
+        <nav aria-label={t.groups.breadcrumb} className="text-muted-foreground text-sm">
           <Link href="/groupes" className="underline underline-offset-2">
-            Mes groupes
+            {t.common.myGroups}
           </Link>
         </nav>
         <GroupView
@@ -75,7 +81,7 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
           favorites={group.favorites}
           schedules={schedules}
           plans={plans.ok ? plans.views.filter((p) => p.state !== "cancelled") : null}
-          plansError={plans.ok ? null : plans.error}
+          plansError={plans.ok ? null : tr(plans.error)}
         />
       </main>
     </>

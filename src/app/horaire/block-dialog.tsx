@@ -1,7 +1,5 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
-import { frCA } from "date-fns/locale";
 import { AlertTriangle, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
@@ -11,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import {
   REPEAT_COUNT_MAX,
   REPEAT_EVERY_MAX,
-  REPEAT_UNIT_LABEL,
+  repeatUnitLabels,
   REPEAT_UNITS,
 } from "@/lib/scheduling/recurrence";
 import { clockOptions } from "@/lib/scheduling/weekGrid";
@@ -21,16 +19,17 @@ import {
   type BlockSpec,
   findOverlaps,
   formatClock,
-  formatClockFr,
   repeatLabel,
   validateBlockForm,
-  WEEKDAY_LONG,
-  WEEKDAY_SHORT,
   WEEKDAYS,
 } from "@/lib/scheduling/weeklyBlocks";
 import { cn } from "@/lib/utils";
 
 import type { ScheduleActions, ScheduleBlock, SchedulePlace } from "./types";
+import { useI18n } from "@/lib/i18n/client";
+import type { Locale } from "@/lib/i18n/config";
+import type { Messages } from "@/lib/i18n/messages";
+import { formatClockLocale, formatDay, weekdayLong, weekdayShort } from "@/lib/i18n/format";
 
 /** Contenu du formulaire : un nouveau bloc (`id` absent) ou un bloc existant. */
 export interface BlockDraft extends BlockFormInput {
@@ -89,6 +88,8 @@ function BlockForm({
   onClose,
   onSaved,
 }: Omit<Props, "draft"> & { initial: BlockDraft }) {
+  const { locale, t, tr } = useI18n();
+  const tb = t.schedule.block;
   const [d, setD] = useState<BlockDraft>(initial);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -114,8 +115,8 @@ function BlockForm({
   const preview = useMemo(() => {
     if (d.kind !== "custom") return null;
     const v = validateBlockForm({ ...d, title: d.title.trim() || "?" }, { single: editing });
-    return v.ok ? describeCustom(v.value) : null;
-  }, [d, editing]);
+    return v.ok ? describeCustom(v.value, locale, tb) : null;
+  }, [d, editing, locale, tb]);
 
   function chooseKind(kind: BlockDraft["kind"]) {
     setD((prev) => ({
@@ -132,38 +133,28 @@ function BlockForm({
     setError(null);
     const v = validateBlockForm(d, { single: editing });
     if (!v.ok) {
-      setError(v.error);
+      setError(tr(v.error));
       return;
     }
     startTransition(async () => {
       const r = editing ? await actions.modifierBloc(d.id, d) : await actions.ajouterBlocs(d);
       if (!r.ok) {
-        setError(r.error);
+        setError(tr(r.error));
         return;
       }
       const n = v.value.length;
-      onSaved(
-        editing
-          ? `« ${v.value[0].title} » est modifié.`
-          : `« ${v.value[0].title} » est ajouté${n > 1 ? ` (${n} jours)` : ""}.`,
-      );
+      onSaved(editing ? tb.edited(v.value[0].title) : tb.added(v.value[0].title, n));
     });
   }
 
   function remove() {
     if (!d.id) return;
-    const quoi =
-      d.kind === "weekly"
-        ? "toutes les semaines de ce bloc"
-        : d.kind === "custom"
-          ? "toutes les répétitions de ce bloc"
-          : "ce bloc";
-    if (!window.confirm(`Supprimer ${quoi} (« ${d.title} ») ?`)) return;
+    if (!window.confirm(tb.confirmDelete(d.kind, d.title))) return;
     setError(null);
     startTransition(async () => {
       const r = await actions.supprimerBloc(d.id);
-      if (!r.ok) setError(r.error);
-      else onSaved(`« ${d.title} » est supprimé.`);
+      if (!r.ok) setError(tr(r.error));
+      else onSaved(tb.deleted(d.title));
     });
   }
 
@@ -180,21 +171,27 @@ function BlockForm({
     >
       <div className="flex items-center justify-between gap-2">
         <h2 id="bloc-titre-fenetre" className="text-lg font-semibold">
-          {editing ? "Modifier le bloc" : "Nouveau bloc"}
+          {editing ? tb.editTitle : tb.newTitle}
         </h2>
-        <Button type="button" variant="ghost" size="icon" aria-label="Fermer" onClick={onClose}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t.common.close}
+          onClick={onClose}
+        >
           <X />
         </Button>
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="bloc-titre">Titre</Label>
+        <Label htmlFor="bloc-titre">{tb.title}</Label>
         <Input
           id="bloc-titre"
           value={d.title}
           onChange={(e) => set("title", e.target.value)}
           maxLength={BLOCK_TITLE_MAX}
-          placeholder="ex. Chimie générale, Travail"
+          placeholder={tb.titlePlaceholder}
           autoComplete="off"
           required
           autoFocus
@@ -202,14 +199,14 @@ function BlockForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="bloc-lieu">Lieu</Label>
+        <Label htmlFor="bloc-lieu">{tb.place}</Label>
         <select
           id="bloc-lieu"
           className={SELECT}
           value={d.placeId ?? ""}
           onChange={(e) => set("placeId", e.target.value || null)}
         >
-          <option value="">{homeName ? `Maison (${homeName})` : "Maison"}</option>
+          <option value="">{homeName ? tb.homeNamed(homeName) : tb.home}</option>
           {places
             .filter((p) => p.id !== homeId)
             .map((p) => (
@@ -222,7 +219,7 @@ function BlockForm({
 
       <div className="grille-4-demi">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="bloc-debut">Début</Label>
+          <Label htmlFor="bloc-debut">{tb.start}</Label>
           <select
             id="bloc-debut"
             className={SELECT}
@@ -231,13 +228,13 @@ function BlockForm({
           >
             {START_OPTIONS.map((m) => (
               <option key={m} value={formatClock(m)}>
-                {formatClockFr(m)}
+                {formatClockLocale(m, locale)}
               </option>
             ))}
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="bloc-fin">Fin</Label>
+          <Label htmlFor="bloc-fin">{tb.end}</Label>
           <select
             id="bloc-fin"
             className={SELECT}
@@ -246,7 +243,7 @@ function BlockForm({
           >
             {END_OPTIONS.map((m) => (
               <option key={m} value={formatClock(m)}>
-                {formatClockFr(m)}
+                {formatClockLocale(m, locale)}
               </option>
             ))}
           </select>
@@ -254,13 +251,13 @@ function BlockForm({
       </div>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-sm font-medium">Répétition</legend>
+        <legend className="mb-2 text-sm font-medium">{tb.repeat}</legend>
         <div className="grid grid-cols-3 gap-2">
           {(
             [
-              ["weekly", "Chaque semaine"],
-              ["once", "Une seule fois"],
-              ["custom", "Personnalisée"],
+              ["weekly", tb.kinds.weekly],
+              ["once", tb.kinds.once],
+              ["custom", tb.kinds.custom],
             ] as const
           ).map(([kind, label]) => (
             <label
@@ -290,12 +287,12 @@ function BlockForm({
           <WeekdayPicker
             weekdays={d.weekdays}
             editing={editing}
-            legend={editing ? "Jour" : "Jours (coche tous les jours de ce cours)"}
+            legend={editing ? tb.day : tb.daysAll}
             onChange={(w) => set("weekdays", w)}
           />
           <div className="grille-4-demi">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="bloc-session-debut">Début de session</Label>
+              <Label htmlFor="bloc-session-debut">{tb.sessionStart}</Label>
               <Input
                 id="bloc-session-debut"
                 type="date"
@@ -305,7 +302,7 @@ function BlockForm({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="bloc-session-fin">Fin de session</Label>
+              <Label htmlFor="bloc-session-fin">{tb.sessionEnd}</Label>
               <Input
                 id="bloc-session-fin"
                 type="date"
@@ -316,13 +313,11 @@ function BlockForm({
               />
             </div>
           </div>
-          <p className="text-muted-foreground -mt-2 text-xs">
-            Le bloc revient chaque semaine entre ces deux dates (incluses), et plus après.
-          </p>
+          <p className="text-muted-foreground -mt-2 text-xs">{tb.sessionHint}</p>
         </>
       ) : (
         <div className="flex flex-col gap-2">
-          <Label htmlFor="bloc-date">Jour</Label>
+          <Label htmlFor="bloc-date">{tb.day}</Label>
           <Input
             id="bloc-date"
             type="date"
@@ -339,10 +334,7 @@ function BlockForm({
           className="border-warning/60 bg-warning/15 flex gap-2 rounded-md border p-3 text-sm"
         >
           <AlertTriangle className="size-4 shrink-0" />
-          <span>
-            Chevauche {overlaps.map((b) => `« ${b.title} »`).join(", ")}. Tu peux enregistrer quand
-            même (les deux comptent comme occupés).
-          </span>
+          <span>{tb.overlaps(overlaps.map((b) => tb.quoted(b.title)).join(", "))}</span>
         </p>
       )}
       {error && (
@@ -353,10 +345,10 @@ function BlockForm({
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>
-          {pending ? "Enregistrement…" : "Enregistrer"}
+          {pending ? t.common.saving : t.common.save}
         </Button>
         <Button type="button" variant="ghost" onClick={onClose}>
-          Annuler
+          {t.common.cancel}
         </Button>
         {editing && (
           <Button
@@ -366,7 +358,7 @@ function BlockForm({
             disabled={pending}
             onClick={remove}
           >
-            <Trash2 /> Supprimer
+            <Trash2 /> {t.common.delete}
           </Button>
         )}
       </div>
@@ -385,6 +377,7 @@ function WeekdayPicker({
   legend: string;
   onChange: (weekdays: number[]) => void;
 }) {
+  const { locale } = useI18n();
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-2 text-sm font-medium">{legend}</legend>
@@ -394,7 +387,7 @@ function WeekdayPicker({
           return (
             <label
               key={w}
-              title={WEEKDAY_LONG[w]}
+              title={weekdayLong(w, locale)}
               className={cn(
                 "flex h-10 cursor-pointer items-center justify-center rounded-md border text-xs has-[:focus-visible]:ring-2",
                 checked && "border-primary bg-primary text-primary-foreground font-medium",
@@ -405,7 +398,7 @@ function WeekdayPicker({
                 name="bloc-jours"
                 className="sr-only"
                 checked={checked}
-                aria-label={WEEKDAY_LONG[w]}
+                aria-label={weekdayLong(w, locale)}
                 onChange={() =>
                   onChange(
                     editing
@@ -416,7 +409,7 @@ function WeekdayPicker({
                   )
                 }
               />
-              {WEEKDAY_SHORT[w].replace(".", "")}
+              {weekdayShort(w, locale).replace(".", "")}
             </label>
           );
         })}
@@ -426,29 +419,31 @@ function WeekdayPicker({
 }
 
 /** Résumé d'une répétition personnalisée validée, pour l'aperçu sous le formulaire. */
-function describeCustom(specs: BlockSpec[]): string {
+function describeCustom(
+  specs: BlockSpec[],
+  locale: Locale,
+  tb: Messages["schedule"]["block"],
+): string {
   const first = specs[0];
-  const label = repeatLabel(first) ?? "";
+  const label = repeatLabel(first, locale) ?? "";
   let text = label.charAt(0).toUpperCase() + label.slice(1);
-  const weekdays = specs.flatMap((b) => (b.weekday == null ? [] : [WEEKDAY_LONG[b.weekday]]));
+  const weekdays = specs.flatMap((b) =>
+    b.weekday == null ? [] : [weekdayLong(b.weekday, locale)],
+  );
   if (weekdays.length) {
     const list =
       weekdays.length > 1
-        ? `${weekdays.slice(0, -1).join(", ")} et ${weekdays[weekdays.length - 1]}`
+        ? `${weekdays.slice(0, -1).join(", ")} ${tb.and} ${weekdays[weekdays.length - 1]}`
         : weekdays[0];
-    text += `, le ${list}`;
+    text += tb.on(list);
   }
-  const day = (iso: string) => format(parseISO(iso), "d MMMM yyyy", { locale: frCA });
-  if (first.validFrom) text += `, à partir du ${day(first.validFrom)}`;
-  text += first.validUntil ? `, jusqu'au ${day(first.validUntil)}.` : ", sans fin.";
+  const day = (iso: string) => formatDay(iso, "dayMonthYear", locale);
+  if (first.validFrom) text += tb.fromDay(day(first.validFrom));
+  text += first.validUntil ? tb.untilDay(day(first.validUntil)) : tb.noEnd;
   return text;
 }
 
-const END_CHOICES = [
-  ["never", "Jamais"],
-  ["date", "Le"],
-  ["count", "Après"],
-] as const;
+const END_CHOICES = ["never", "date", "count"] as const;
 
 /** Champs « Personnalisée » : tous les X jours / semaines / mois / ans, début, jours et fin. */
 function CustomRepeat({
@@ -462,6 +457,9 @@ function CustomRepeat({
   editing: boolean;
   preview: string | null;
 }) {
+  const { locale, t } = useI18n();
+  const tb = t.schedule.block;
+  const unitLabels = repeatUnitLabels(locale);
   const every = Number(d.repeatEvery);
   const plural = !Number.isInteger(every) || every !== 1;
   const unit = (REPEAT_UNITS as readonly string[]).includes(d.repeatUnit ?? "")
@@ -472,7 +470,7 @@ function CustomRepeat({
   return (
     <>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="bloc-tous-les">Tous les</Label>
+        <Label htmlFor="bloc-tous-les">{tb.every}</Label>
         <div className="grid grid-cols-[6rem_1fr] gap-2">
           <Input
             id="bloc-tous-les"
@@ -487,7 +485,7 @@ function CustomRepeat({
             required
           />
           <select
-            aria-label="Unité"
+            aria-label={tb.unit}
             className={SELECT}
             value={unit}
             onChange={(e) => {
@@ -499,13 +497,13 @@ function CustomRepeat({
           >
             {REPEAT_UNITS.map((u) => (
               <option key={u} value={u}>
-                {plural ? REPEAT_UNIT_LABEL[u].many : REPEAT_UNIT_LABEL[u].one}
+                {plural ? unitLabels[u].many : unitLabels[u].one}
               </option>
             ))}
           </select>
         </div>
         <p id="bloc-tous-les-aide" className="text-muted-foreground text-xs">
-          Un nombre de 1 à {REPEAT_EVERY_MAX} (ex. 2 semaines, 3 mois).
+          {tb.everyHint(REPEAT_EVERY_MAX)}
         </p>
       </div>
 
@@ -513,13 +511,13 @@ function CustomRepeat({
         <WeekdayPicker
           weekdays={d.weekdays}
           editing={editing}
-          legend={editing ? "Jour" : "Jours"}
+          legend={editing ? tb.day : tb.days}
           onChange={(w) => set("weekdays", w)}
         />
       )}
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="bloc-repetition-debut">À partir du</Label>
+        <Label htmlFor="bloc-repetition-debut">{tb.from}</Label>
         <Input
           id="bloc-repetition-debut"
           type="date"
@@ -527,21 +525,15 @@ function CustomRepeat({
           onChange={(e) => set("sessionStart", e.target.value)}
           required
         />
-        {unit === "week" && (
-          <p className="text-muted-foreground text-xs">
-            La semaine de cette date compte comme la première.
-          </p>
-        )}
+        {unit === "week" && <p className="text-muted-foreground text-xs">{tb.weekFirst}</p>}
         {(unit === "month" || unit === "year") && startDay > 28 && (
-          <p className="text-muted-foreground text-xs">
-            Les mois qui n&apos;ont pas de {startDay} : le dernier jour du mois.
-          </p>
+          <p className="text-muted-foreground text-xs">{tb.shortMonths(startDay)}</p>
         )}
       </div>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-sm font-medium">Fin</legend>
-        {END_CHOICES.map(([mode, label]) => (
+        <legend className="mb-2 text-sm font-medium">{tb.endLegend}</legend>
+        {END_CHOICES.map((mode) => (
           <div key={mode} className="flex min-h-11 items-center gap-2 text-sm">
             <label className="flex cursor-pointer items-center gap-2">
               <input
@@ -551,12 +543,12 @@ function CustomRepeat({
                 checked={d.repeatEnd === mode}
                 onChange={() => set("repeatEnd", mode)}
               />
-              {label}
+              {tb.endChoices[mode]}
             </label>
             {mode === "date" && (
               <Input
                 type="date"
-                aria-label="Date de fin"
+                aria-label={tb.endDate}
                 className="w-auto"
                 value={d.sessionEnd}
                 min={d.sessionStart || undefined}
@@ -569,7 +561,7 @@ function CustomRepeat({
                 <Input
                   type="number"
                   inputMode="numeric"
-                  aria-label="Nombre de fois"
+                  aria-label={tb.times}
                   className="w-24"
                   min={1}
                   max={REPEAT_COUNT_MAX}
@@ -578,7 +570,7 @@ function CustomRepeat({
                   disabled={d.repeatEnd !== "count"}
                   onChange={(e) => set("repeatCount", e.target.value)}
                 />
-                fois
+                {tb.timesSuffix}
               </>
             )}
           </div>

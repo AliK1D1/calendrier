@@ -1,7 +1,5 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
-import { frCA } from "date-fns/locale";
 import { AlertTriangle, FileUp, MapPin, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -15,15 +13,15 @@ import type { ImportedBlock, IcsPreview } from "@/lib/import/ics";
 import { ICS_MAX_BYTES } from "@/lib/import/limits";
 import type { IcsConfirmInput, PlaceChoice } from "@/lib/import/icsImport";
 import { PLACE_NAME_MAX } from "@/lib/places/validation";
-import { formatClockFr, WEEKDAY_LONG, type Weekday } from "@/lib/scheduling/weeklyBlocks";
+import type { Weekday } from "@/lib/scheduling/weeklyBlocks";
 import { cn } from "@/lib/utils";
 
 import type { IcsActions, SchedulePlace } from "./types";
+import { useI18n } from "@/lib/i18n/client";
+import { formatClockLocale, formatDay, weekdayLong } from "@/lib/i18n/format";
 
 const SELECT =
   "border-input focus-visible:ring-ring/50 h-11 sm:h-10 w-full rounded-md border bg-transparent px-3 text-base outline-none focus-visible:ring-[3px] md:text-sm";
-
-const day = (d: string, pattern: string) => format(parseISO(d), pattern, { locale: frCA });
 
 /** Choix de lieu dans l'aperçu : « home », « place:<id> » ou « new » (+ recherche). */
 type Pick =
@@ -47,6 +45,7 @@ export function IcsImport(props: Props) {
   const [open, setOpen] = useState(false);
   // Nouvelle clé à chaque ouverture : la fenêtre repart de zéro.
   const [session, setSession] = useState(0);
+  const { t } = useI18n();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -68,7 +67,8 @@ export function IcsImport(props: Props) {
       >
         <FileUp />
         <span>
-          Importer<span className="max-sm:hidden"> un horaire</span>
+          {t.schedule.ics.importShort}
+          <span className="max-sm:hidden">{t.schedule.ics.importLong}</span>
         </span>
       </Button>
       <dialog
@@ -101,6 +101,8 @@ function ImportFlow({
   onClose,
   onImported,
 }: Props & { onClose: () => void }) {
+  const { t, tr } = useI18n();
+  const ti = t.schedule.ics;
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<IcsPreview | null>(null);
   const [existing, setExisting] = useState(0);
@@ -109,7 +111,7 @@ function ImportFlow({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const homeName = places.find((p) => p.id === homeId)?.name ?? "Maison";
+  const homeName = places.find((p) => p.id === homeId)?.name ?? ti.home;
 
   function suggest(location: string): Pick {
     const l = location.toLocaleLowerCase("fr");
@@ -127,11 +129,11 @@ function ImportFlow({
   function loadPreview() {
     setError(null);
     if (!file) {
-      setError("Choisis un fichier .ics.");
+      setError(ti.chooseFile);
       return;
     }
     if (file.size > ICS_MAX_BYTES) {
-      setError("Le fichier est trop gros (1 Mo au maximum).");
+      setError(ti.tooBig);
       return;
     }
     const data = new FormData();
@@ -139,7 +141,7 @@ function ImportFlow({
     startTransition(async () => {
       const r = await actions.apercuIcs(data);
       if (!r.ok) {
-        setError(r.error);
+        setError(tr(r.error));
         return;
       }
       setPreview(r.preview);
@@ -166,11 +168,11 @@ function ImportFlow({
     if (!preview) return;
     setError(null);
     if (kept.length === 0) {
-      setError("Coche au moins un bloc à importer.");
+      setError(ti.checkOne);
       return;
     }
     if (missingPosition.length > 0) {
-      setError(`Cherche l'adresse du nouveau lieu « ${missingPosition[0]} ».`);
+      setError(ti.searchAddress(missingPosition[0]));
       return;
     }
     const input: IcsConfirmInput = {
@@ -188,23 +190,17 @@ function ImportFlow({
     startTransition(async () => {
       const r = await actions.confirmerIcs(input);
       if (!r.ok) {
-        setError(r.error);
+        setError(tr(r.error));
         return;
       }
-      const parts = [
-        `${r.imported} bloc${r.imported > 1 ? "s" : ""} importé${r.imported > 1 ? "s" : ""}`,
-      ];
+      const parts = [ti.imported(r.imported)];
       if (r.replaced > 0) {
-        parts.push(
-          `${r.replaced} ancien${r.replaced > 1 ? "s" : ""} remplacé${r.replaced > 1 ? "s" : ""}`,
-        );
+        parts.push(ti.replaced(r.replaced));
       }
       if (r.placesCreated > 0) {
-        parts.push(
-          `${r.placesCreated} lieu${r.placesCreated > 1 ? "x" : ""} ajouté${r.placesCreated > 1 ? "s" : ""}`,
-        );
+        parts.push(ti.placesCreated(r.placesCreated));
       }
-      onImported(`Horaire importé : ${parts.join(", ")}.`);
+      onImported(ti.done(parts.join(", ")));
     });
   }
 
@@ -215,9 +211,15 @@ function ImportFlow({
     <div className="flex flex-col gap-4 p-4 sm:p-6">
       <div className="flex items-center justify-between gap-2">
         <h2 id="ics-titre" className="text-lg font-semibold">
-          Importer ton horaire
+          {ti.title}
         </h2>
-        <Button type="button" variant="ghost" size="icon" aria-label="Fermer" onClick={onClose}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t.common.close}
+          onClick={onClose}
+        >
           <X />
         </Button>
       </div>
@@ -226,28 +228,27 @@ function ImportFlow({
         <div className="flex flex-col gap-3">
           <ul className="flex flex-col gap-2 text-sm">
             <li className="rounded-lg border p-3">
-              <strong>Ton horaire est dans Outlook ?</strong>{" "}
+              <strong>{ti.outlookQ}</strong>{" "}
               <Link href="/profil#outlook" className="underline underline-offset-2">
-                Connecte ton compte
-              </Link>{" "}
-              : il se met à jour tout seul.
+                {ti.outlookLink}
+              </Link>
+              {ti.outlookAfter}
             </li>
             <li className="rounded-lg border p-3">
-              <strong>Tu as un lien de calendrier ?</strong> (Google Agenda, iCloud, lien « webcal
-              »){" "}
+              <strong>{ti.linkQ}</strong>
+              {ti.linkHint}{" "}
               <Link href="/profil#abonnements" className="underline underline-offset-2">
-                Abonne-toi au lien
-              </Link>{" "}
-              : il se met à jour tout seul aussi.
+                {ti.linkLink}
+              </Link>
+              {ti.linkAfter}
             </li>
             <li className="border-primary bg-primary/5 rounded-lg border p-3">
-              <strong>Sinon, un fichier .ics</strong> : exporte ton horaire en fichier calendrier,
-              puis choisis-le ici. C&apos;est une copie : refais l&apos;import si ton horaire
-              change. Tu verras un aperçu avant que quoi que ce soit soit enregistré.
+              <strong>{ti.fileQ}</strong>
+              {ti.fileHint}
             </li>
           </ul>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="ics-fichier">Fichier .ics (1 Mo au maximum)</Label>
+            <Label htmlFor="ics-fichier">{ti.fileLabel}</Label>
             {/*
               Le bouton natif dit « Choose File / No file chosen » (langue du navigateur) : on
               le cache visuellement et on montre un bouton et un texte en français. Le champ
@@ -261,7 +262,7 @@ function ImportFlow({
                 )}
               >
                 <FileUp aria-hidden />
-                Choisir un fichier
+                {ti.pickFile}
                 <input
                   id="ics-fichier"
                   type="file"
@@ -277,46 +278,37 @@ function ImportFlow({
                 className={cn("truncate text-sm", !file && "text-muted-foreground")}
                 aria-live="polite"
               >
-                {file ? file.name : "Aucun fichier choisi"}
+                {file ? file.name : ti.noFile}
               </span>
             </div>
           </div>
           {error && (
             <p role="alert" className="text-destructive text-sm">
-              {error}
+              {tr(error)}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={loadPreview} disabled={pending || !file}>
-              {pending ? "Lecture…" : "Voir l'aperçu"}
+              {pending ? ti.reading : ti.seePreview}
             </Button>
             <Button type="button" variant="ghost" onClick={onClose}>
-              Annuler
+              {t.common.cancel}
             </Button>
           </div>
         </div>
       ) : (
         <div className="flex flex-col gap-5">
           <p className="text-sm" role="status">
-            <strong>{preview.blocks.length}</strong> bloc{preview.blocks.length > 1 ? "s" : ""}{" "}
-            détecté{preview.blocks.length > 1 ? "s" : ""} : {weekly.length} chaque semaine,{" "}
-            {once.length} une seule fois. Rien n&apos;est encore enregistré.
+            {ti.detected(preview.blocks.length, weekly.length, once.length)}
           </p>
 
           {(preview.warnings.length > 0 || existing > 0) && (
             <div className="border-warning/60 bg-warning/15 flex gap-2 rounded-md border p-3 text-sm">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <ul className="flex flex-col gap-1">
-                {existing > 0 && (
-                  <li>
-                    Les {existing} bloc{existing > 1 ? "s" : ""} déjà importé
-                    {existing > 1 ? "s" : ""} d&apos;un fichier .ics ser
-                    {existing > 1 ? "ont" : "a"} remplacé{existing > 1 ? "s" : ""}. Tes blocs
-                    ajoutés à la main ne changent pas.
-                  </li>
-                )}
+                {existing > 0 && <li>{ti.willReplace(existing)}</li>}
                 {preview.warnings.map((w) => (
-                  <li key={w}>{w}</li>
+                  <li key={w}>{tr(w)}</li>
                 ))}
               </ul>
             </div>
@@ -325,11 +317,9 @@ function ImportFlow({
           {preview.locations.length > 0 && (
             <section aria-labelledby="ics-lieux" className="flex flex-col gap-3">
               <h3 id="ics-lieux" className="font-semibold">
-                Lieux du fichier
+                {ti.fileLocations}
               </h3>
-              <p className="text-muted-foreground -mt-2 text-xs">
-                Associe chaque lieu à un de tes lieux, ou crée-le.
-              </p>
+              <p className="text-muted-foreground -mt-2 text-xs">{ti.matchHint}</p>
               {preview.locations.map((loc, i) => {
                 const pick = picks[loc] ?? { value: "home" };
                 return (
@@ -363,11 +353,11 @@ function ImportFlow({
                       {places.map((p) => (
                         <option key={p.id} value={`place:${p.id}`}>
                           {p.name}
-                          {p.id === homeId ? " (maison)" : ""}
+                          {p.id === homeId ? ti.homeSuffix : ""}
                         </option>
                       ))}
                       {!homeId && <option value="home">{homeName}</option>}
-                      <option value="new">Nouveau lieu…</option>
+                      <option value="new">{ti.newPlace}</option>
                     </select>
                     {pick.value === "new" && (
                       <NewPlace
@@ -385,7 +375,7 @@ function ImportFlow({
 
           <section aria-labelledby="ics-blocs" className="flex flex-col gap-2">
             <h3 id="ics-blocs" className="font-semibold">
-              Blocs à importer ({kept.length} sur {preview.blocks.length})
+              {ti.toImport(kept.length, preview.blocks.length)}
             </h3>
             <ul className="flex flex-col gap-2">
               {preview.blocks.map((b) => (
@@ -408,14 +398,12 @@ function ImportFlow({
 
           {error && (
             <p role="alert" className="text-destructive text-sm">
-              {error}
+              {tr(error)}
             </p>
           )}
           <div className="bg-background sticky bottom-0 -mx-4 flex flex-wrap gap-2 border-t px-4 py-3 sm:-mx-6 sm:px-6">
             <Button type="button" onClick={confirm} disabled={pending || kept.length === 0}>
-              {pending
-                ? "Importation…"
-                : `Importer ${kept.length} bloc${kept.length > 1 ? "s" : ""}`}
+              {pending ? ti.importing : ti.importN(kept.length)}
             </Button>
             <Button
               type="button"
@@ -426,10 +414,10 @@ function ImportFlow({
               }}
               disabled={pending}
             >
-              Autre fichier
+              {ti.otherFile}
             </Button>
             <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
-              Annuler
+              {t.common.cancel}
             </Button>
           </div>
         </div>
@@ -457,10 +445,12 @@ function NewPlace({
   pick: Extract<Pick, { value: "new" }>;
   onChange: (p: Pick) => void;
 }) {
+  const { t } = useI18n();
+  const ti = t.schedule.ics;
   return (
     <div className="flex flex-col gap-3 border-l-2 pl-3">
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`ics-nom-${index}`}>Nom du nouveau lieu</Label>
+        <Label htmlFor={`ics-nom-${index}`}>{ti.newPlaceName}</Label>
         <Input
           id={`ics-nom-${index}`}
           value={pick.name}
@@ -469,15 +459,13 @@ function NewPlace({
         />
       </div>
       <AddressSearch
-        label="Adresse"
+        label={ti.address}
         initialQuery={location.slice(0, 200)}
         selectedId={pick.resultId ?? null}
         onSelect={(r) => onChange({ ...pick, lat: r.lat, lng: r.lng, resultId: r.id })}
       />
       {pick.lat === undefined && (
-        <p className="text-muted-foreground text-xs">
-          Cherche l&apos;adresse pour placer ce lieu sur la carte.
-        </p>
+        <p className="text-muted-foreground text-xs">{ti.searchToPlace}</p>
       )}
     </div>
   );
@@ -492,15 +480,24 @@ function PreviewRow({
   checked: boolean;
   onToggle: (on: boolean) => void;
 }) {
-  const hours = `${formatClockFr(block.startMinute)} à ${formatClockFr(block.endMinute)}`;
+  const { locale, t } = useI18n();
+  const ti = t.schedule.ics;
+  const hours = ti.hours(
+    formatClockLocale(block.startMinute, locale),
+    formatClockLocale(block.endMinute, locale),
+  );
   const when =
     block.weekday == null
-      ? `${day(block.validFrom, "EEEE d MMMM yyyy")}, ${hours}`
-      : `Chaque ${WEEKDAY_LONG[block.weekday as Weekday]}, ${hours}`;
+      ? `${formatDay(block.validFrom, "weekdayDayMonthYear", locale)}, ${hours}`
+      : ti.every(weekdayLong(block.weekday as Weekday, locale), hours);
   const period =
     block.weekday == null
       ? null
-      : `du ${day(block.validFrom, "d MMM")} au ${day(block.validUntil, "d MMM yyyy")} (${block.occurrences} fois)`;
+      : ti.period(
+          formatDay(block.validFrom, "shortDayMonth", locale),
+          formatDay(block.validUntil, "shortDayMonthYear", locale),
+          block.occurrences,
+        );
   const id = `ics-bloc-${block.key.replace(/[^A-Za-z0-9_-]/g, "_")}`;
   return (
     <li className={cn("flex items-start gap-3 rounded-lg border p-3", !checked && "opacity-60")}>
@@ -516,7 +513,7 @@ function PreviewRow({
           {block.title}
           {block.titleTruncated && (
             <Badge variant="secondary" className="ml-2">
-              titre raccourci
+              {ti.truncated}
             </Badge>
           )}
         </span>

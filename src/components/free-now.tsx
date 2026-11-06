@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { FreeNowMatchView, FreeNowView } from "@/lib/meetups/freeNow";
 import type { Result } from "@/lib/places/validation";
-import { plural } from "@/lib/ux/plural";
+import { useI18n } from "@/lib/i18n/client";
 
 type Search = (raw: unknown) => Promise<Result<FreeNowView>>;
 
@@ -27,6 +27,8 @@ interface Props {
  */
 export function FreeNow({ groupId, search = chercherLibresMaintenant, onPropose }: Props) {
   const titleId = useId();
+  const { t, tr } = useI18n();
+  const tf = t.meetups.freeNow;
   const [view, setView] = useState<FreeNowView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -51,17 +53,13 @@ export function FreeNow({ groupId, search = chercherLibresMaintenant, onPropose 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 id={titleId} className="font-semibold">
-            Je suis libre maintenant
+            {tf.title}
           </h2>
-          <p className="text-muted-foreground text-sm">
-            {groupId
-              ? "Qui, dans ce groupe, peut te voir d'ici 2 heures ?"
-              : "Qui, dans tes groupes, peut te voir d'ici 2 heures ?"}
-          </p>
+          <p className="text-muted-foreground text-sm">{groupId ? tf.inGroup : tf.inGroups}</p>
         </div>
         <Button type="button" onClick={run} disabled={pending} className="min-h-11">
           {pending ? <Loader2 className="animate-spin" /> : <Zap />}
-          {pending ? "Recherche…" : "Qui est libre ?"}
+          {pending ? tf.searching : tf.whoIsFree}
         </Button>
       </div>
 
@@ -70,7 +68,7 @@ export function FreeNow({ groupId, search = chercherLibresMaintenant, onPropose 
           role="alert"
           className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
         >
-          {error}
+          {tr(error)}
         </p>
       )}
 
@@ -86,25 +84,23 @@ function Results({
   view: FreeNowView;
   onPropose?: (match: FreeNowMatchView) => void;
 }) {
+  const { t } = useI18n();
+  const tf = t.meetups.freeNow;
   const notes: string[] = [];
   if (view.incomplete.length > 0) {
-    notes.push(`Sans lieu « maison », donc pas comptés : ${view.incomplete.join(", ")}.`);
+    notes.push(tf.noHome(view.incomplete.join(", ")));
   }
-  if (view.truncated) notes.push("Seuls les 10 premiers groupes et 40 membres ont été vérifiés.");
+  if (view.truncated) notes.push(tf.truncated);
 
   return (
     <div className="flex flex-col gap-2">
       {view.matches.length === 0 ? (
         <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-sm">
-          {view.checked === 0
-            ? "Personne d'autre à vérifier pour l'instant : invite des amis dans un groupe."
-            : `Personne n'est libre en même temps que toi entre ${view.windowLabel} (au moins 30 min, trajets compris).`}
+          {view.checked === 0 ? tf.nobodyToCheck : tf.nobodyFree(view.windowLabel)}
         </p>
       ) : (
         <>
-          <p className="text-sm">
-            {plural(view.matches.length, "personne")} sur {view.checked} entre {view.windowLabel} :
-          </p>
+          <p className="text-sm">{tf.count(view.matches.length, view.checked, view.windowLabel)}</p>
           <ul className="flex flex-col gap-2">
             {view.matches.map((m) => (
               <li key={m.personId} className="flex flex-col gap-2 rounded-md border p-3">
@@ -112,19 +108,19 @@ function Results({
                   <span className="font-medium break-words">{m.name}</span>
                   {m.kind === "call" ? (
                     <Badge variant="secondary">
-                      <Phone /> Appel
+                      <Phone /> {tf.call}
                     </Badge>
                   ) : (
                     <Badge variant="secondary">
-                      <MapPin /> En personne
+                      <MapPin /> {tf.inPerson}
                     </Badge>
                   )}
                   <span className="text-sm tabular-nums">{m.timeLabel}</span>
                 </div>
                 <p className="text-muted-foreground text-xs">
                   {m.kind === "call"
-                    ? "Trop loin pour se rejoindre à temps : un appel ou une visio."
-                    : `${m.placeName ?? "Lieu"} · ton trajet ${m.myTravel} min, le sien ${m.theirTravel} min`}
+                    ? tf.tooFar
+                    : tf.travel(m.placeName ?? t.meetups.place, m.myTravel, m.theirTravel)}
                   {m.groups.length > 0 ? ` · ${m.groups.join(", ")}` : ""}
                 </p>
                 {onPropose && (
@@ -135,7 +131,7 @@ function Results({
                     className="self-start"
                     onClick={() => onPropose(m)}
                   >
-                    <Send /> Proposer ce moment
+                    <Send /> {t.meetups.propose}
                   </Button>
                 )}
               </li>

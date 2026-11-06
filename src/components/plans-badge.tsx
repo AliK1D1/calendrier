@@ -1,5 +1,6 @@
 import { cache } from "react";
 
+import { getI18n } from "@/lib/i18n/server";
 import { countAwaitingPlans } from "@/lib/plans/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -11,10 +12,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export async function PlansBadge() {
   const n = await awaitingCount();
   if (n === 0) return null;
+  const { t } = await getI18n();
   return (
     <span
       className="bg-destructive ml-1 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[0.7rem] leading-5 font-semibold text-white tabular-nums"
-      aria-label={`${n} en attente de ta réponse`}
+      aria-label={t.common.plansBadge(n)}
     >
       {n > 9 ? "9+" : n}
     </span>

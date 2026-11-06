@@ -11,6 +11,7 @@ import {
 import { supabaseFreeNowStore, supabaseMeetupStore } from "@/lib/meetups/supabaseStore";
 import type { Result } from "@/lib/places/validation";
 import { getTravelProvider } from "@/lib/travel/server";
+import { getLocale } from "@/lib/i18n/server";
 
 /** Cherche les moments réalistes pour les participants choisis d'un groupe. */
 export async function chercherMoments(raw: unknown): Promise<Result<MeetupSearchView>> {
@@ -26,6 +27,7 @@ export async function chercherMoments(raw: unknown): Promise<Result<MeetupSearch
       userId: ctx.user.id,
       now: new Date(),
       travel: getTravelProvider(),
+      locale: await getLocale(),
     });
   } catch (e) {
     console.error("Moments :", e);
@@ -51,6 +53,7 @@ export async function chercherLibresMaintenant(raw: unknown): Promise<Result<Fre
       userId: ctx.user.id,
       now: new Date(),
       travel: getTravelProvider(),
+      locale: await getLocale(),
     });
   } catch (e) {
     console.error("Libre maintenant :", e);

@@ -8,11 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMyGroups } from "@/lib/groups/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { plural } from "@/lib/ux/plural";
 
 import { CreateGroupForm, JoinByCodeForm } from "./group-forms";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Mes groupes · Temps libre commun" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.groups.metaTitle };
+}
 export const dynamic = "force-dynamic";
 
 export default async function MesGroupes() {
@@ -22,27 +25,26 @@ export default async function MesGroupes() {
   if (!data.user) redirect("/connexion?next=/groupes");
 
   const groups = await getMyGroups(supabase, data.user.id);
+  const { t } = await getI18n();
 
   return (
     <>
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">Mes groupes</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t.groups.title}</h1>
           <p className="text-muted-foreground text-sm">
-            Crée un groupe et envoie le lien d&apos;invitation à tes amis. Les membres d&apos;un
-            groupe voient quand tu es occupé et où, mais pas le titre de tes cours (réglable dans
-            ton{" "}
+            {t.groups.introBefore}
             <Link href="/profil" className="underline underline-offset-2">
-              profil
+              {t.groups.introLink}
             </Link>
-            ).
+            {t.groups.introAfter}
           </p>
         </header>
 
         <section aria-labelledby="liste-groupes" className="flex flex-col gap-3">
           <h2 id="liste-groupes" className="text-lg font-semibold">
-            {groups.length === 0 ? "Aucun groupe pour l'instant" : plural(groups.length, "groupe")}
+            {groups.length === 0 ? t.groups.none : t.groups.count(groups.length)}
           </h2>
           {groups.length > 0 && (
             <ul className="flex flex-col gap-2">
@@ -56,10 +58,10 @@ export default async function MesGroupes() {
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="font-medium break-words">{g.name}</span>
                       <span className="text-muted-foreground text-xs">
-                        {g.memberCount} membre{g.memberCount > 1 ? "s" : ""}
+                        {t.groups.members(g.memberCount)}
                       </span>
                     </span>
-                    {g.role === "admin" && <Badge variant="secondary">Admin</Badge>}
+                    {g.role === "admin" && <Badge variant="secondary">{t.groups.admin}</Badge>}
                     <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                   </Link>
                 </li>
@@ -70,11 +72,8 @@ export default async function MesGroupes() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Créer un groupe</CardTitle>
-            <CardDescription>
-              Tu en seras l&apos;admin : tu pourras retirer un membre ou changer le lien
-              d&apos;invitation.
-            </CardDescription>
+            <CardTitle>{t.groups.createTitle}</CardTitle>
+            <CardDescription>{t.groups.createHint}</CardDescription>
           </CardHeader>
           <CardContent>
             <CreateGroupForm />
@@ -83,10 +82,8 @@ export default async function MesGroupes() {
 
         <Card>
           <CardHeader>
-            <CardTitle>J&apos;ai reçu une invitation</CardTitle>
-            <CardDescription>
-              Ouvre le lien reçu, ou colle-le ici (ou seulement le code).
-            </CardDescription>
+            <CardTitle>{t.groups.inviteTitle}</CardTitle>
+            <CardDescription>{t.groups.inviteHint}</CardDescription>
           </CardHeader>
           <CardContent>
             <JoinByCodeForm />

@@ -11,12 +11,14 @@
 import { formatInTimeZone } from "date-fns-tz";
 
 import { type BusyBlockInput, expandBusyBlocks } from "@/lib/db/convert";
+import type { Locale } from "@/lib/i18n/config";
+import { formatInstantClock } from "@/lib/i18n/format";
+import { getMessages } from "@/lib/i18n/messages";
 import { DEFAULT_BUFFER_MINUTES } from "@/lib/meetups/search";
 import { type LeaveBy, leaveByTime, previousStop, transitQueryFor } from "@/lib/scheduling/leaveBy";
 import { TIME_ZONE } from "@/lib/scheduling/time";
 import type { TravelTimeProvider } from "@/lib/scheduling/travel";
 import type { Place, TravelMode } from "@/lib/scheduling/types";
-import { formatClockFr, parseClock } from "@/lib/scheduling/weeklyBlocks";
 import type { TransitLeg } from "@/lib/travel/googleRoutes";
 import type { TransitRouter } from "@/lib/travel/transitRouter";
 
@@ -73,6 +75,8 @@ export interface LeaveByDeps {
   budgetKey: string;
   now: Date;
   bufferMinutes?: number;
+  /** Langue des phrases (français par défaut). */
+  locale?: Locale;
 }
 
 /** Plan pour lequel calculer une heure de départ. */
@@ -105,20 +109,16 @@ export function leaveByTargets(
     .map((v) => ({ id: v.id, placeId: v.placeId as string, start: new Date(v.startsAt) }));
 }
 
-function clock(instant: Date): string {
-  const m = parseClock(formatInTimeZone(instant, TIME_ZONE, "HH:mm"));
-  return m === null ? "" : formatClockFr(m);
-}
-
-function transitLine(legs: readonly TransitLeg[]): string | null {
+function transitLine(legs: readonly TransitLeg[], locale: Locale): string | null {
   if (legs.length === 0) return null;
+  const t = getMessages(locale).plans.leave;
   const shown = legs.slice(0, MAX_LEGS_SHOWN).map((l) => {
     const name = l.line ? `${l.vehicle} ${l.line}` : l.vehicle;
-    const stop = l.stop ? ` (arrêt ${l.stop})` : "";
-    return `${name} à ${clock(l.departAt)}${stop}`;
+    const stop = l.stop ? t.stop(l.stop) : "";
+    return t.legAt(name, formatInstantClock(l.departAt, locale), stop);
   });
   const more = legs.length > MAX_LEGS_SHOWN ? "…" : "";
-  return shown.join(", puis ") + more;
+  return shown.join(t.then) + more;
 }
 
 /** Met un résultat en mots (fonction pure). */
@@ -131,18 +131,20 @@ export function describeLeaveBy(input: {
   previousEnd: Date | null;
   legs: readonly TransitLeg[];
   estimate: boolean;
+  /** Langue des phrases (français par défaut). */
+  locale?: Locale;
 }): LeaveByView {
   const { result, mode, fromName, fromHome, previousEnd, legs, estimate } = input;
-  const from = fromHome ? "de chez toi" : `de « ${fromName} »`;
-  const late = (arrive: Date, n: number) =>
-    `Tu arriveras vers ${clock(arrive)}, ${n} min en retard.`;
+  const locale = input.locale ?? "fr";
+  const t = getMessages(locale).plans.leave;
+  const clock = (instant: Date) => formatInstantClock(instant, locale);
+  const from = fromHome ? t.fromHome : t.fromPlace(fromName);
+  const late = (arrive: Date, n: number) => t.late(clock(arrive), n);
 
   if (result.kind === "there") {
     return {
       mode,
-      main: fromHome
-        ? "Le plan est chez toi : pas de trajet."
-        : `Tu es déjà sur place (« ${fromName} »).`,
+      main: fromHome ? t.planAtHome : t.alreadyThere(fromName),
       detail: null,
       transit: null,
       warning: result.lateMinutes > 0 && previousEnd ? late(previousEnd, result.lateMinutes) : null,
@@ -154,20 +156,16 @@ export function describeLeaveBy(input: {
   }
 
   const isLate = result.lateMinutes > 0;
-  const noteText = !estimate
-    ? null
-    : mode === "transit"
-      ? "Estimation : l'horaire du transport en commun n'est pas disponible."
-      : "Estimation : le vrai temps de trajet n'est pas disponible.";
+  const noteText = !estimate ? null : mode === "transit" ? t.estimateTransit : t.estimate;
   return {
     mode,
     main: isLate
-      ? `Pars ${from} dès ${clock(result.leaveAt)}`
-      : `Pars ${from} à ${clock(result.leaveAt)}`,
-    detail: isLate ? null : `Arrivée prévue ${clock(result.arriveAt)}`,
-    transit: result.usedTransit ? transitLine(legs) : null,
+      ? t.leaveFrom(from, clock(result.leaveAt))
+      : t.leaveAt(from, clock(result.leaveAt)),
+    detail: isLate ? null : t.arrival(clock(result.arriveAt)),
+    transit: result.usedTransit ? transitLine(legs, locale) : null,
     warning: isLate ? late(result.arriveAt, result.lateMinutes) : null,
-    urgent: result.timeToGo ? "C'est l'heure de partir !" : null,
+    urgent: result.timeToGo ? t.timeToGo : null,
     note: noteText,
     leaveAt: result.leaveAt.toISOString(),
     lateMinutes: result.lateMinutes,
@@ -263,6 +261,7 @@ export async function computeLeaveBy(
             previousEnd: previous.end,
             legs,
             estimate: !measured,
+            locale: deps.locale,
           }),
         );
       } catch (e) {

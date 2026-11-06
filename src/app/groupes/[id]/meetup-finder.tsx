@@ -24,13 +24,13 @@ import {
   type MeetupDuration,
   type MeetupSearchView,
   type ProposalView,
-  formatMinutesFr,
 } from "@/lib/meetups/search";
 import type { Result } from "@/lib/places/validation";
-import { MEETUP_PERIOD_LABELS, MEETUP_PERIODS, type MeetupPeriod } from "@/lib/scheduling/period";
-import { plural } from "@/lib/ux/plural";
+import { MEETUP_PERIODS, type MeetupPeriod } from "@/lib/scheduling/period";
 
 import { chercherMoments } from "../meetup-actions";
+import { useI18n } from "@/lib/i18n/client";
+import { formatDuration as formatDurationLocale } from "@/lib/i18n/format";
 
 type Search = (raw: unknown) => Promise<Result<MeetupSearchView>>;
 
@@ -46,17 +46,6 @@ interface Props {
 
 /** Propositions montrées avant « Voir les N propositions ». */
 const FIRST_CARDS = 6;
-
-const DURATION_LABELS: Record<MeetupDuration, string> = {
-  30: "30 min",
-  45: "45 min",
-  60: "1 h",
-  90: "1 h 30",
-  120: "2 h",
-};
-
-/** « 75 » → « 1 h 15 ». */
-const formatDuration = formatMinutesFr;
 
 /** Moment visé par un compromis « Pourquoi pas ? » choisi : on le montre en premier. */
 interface Focus {
@@ -87,6 +76,9 @@ export function MeetupFinder({
   onPropose,
 }: Props) {
   const formId = useId();
+  const { locale, t, tr } = useI18n();
+  const tm = t.meetups;
+  const formatDuration = (m: number) => formatDurationLocale(Math.floor(m), locale);
   const [selected, setSelected] = useState<string[]>(members.map((m) => m.userId));
   const [period, setPeriod] = useState<MeetupPeriod>("this-week");
   const [duration, setDuration] = useState<number>(60);
@@ -138,7 +130,7 @@ export function MeetupFinder({
    */
   function applyCompromise(a: AlmostView, c: CompromiseView) {
     if (c.kind === "call") {
-      setFocus({ kind: "call", placeId: null, start: c.start, end: c.end, label: "Appel" });
+      setFocus({ kind: "call", placeId: null, start: c.start, end: c.end, label: tm.call });
       return;
     }
     if (c.kind === "shorten") {
@@ -150,7 +142,7 @@ export function MeetupFinder({
           placeId: a.placeId,
           start: a.start,
           end: a.end,
-          label: `Durée réduite à ${formatDuration(c.durationMinutes)}`,
+          label: tm.shortened(formatDuration(c.durationMinutes)),
         },
       );
       return;
@@ -165,7 +157,7 @@ export function MeetupFinder({
           placeId: a.placeId,
           start: c.start,
           end: c.end,
-          label: `Sans ${c.name}`,
+          label: tm.without(c.name),
         },
       );
       return;
@@ -177,7 +169,7 @@ export function MeetupFinder({
         placeId: c.placeId,
         start: c.start,
         end: c.end,
-        label: `À ${c.placeName}`,
+        label: tm.at(c.placeName),
       },
     );
   }
@@ -189,7 +181,7 @@ export function MeetupFinder({
   return (
     <section aria-labelledby="se-voir" className="flex flex-col gap-4">
       <h2 id="se-voir" className="scroll-mt-16 text-lg font-semibold">
-        Quand on peut se voir
+        {tm.title}
       </h2>
       <form
         onSubmit={submit}
@@ -197,11 +189,11 @@ export function MeetupFinder({
         aria-describedby={`${formId}-aide`}
       >
         <p id={`${formId}-aide`} className="text-muted-foreground text-sm">
-          Des moments où tout le monde peut vraiment être là, trajets compris.
+          {tm.help}
         </p>
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-medium">Qui participe ?</legend>
+          <legend className="mb-1 text-sm font-medium">{tm.who}</legend>
           <div className="flex flex-wrap gap-2">
             {members.map((m) => (
               <label
@@ -215,14 +207,14 @@ export function MeetupFinder({
                   className="size-4"
                 />
                 {m.displayName}
-                {m.userId === myId ? " (toi)" : ""}
+                {m.userId === myId ? tm.you : ""}
               </label>
             ))}
           </div>
         </fieldset>
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-medium">Période</legend>
+          <legend className="mb-1 text-sm font-medium">{tm.period}</legend>
           <div className="grille-4-demi">
             {MEETUP_PERIODS.map((p) => (
               <label
@@ -237,7 +229,7 @@ export function MeetupFinder({
                   onChange={() => setPeriod(p)}
                   className="sr-only"
                 />
-                {MEETUP_PERIOD_LABELS[p]}
+                {tm.periods[p]}
               </label>
             ))}
           </div>
@@ -245,7 +237,7 @@ export function MeetupFinder({
 
         <div className="grille-4-demi">
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Au moins
+            {tm.atLeast}
             <select
               value={duration}
               onChange={(e) => setDuration(Number(e.target.value))}
@@ -253,13 +245,13 @@ export function MeetupFinder({
             >
               {durations.map((d) => (
                 <option key={d} value={d}>
-                  {DURATION_LABELS[d as MeetupDuration] ?? formatDuration(d)}
+                  {formatDuration(d)}
                 </option>
               ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Marge par trajet (min)
+            {tm.buffer}
             <input
               type="number"
               inputMode="numeric"
@@ -274,15 +266,13 @@ export function MeetupFinder({
           </label>
         </div>
         <p id={`${formId}-marge`} className="text-muted-foreground -mt-2 text-xs">
-          Minutes ajoutées à chaque trajet pour les imprévus (attendre le bus, trouver où se garer).
+          {tm.bufferHint}
         </p>
 
         <Button type="submit" size="lg" disabled={pending || selected.length < 2}>
-          <CalendarSearch /> {pending ? "Calcul en cours…" : "Trouver des moments"}
+          <CalendarSearch /> {pending ? tm.computing : tm.find}
         </Button>
-        {selected.length < 2 && (
-          <p className="text-muted-foreground text-sm">Choisis au moins deux participants.</p>
-        )}
+        {selected.length < 2 && <p className="text-muted-foreground text-sm">{tm.pickTwo}</p>}
       </form>
 
       {error && (
@@ -290,7 +280,7 @@ export function MeetupFinder({
           role="alert"
           className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
         >
-          {error}
+          {tr(error)}
         </p>
       )}
 
@@ -335,6 +325,8 @@ function MeetupResults({
   onCompromise: (a: AlmostView, c: CompromiseView) => void;
   onPropose?: (p: ProposalView) => void;
 }) {
+  const { t } = useI18n();
+  const tm = t.meetups;
   const [showAll, setShowAll] = useState(false);
   const enough = view.participants.length >= 2;
   const nothing = view.inPerson.length === 0;
@@ -349,29 +341,29 @@ function MeetupResults({
     <div className="flex flex-col gap-3" aria-live="polite">
       {view.excluded.length > 0 && (
         <p className="border-warning/60 bg-warning/15 rounded-md border p-3 text-sm">
-          Pas dans le calcul : {view.excluded.map((x) => `${x.name} (${x.reason})`).join(", ")}.
+          {tm.excluded(view.excluded.map((x) => `${x.name} (${x.reason})`).join(", "))}
         </p>
       )}
       {view.hiddenPlaceBlocks.length > 0 && (
         <p className="text-muted-foreground text-sm">
-          Certains lieux ne te sont pas visibles (
-          {view.hiddenPlaceBlocks.map((h) => `${h.name} : ${plural(h.count, "bloc")}`).join(", ")})
-          : on compte ces moments comme occupés, à la maison de la personne.
+          {tm.hiddenBefore}
+          {view.hiddenPlaceBlocks.map((h) => tm.hiddenItem(h.name, h.count)).join(", ")}
+          {tm.hiddenAfter}
         </p>
       )}
 
       {!enough ? (
         <p role="status" className="rounded-md border p-3 text-sm">
-          Il faut au moins deux participants prêts pour chercher un moment.
+          {tm.needTwo}
         </p>
       ) : (
         <>
           <div className="flex items-center justify-between gap-2">
             <p className="text-muted-foreground text-sm">
-              {plural(view.inPerson.length, "moment en personne", "moments en personne")}
-              {view.calls.length > 0 ? ` · ${plural(view.calls.length, "appel")}` : ""}
+              {tm.inPersonCount(view.inPerson.length)}
+              {view.calls.length > 0 ? tm.callCount(view.calls.length) : ""}
             </p>
-            <div className="flex gap-1" role="group" aria-label="Affichage">
+            <div className="flex gap-1" role="group" aria-label={tm.display}>
               <Button
                 type="button"
                 size="sm"
@@ -379,7 +371,7 @@ function MeetupResults({
                 aria-pressed={mode === "liste"}
                 onClick={() => onMode("liste")}
               >
-                <List /> Liste
+                <List /> {tm.list}
               </Button>
               <Button
                 type="button"
@@ -388,7 +380,7 @@ function MeetupResults({
                 aria-pressed={mode === "grille"}
                 onClick={() => onMode("grille")}
               >
-                <LayoutGrid /> Grille
+                <LayoutGrid /> {tm.grid}
               </Button>
             </div>
           </div>
@@ -402,13 +394,12 @@ function MeetupResults({
                   role="status"
                   className="border-warning/60 bg-warning/15 rounded-md border p-3 text-sm"
                 >
-                  Ce compromis ne donne finalement pas de moment (l&apos;horaire a peut-être changé
-                  entre-temps).
+                  {tm.compromiseFailed}
                 </p>
               )}
               {focused && focus && (
                 <div className="flex flex-col gap-2">
-                  <h3 className="text-sm font-semibold">Avec ton compromis : {focus.label}</h3>
+                  <h3 className="text-sm font-semibold">{tm.withCompromise(focus.label)}</h3>
                   <ol className="flex flex-col gap-3">
                     <ProposalCard p={focused} onPropose={onPropose} highlight />
                   </ol>
@@ -416,10 +407,9 @@ function MeetupResults({
               )}
               {nothing && !focused && view.almost.length === 0 && (
                 <p role="status" className="rounded-md border p-3 text-sm">
-                  Pas de moment réaliste en personne sur cette période
                   {firstCall
-                    ? `, voici un appel possible ${firstCall.dayLabel} à ${firstCall.timeLabel.split(" – ")[0]}.`
-                    : ", et pas de trou commun assez long pour un appel. Essaie une durée plus courte ou l'autre semaine."}
+                    ? tm.nothingWithCall(firstCall.dayLabel, firstCall.timeLabel.split(" – ")[0])
+                    : tm.nothing}
                 </p>
               )}
               {nothing && !focused && view.almost.length > 0 && (
@@ -432,13 +422,13 @@ function MeetupResults({
               </ol>
               {!showAll && inPerson.length > FIRST_CARDS && (
                 <Button type="button" variant="outline" onClick={() => setShowAll(true)}>
-                  Voir les {inPerson.length} propositions
+                  {tm.seeAll(inPerson.length)}
                 </Button>
               )}
               {calls.length > 0 && (
                 <>
                   <h3 className="mt-2 text-sm font-semibold">
-                    {nothing ? "Appels possibles" : "Les autres jours, un appel"}
+                    {nothing ? tm.possibleCalls : tm.otherDaysCall}
                   </h3>
                   <ol className="flex flex-col gap-3">
                     {calls.map((p) => (
@@ -468,14 +458,15 @@ function WhyNot({
   pending: boolean;
   onCompromise: (a: AlmostView, c: CompromiseView) => void;
 }) {
+  const { locale, t } = useI18n();
+  const tm = t.meetups;
   return (
     <div className="flex flex-col gap-3">
       <p role="status" className="rounded-md border p-3 text-sm">
-        Pas de moment assez long en personne sur cette période. Voici ce qui passe presque, et ce
-        qui le débloquerait.
+        {tm.almostIntro}
       </p>
       <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-        <HelpCircle className="size-4" aria-hidden /> Pourquoi pas ?
+        <HelpCircle className="size-4" aria-hidden /> {tm.whyNot}
       </h3>
       <ol className="flex flex-col gap-3">
         {almost.map((a) => (
@@ -490,7 +481,8 @@ function WhyNot({
             <p className="flex items-center gap-1.5 text-sm">
               <MapPin className="size-4" aria-hidden /> {a.placeName}
               <Badge variant="outline" className="ml-auto">
-                <Clock aria-hidden /> Il manque {formatDuration(a.missingMinutes)}
+                <Clock aria-hidden />{" "}
+                {tm.missing(formatDurationLocale(Math.floor(a.missingMinutes), locale))}
               </Badge>
             </p>
             <p className="text-sm">{a.sentence}</p>
@@ -506,14 +498,12 @@ function WhyNot({
                     className="h-auto min-h-11 whitespace-normal"
                   >
                     {c.label}
-                    {i === 0 && <span className="sr-only"> (le plus simple)</span>}
+                    {i === 0 && <span className="sr-only">{tm.simplest}</span>}
                   </Button>
                 ))}
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">
-                Aucun petit compromis ne suffit pour ce moment.
-              </p>
+              <p className="text-muted-foreground text-sm">{tm.noCompromise}</p>
             )}
           </li>
         ))}
@@ -532,6 +522,8 @@ function ProposalCard({
   /** Moment obtenu par un compromis : mis en évidence et amené à l'écran. */
   highlight?: boolean;
 }) {
+  const { locale, t } = useI18n();
+  const tm = t.meetups;
   const call = p.kind === "call";
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => {
@@ -549,7 +541,7 @@ function ProposalCard({
       <p className="flex items-center gap-1.5 text-sm">
         {call ? (
           <>
-            <Phone className="size-4" aria-hidden /> Appel ou visio
+            <Phone className="size-4" aria-hidden /> {tm.callOrVideo}
           </>
         ) : (
           <>
@@ -557,19 +549,20 @@ function ProposalCard({
           </>
         )}
         <Badge variant="outline" className="ml-auto">
-          <Clock aria-hidden /> {formatDuration(p.durationMinutes)}
+          <Clock aria-hidden /> {formatDurationLocale(p.durationMinutes, locale)}
         </Badge>
       </p>
       {!call && (
         <p className="text-muted-foreground text-sm">
-          Trajet :{" "}
-          {p.travel.map((t, i) => (
-            <span key={t.personId}>
+          {tm.travel}{" "}
+          {p.travel.map((leg, i) => (
+            <span key={leg.personId}>
               {i > 0 && ", "}
               <span className="text-foreground">
-                {t.name} : {t.to} min
+                {leg.name}
+                {locale === "fr" ? " :" : ":"} {leg.to} min
               </span>
-              {t.from !== t.to && <span> (retour {t.from} min)</span>}
+              {leg.from !== leg.to && <span>{tm.back(leg.from)}</span>}
             </span>
           ))}
         </p>
@@ -581,7 +574,7 @@ function ProposalCard({
           className="mt-1 sm:self-start"
           onClick={() => onPropose(p)}
         >
-          <Send /> Proposer ce moment
+          <Send /> {tm.propose}
         </Button>
       )}
     </li>
@@ -589,6 +582,8 @@ function ProposalCard({
 }
 
 function AvailabilityGridView({ view }: { view: MeetupSearchView }) {
+  const { t } = useI18n();
+  const tm = t.meetups;
   const total = view.participants.length;
   const shades = ["bg-muted", "bg-success/25", "bg-success/55", "bg-success"];
   const shade = (n: number) =>
@@ -597,18 +592,16 @@ function AvailabilityGridView({ view }: { view: MeetupSearchView }) {
   const [picked, setPicked] = useState<{ day: string; start: string } | null>(null);
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-muted-foreground text-sm">
-        Qui est libre, par demi-heure (sans compter les trajets). Touche une case pour voir qui.
-      </p>
+      <p className="text-muted-foreground text-sm">{tm.gridHelp}</p>
       <ul
         className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs"
-        aria-label="Légende"
+        aria-label={tm.legend}
       >
         {[
-          [shades[3], "Tout le monde"],
-          [shades[2], "La moitié ou plus"],
-          [shades[1], "Moins de la moitié"],
-          [shades[0], "Personne"],
+          [shades[3], tm.everyone],
+          [shades[2], tm.halfOrMore],
+          [shades[1], tm.lessThanHalf],
+          [shades[0], tm.nobody],
         ].map(([cls, label]) => (
           <li key={label} className="flex items-center gap-1.5">
             <span className={`size-3 rounded-sm border ${cls}`} aria-hidden />
@@ -632,8 +625,8 @@ function AvailabilityGridView({ view }: { view: MeetupSearchView }) {
                 <button
                   key={s.start}
                   type="button"
-                  title={`${s.label} : ${s.free.length ? s.free.join(", ") : "personne"}`}
-                  aria-label={`${s.label} : ${s.free.length} sur ${total} libres`}
+                  title={`${s.label} : ${s.free.length ? s.free.join(", ") : tm.nobodyLower}`}
+                  aria-label={tm.slotFree(s.label, s.free.length, total)}
                   aria-pressed={slot?.start === s.start}
                   onClick={() =>
                     setPicked(slot?.start === s.start ? null : { day: d.day, start: s.start })
@@ -650,10 +643,10 @@ function AvailabilityGridView({ view }: { view: MeetupSearchView }) {
               <p className="text-sm" role="status">
                 <span className="tabular-nums">{slot.label}</span> :{" "}
                 {slot.free.length === 0
-                  ? "personne n'est libre."
+                  ? tm.slotNobody
                   : slot.free.length === total
-                    ? "tout le monde est libre."
-                    : `libres : ${slot.free.join(", ")}.`}
+                    ? tm.slotEveryone
+                    : tm.slotSome(slot.free.join(", "))}
               </p>
             )}
           </div>

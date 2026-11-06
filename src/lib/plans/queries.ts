@@ -10,6 +10,8 @@ import {
   type PlanView,
   type PlanVoteInput,
 } from "./view";
+import type { Locale } from "@/lib/i18n/config";
+import { getMessages } from "@/lib/i18n/messages";
 
 /** Plans lus au plus : au-delà, les plus anciens ne s'affichent pas. */
 const MAX_PLANS = 150;
@@ -55,8 +57,9 @@ export async function loadPlans(
   supabase: SupabaseClient,
   myId: string,
   now: Date,
-  opts: { groupId?: string; planId?: string } = {},
+  opts: { groupId?: string; planId?: string; locale?: Locale } = {},
 ): Promise<PlansResult> {
+  const t = getMessages(opts.locale ?? "fr").plans;
   let query = supabase.from("meetup_plans").select(PLAN_COLUMNS);
   if (opts.planId) {
     query = query.eq("id", opts.planId);
@@ -139,7 +142,7 @@ export async function loadPlans(
   const names = new Map<string, string>();
   const groupMembers = new Map<string, string[]>();
   for (const m of members.data ?? []) {
-    names.set(m.user_id, m.profiles?.display_name || "Sans nom");
+    names.set(m.user_id, m.profiles?.display_name || t.noName);
     groupMembers.set(m.group_id, [...(groupMembers.get(m.group_id) ?? []), m.user_id]);
   }
   // Créateur ou invité qui a quitté le groupe : son profil n'est plus forcément lisible.
@@ -152,8 +155,8 @@ export async function loadPlans(
       .select("id, display_name")
       .in("id", missing)
       .returns<{ id: string; display_name: string }[]>();
-    for (const p of data ?? []) names.set(p.id, p.display_name || "Sans nom");
-    for (const id of missing) if (!names.has(id)) names.set(id, "Ancien membre");
+    for (const p of data ?? []) names.set(p.id, p.display_name || t.noName);
+    for (const id of missing) if (!names.has(id)) names.set(id, t.formerMember);
   }
 
   return {
@@ -165,6 +168,7 @@ export async function loadPlans(
       groupNames: new Map((groups.data ?? []).map((g) => [g.id, g.name])),
       placeNames: new Map((places.data ?? []).map((p) => [p.id, p.name])),
       groupMembers,
+      locale: opts.locale,
     }),
   };
 }

@@ -13,7 +13,9 @@
  */
 import { TIME_ZONE, zonedDayBounds, zonedTime } from "./time";
 import type { BusyBlock, PlaceId } from "./types";
-import { formatClockFr, MINUTES_PER_DAY, parseClock, type ValidationResult } from "./weeklyBlocks";
+import { MINUTES_PER_DAY, parseClock, type ValidationResult } from "./weeklyBlocks";
+import type { Locale } from "@/lib/i18n/config";
+import { formatClockLocale } from "@/lib/i18n/format";
 
 /** Une disponibilité : un jour local et des heures locales (« 24:00 » = minuit suivant). */
 export interface OneOffAvailability {
@@ -200,6 +202,10 @@ export function validateAvailabilityForm(
 }
 
 /** « 13 h – 18 h » */
-export function availabilityLabel(startMinute: number, endMinute: number): string {
-  return `${formatClockFr(startMinute)} – ${formatClockFr(endMinute)}`;
+export function availabilityLabel(
+  startMinute: number,
+  endMinute: number,
+  locale: Locale = "fr",
+): string {
+  return `${formatClockLocale(startMinute, locale)} – ${formatClockLocale(endMinute, locale)}`;
 }

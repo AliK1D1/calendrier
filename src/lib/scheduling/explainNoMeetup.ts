@@ -12,6 +12,9 @@
  */
 import { formatInTimeZone } from "date-fns-tz";
 
+import type { Locale } from "@/lib/i18n/config";
+import { formatClockLocale } from "@/lib/i18n/format";
+
 import {
   DEFAULT_DAY_HOURS,
   availabilitiesAtPlace,
@@ -25,7 +28,7 @@ import { getFreeWindows } from "./freeWindows";
 import { TIME_ZONE, addMinutesTo, eachDay, minutesBetween, zonedDayBounds } from "./time";
 import type { TravelTimeProvider } from "./travel";
 import type { MeetupRequest, Person, PersonId, Place, PlaceId, TravelLeg } from "./types";
-import { formatClockFr, parseClock } from "./weeklyBlocks";
+import { parseClock } from "./weeklyBlocks";
 
 /** Un « presque » : créneau commun d'au moins cette part de la durée minimale (défaut 50 %). */
 export const DEFAULT_ALMOST_RATIO = 0.5;
@@ -387,27 +390,37 @@ function closestWorking(
 }
 
 // ---------------------------------------------------------------------------
-// Phrase en français (Québec)
+// Phrase en français (Québec) ou en anglais
 // ---------------------------------------------------------------------------
 
-/** « 13 h », « 13 h 05 » dans le fuseau de l'app. */
-function clock(instant: Date): string {
+/** « 13 h », « 13 h 05 » (ou « 1 PM ») dans le fuseau de l'app. */
+function clock(instant: Date, locale: Locale): string {
   const minutes = parseClock(formatInTimeZone(instant, TIME_ZONE, "HH:mm"));
-  return minutes === null ? "" : formatClockFr(minutes);
+  return minutes === null ? "" : formatClockLocale(minutes, locale);
 }
 
-function travelText(cause: LimitCause, verb: string): string {
-  const marge = cause.bufferMinutes > 0 ? ` (+ ${cause.bufferMinutes} min de marge)` : "";
-  return `il lui faut ${cause.travelMinutes} min${marge} pour ${verb}`;
-}
-
-function causeText(cause: LimitCause): string {
-  if (cause.side === "arrival") {
-    const busy = `occupé·e jusqu'à ${clock(cause.busyEdge)}`;
-    return cause.reason === "travel" ? `${busy} et ${travelText(cause, "s'y rendre")}` : busy;
+function travelText(cause: LimitCause, arrival: boolean, locale: Locale): string {
+  if (locale === "en") {
+    const margin = cause.bufferMinutes > 0 ? ` (+ ${cause.bufferMinutes} min margin)` : "";
+    return `needs ${cause.travelMinutes} min${margin} to ${arrival ? "get there" : "leave"}`;
   }
-  const busy = `occupé·e dès ${clock(cause.busyEdge)}`;
-  return cause.reason === "travel" ? `${busy} et ${travelText(cause, "repartir")}` : busy;
+  const marge = cause.bufferMinutes > 0 ? ` (+ ${cause.bufferMinutes} min de marge)` : "";
+  return `il lui faut ${cause.travelMinutes} min${marge} pour ${arrival ? "s'y rendre" : "repartir"}`;
+}
+
+function causeText(cause: LimitCause, locale: Locale): string {
+  const arrival = cause.side === "arrival";
+  const edge = clock(cause.busyEdge, locale);
+  const busy =
+    locale === "en"
+      ? arrival
+        ? `busy until ${edge}`
+        : `busy from ${edge}`
+      : arrival
+        ? `occupé·e jusqu'à ${edge}`
+        : `occupé·e dès ${edge}`;
+  if (cause.reason !== "travel") return busy;
+  return `${busy} ${locale === "en" ? "and" : "et"} ${travelText(cause, arrival, locale)}`;
 }
 
 /**
@@ -419,8 +432,10 @@ export function explainSentence(
   almost: Pick<AlmostMeetup, "sharedMinutes" | "missingMinutes" | "limiting">,
   personName: string | null,
   placeName: string,
+  locale: Locale = "fr",
 ): string {
   const { limiting } = almost;
+  if (locale === "en") return explainSentenceEn(almost, personName, placeName);
   if (!limiting || limiting.causes.length === 0 || personName === null) {
     return `Le moment commun à ${placeName} ne dure que ${almost.sharedMinutes} min : il manque ${almost.missingMinutes} min.`;
   }
@@ -430,5 +445,23 @@ export function explainSentence(
     own <= almost.sharedMinutes
       ? `${personName} n'a que ${own} min à ${placeName}${hasTravel ? " une fois le trajet compté" : ""}`
       : `C'est ${personName} qui écourte le moment à ${placeName}`;
-  return `${lead} : ${limiting.causes.map(causeText).join(" ; ")}.`;
+  return `${lead} : ${limiting.causes.map((c) => causeText(c, "fr")).join(" ; ")}.`;
+}
+
+function explainSentenceEn(
+  almost: Pick<AlmostMeetup, "sharedMinutes" | "missingMinutes" | "limiting">,
+  personName: string | null,
+  placeName: string,
+): string {
+  const { limiting } = almost;
+  if (!limiting || limiting.causes.length === 0 || personName === null) {
+    return `The shared time at ${placeName} only lasts ${almost.sharedMinutes} min: ${almost.missingMinutes} min are missing.`;
+  }
+  const own = Math.floor(minutesBetween(limiting.ownStart, limiting.ownEnd));
+  const hasTravel = limiting.causes.some((c) => c.reason === "travel");
+  const lead =
+    own <= almost.sharedMinutes
+      ? `${personName} only has ${own} min at ${placeName}${hasTravel ? " once travel is counted" : ""}`
+      : `${personName} is the one who shortens the time at ${placeName}`;
+  return `${lead}: ${limiting.causes.map((c) => causeText(c, "en")).join("; ")}.`;
 }

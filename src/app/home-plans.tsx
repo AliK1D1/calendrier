@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { type PlanActions, PlanList } from "@/components/plans/plan-list";
 import type { PlanView } from "@/lib/plans/view";
-import { plural } from "@/lib/ux/plural";
+import { useI18n } from "@/lib/i18n/client";
 
 import { annulerPlan, repondrePlan } from "./plans/actions";
 
@@ -20,6 +20,7 @@ export function HomePlans({
   upcoming: PlanView[];
   moreUpcoming: number;
 }) {
+  const { t } = useI18n();
   if (awaiting.length === 0 && upcoming.length === 0) return null;
   return (
     <>
@@ -27,13 +28,9 @@ export function HomePlans({
         <section aria-labelledby="accueil-a-repondre" className="flex flex-col gap-3">
           <div className="flex flex-col gap-0.5">
             <h2 id="accueil-a-repondre" className="text-lg font-semibold">
-              {awaiting.length > 1
-                ? `${awaiting.length} plans attendent ta réponse`
-                : "Un plan attend ta réponse"}
+              {t.home.plans.awaiting(awaiting.length)}
             </h2>
-            <p className="text-muted-foreground text-sm">
-              Si tu acceptes, le moment s&apos;ajoute à ton horaire.
-            </p>
+            <p className="text-muted-foreground text-sm">{t.home.plans.awaitingHint}</p>
           </div>
           <PlanList plans={awaiting} actions={ACTIONS} showGroup />
         </section>
@@ -41,13 +38,11 @@ export function HomePlans({
       {upcoming.length > 0 && (
         <section aria-labelledby="accueil-prochains" className="flex flex-col gap-3">
           <h2 id="accueil-prochains" className="text-lg font-semibold">
-            Tes prochains plans
+            {t.home.plans.upcoming}
           </h2>
           <PlanList plans={upcoming} actions={ACTIONS} showGroup />
           <Link href="/plans" className="text-sm underline underline-offset-2 sm:self-start">
-            {moreUpcoming > 0
-              ? `Voir tous mes plans (${plural(moreUpcoming, "autre")})`
-              : "Voir tous mes plans"}
+            {t.home.plans.seeAll(moreUpcoming)}
           </Link>
         </section>
       )}

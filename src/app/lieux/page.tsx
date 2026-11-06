@@ -6,8 +6,12 @@ import { getMyPlaces, getMyProfile } from "@/lib/profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { PlacesManager } from "./places-manager";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Mes lieux · Temps libre commun" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.places.metaTitle };
+}
 export const dynamic = "force-dynamic";
 
 export default async function MesLieux() {
@@ -21,16 +25,14 @@ export default async function MesLieux() {
     getMyPlaces(supabase, data.user.id),
   ]);
 
+  const { t } = await getI18n();
   return (
     <>
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">Mes lieux</h1>
-          <p className="text-muted-foreground text-sm">
-            Ta maison, ton cégep, ton travail… L&apos;app s&apos;en sert pour calculer tes temps de
-            trajet. Les membres de tes groupes voient ces lieux.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t.places.title}</h1>
+          <p className="text-muted-foreground text-sm">{t.places.intro}</p>
         </header>
         <PlacesManager places={places} homeId={profile?.home_place_id ?? null} />
       </main>

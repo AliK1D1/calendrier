@@ -15,6 +15,8 @@ import {
 } from "@/lib/plans/validation";
 import { REPEAT_EVERY_MAX, type RepeatUnit } from "@/lib/scheduling/recurrence";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
+import { formatDuration } from "@/lib/i18n/format";
 
 /** Valeurs de départ du formulaire (`inviteeIds` nul = tout le groupe). */
 export type ProposeDraft = Omit<ProposeFormInput, "groupId"> & {
@@ -43,19 +45,9 @@ const SELECT =
 /** Choix rapides de « Répéter » (story 5) ; « custom » ouvre « tous les X … ». */
 type RepeatChoice = "none" | "day1" | "day2" | "week1" | "custom";
 
-const REPEAT_CHOICES: { value: RepeatChoice; label: string }[] = [
-  { value: "none", label: "Une seule fois" },
-  { value: "day1", label: "Tous les jours" },
-  { value: "day2", label: "Tous les 2 jours" },
-  { value: "week1", label: "Chaque semaine" },
-  { value: "custom", label: "Personnalisé…" },
-];
+const REPEAT_CHOICES: RepeatChoice[] = ["none", "day1", "day2", "week1", "custom"];
 
-const CUSTOM_UNITS: { value: RepeatUnit; label: string }[] = [
-  { value: "day", label: "jour(s)" },
-  { value: "week", label: "semaine(s)" },
-  { value: "month", label: "mois" },
-];
+const CUSTOM_UNITS: RepeatUnit[] = ["day", "week", "month"];
 
 function choiceOf(r: PlanRepeat | null | undefined): RepeatChoice {
   if (!r) return "none";
@@ -63,12 +55,6 @@ function choiceOf(r: PlanRepeat | null | undefined): RepeatChoice {
   if (r.unit === "day" && r.every === 2) return "day2";
   if (r.unit === "week" && r.every === 1) return "week1";
   return "custom";
-}
-
-function durationLabel(m: number): string {
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  return m % 60 ? `${h} h ${String(m % 60).padStart(2, "0")}` : `${h} h`;
 }
 
 /** Fenêtre « Proposer un moment » (élément <dialog> natif, en bas de l'écran sur téléphone). */
@@ -109,6 +95,8 @@ function ProposeForm({
   onDone,
 }: Omit<Props, "draft"> & { initial: ProposeDraft }) {
   const id = useId();
+  const { locale, t, tr } = useI18n();
+  const tp = t.plans.propose;
   const [title, setTitle] = useState(initial.title);
   const [date, setDate] = useState(initial.date);
   const [start, setStart] = useState(initial.start);
@@ -151,7 +139,7 @@ function ProposeForm({
     e.preventDefault();
     setError(null);
     if (!everyone && chosen.length === 0) {
-      setError("Choisis au moins une personne à inviter.");
+      setError(tp.pickSomeone);
       return;
     }
     startTransition(async () => {
@@ -167,13 +155,7 @@ function ProposeForm({
         repeat: repeatValue(),
       } satisfies ProposeFormInput);
       if (r.ok) {
-        const what = recurring ? "Série" : "Proposition";
-        const where = recurring ? "Elle se répète dans ton horaire." : "Elle est dans ton horaire.";
-        onDone(
-          everyone
-            ? `${what} envoyée à tout le groupe. ${where}`
-            : `${what} envoyée (${chosen.length} invité${chosen.length > 1 ? "s" : ""}). ${where}`,
-        );
+        onDone(everyone ? tp.sentAll(recurring) : tp.sentSome(recurring, chosen.length));
       } else {
         setError(r.error);
       }
@@ -185,36 +167,40 @@ function ProposeForm({
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 id="proposer-titre" className="text-lg font-semibold">
-            {recurring ? "Proposer une activité régulière" : "Proposer un moment"}
+            {recurring ? tp.titleRecurring : tp.title}
           </h2>
           {initial.fromSlot && (
             <p className="text-muted-foreground text-sm first-letter:uppercase">
-              Créneau trouvé : {initial.fromSlot}
+              {tp.slotFound(initial.fromSlot)}
             </p>
           )}
         </div>
-        <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Fermer">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          aria-label={t.common.close}
+        >
           <X />
         </Button>
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-titre`}>Quoi ?</Label>
+        <Label htmlFor={`${id}-titre`}>{tp.what}</Label>
         <Input
           id={`${id}-titre`}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={PLAN_TITLE_MAX}
-          placeholder={
-            recurring ? "ex. Gym, course, étude à la bibli" : "ex. Étude à la bibli, souper, cinéma"
-          }
+          placeholder={recurring ? tp.whatPlaceholderRecurring : tp.whatPlaceholder}
           required
         />
       </div>
 
       <div className="grille-4-demi">
         <div className="col-span-2 flex flex-col gap-2 sm:col-span-1">
-          <Label htmlFor={`${id}-jour`}>Jour</Label>
+          <Label htmlFor={`${id}-jour`}>{tp.day}</Label>
           <Input
             id={`${id}-jour`}
             type="date"
@@ -225,7 +211,7 @@ function ProposeForm({
           />
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor={`${id}-debut`}>Début</Label>
+          <Label htmlFor={`${id}-debut`}>{tp.start}</Label>
           <Input
             id={`${id}-debut`}
             type="time"
@@ -237,7 +223,7 @@ function ProposeForm({
           />
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor={`${id}-duree`}>Durée</Label>
+          <Label htmlFor={`${id}-duree`}>{tp.duration}</Label>
           <select
             id={`${id}-duree`}
             value={duration}
@@ -246,7 +232,7 @@ function ProposeForm({
           >
             {durations.map((d) => (
               <option key={d} value={d}>
-                {durationLabel(d)}
+                {formatDuration(d, locale)}
               </option>
             ))}
           </select>
@@ -254,7 +240,7 @@ function ProposeForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-repeter`}>Répéter</Label>
+        <Label htmlFor={`${id}-repeter`}>{tp.repeat}</Label>
         <select
           id={`${id}-repeter`}
           value={repeatChoice}
@@ -262,16 +248,16 @@ function ProposeForm({
           className={SELECT}
         >
           {REPEAT_CHOICES.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
+            <option key={c} value={c}>
+              {tp.repeatChoices[c]}
             </option>
           ))}
         </select>
         {repeatChoice === "custom" && (
           <div className="flex items-center gap-2 text-sm">
-            <span>Tous les</span>
+            <span>{tp.every}</span>
             <Input
-              aria-label="Nombre"
+              aria-label={tp.number}
               type="number"
               inputMode="numeric"
               min={1}
@@ -282,14 +268,14 @@ function ProposeForm({
               required
             />
             <select
-              aria-label="Unité"
+              aria-label={tp.unit}
               value={customUnit}
               onChange={(e) => setCustomUnit(e.target.value as RepeatUnit)}
               className={cn(SELECT, "w-auto flex-1")}
             >
               {CUSTOM_UNITS.map((u) => (
-                <option key={u.value} value={u.value}>
-                  {u.label}
+                <option key={u} value={u}>
+                  {tp.customUnits[u]}
                 </option>
               ))}
             </select>
@@ -297,7 +283,7 @@ function ProposeForm({
         )}
         {recurring && (
           <div className="flex flex-col gap-2">
-            <Label htmlFor={`${id}-fin`}>Jusqu&apos;au (facultatif)</Label>
+            <Label htmlFor={`${id}-fin`}>{tp.until}</Label>
             <Input
               id={`${id}-fin`}
               type="date"
@@ -306,17 +292,13 @@ function ProposeForm({
               onChange={(e) => setUntil(e.target.value)}
               className="h-11"
             />
-            <p className="text-muted-foreground text-xs">
-              Laisse vide pour une série sans fin. Le jour choisi plus haut est la première fois.
-              Chaque invité accepte une seule fois pour toute la série, et chacun peut la quitter ou
-              l&apos;arrêter quand il veut.
-            </p>
+            <p className="text-muted-foreground text-xs">{tp.untilHint}</p>
           </div>
         )}
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-lieu`}>Où ?</Label>
+        <Label htmlFor={`${id}-lieu`}>{tp.where}</Label>
         <select
           id={`${id}-lieu`}
           value={placeId}
@@ -328,25 +310,25 @@ function ProposeForm({
               {p.name}
             </option>
           ))}
-          <option value="">Autre lieu (écrire) ou à préciser</option>
+          <option value="">{tp.otherPlace}</option>
         </select>
         {!placeId && (
           <Input
-            aria-label="Lieu (texte libre)"
+            aria-label={tp.freePlace}
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             maxLength={PLAN_LOCATION_MAX}
-            placeholder="ex. Chez Sam, appel vidéo (facultatif)"
+            placeholder={tp.freePlacePlaceholder}
           />
         )}
       </div>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-sm font-medium">Qui est invité ?</legend>
+        <legend className="mb-1 text-sm font-medium">{tp.who}</legend>
         <div className="grille-4-demi">
           {[
-            [true, "Tout le groupe"],
-            [false, "Certaines personnes"],
+            [true, tp.wholeGroup],
+            [false, tp.somePeople],
           ].map(([value, label]) => (
             <label
               key={String(value)}
@@ -385,11 +367,7 @@ function ProposeForm({
             ))}
           </div>
         )}
-        <p className="text-muted-foreground text-xs">
-          Tout le groupe voit la proposition. Les invités acceptent ou refusent ; s&apos;ils
-          acceptent, le moment s&apos;ajoute à leur horaire (même s&apos;il chevauche autre chose).
-          Toi, tu es inscrit·e d&apos;office.
-        </p>
+        <p className="text-muted-foreground text-xs">{tp.whoHint}</p>
       </fieldset>
 
       {error && (
@@ -397,7 +375,7 @@ function ProposeForm({
           role="alert"
           className="border-destructive/50 text-destructive rounded-md border p-3 text-sm"
         >
-          {error}
+          {tr(error)}
         </p>
       )}
 
@@ -407,10 +385,10 @@ function ProposeForm({
         )}
       >
         <Button type="submit" size="lg" className="flex-1" disabled={pending}>
-          <Send /> {pending ? "Envoi…" : "Proposer"}
+          <Send /> {pending ? tp.sending : tp.send}
         </Button>
         <Button type="button" size="lg" variant="outline" onClick={onClose}>
-          Annuler
+          {t.common.cancel}
         </Button>
       </div>
     </form>

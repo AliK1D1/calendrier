@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { readGeocodeApiResponse } from "@/lib/geocoding/client";
 import type { GeocodeResult } from "@/lib/geocoding/nominatim";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
 
 export interface AddressSearchProps {
   label: string;
@@ -31,6 +32,7 @@ export function AddressSearch({
   onSelect,
 }: AddressSearchProps) {
   const id = useId();
+  const { t, tr } = useI18n();
   const [query, setQuery] = useState(initialQuery ?? "");
   const [results, setResults] = useState<GeocodeResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export function AddressSearch({
         setError(r.error);
       }
     } catch {
-      setError("Pas de connexion. Réessaie.");
+      setError(t.places.search.noConnection);
     } finally {
       setLoading(false);
     }
@@ -70,34 +72,36 @@ export function AddressSearch({
             id={id}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={placeholder ?? "Ex. Cégep Édouard-Montpetit"}
+            placeholder={placeholder ?? t.places.search.placeholder}
             autoComplete="off"
             enterKeyHint="search"
             minLength={3}
             maxLength={200}
             required
           />
-          <Button type="submit" disabled={loading} aria-label="Chercher">
+          <Button type="submit" disabled={loading} aria-label={t.places.search.button}>
             <Search />
-            <span className="hidden sm:inline">{loading ? "Recherche…" : "Chercher"}</span>
+            <span className="hidden sm:inline">
+              {loading ? t.places.search.searching : t.places.search.button}
+            </span>
           </Button>
         </div>
       </form>
 
       {error && (
         <p role="alert" className="text-destructive text-sm">
-          {error}
+          {tr(error)}
         </p>
       )}
 
       {results && results.length === 0 && (
         <p className="text-muted-foreground text-sm" role="status">
-          Aucun lieu trouvé. Essaie avec l&apos;adresse complète (numéro, rue, ville).
+          {t.places.search.noResult}
         </p>
       )}
 
       {results && results.length > 0 && (
-        <ul className="flex flex-col gap-1" aria-label="Résultats">
+        <ul className="flex flex-col gap-1" aria-label={t.places.search.results}>
           {results.map((r) => (
             <li key={r.id}>
               <button
@@ -117,9 +121,7 @@ export function AddressSearch({
           ))}
         </ul>
       )}
-      <p className="text-muted-foreground text-xs">
-        Recherche : © les contributeurs d&apos;OpenStreetMap (Nominatim).
-      </p>
+      <p className="text-muted-foreground text-xs">{t.places.search.credit}</p>
     </div>
   );
 }

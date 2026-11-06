@@ -24,6 +24,7 @@ import {
   validateSessionList,
   validateStudyPreferencesForm,
 } from "@/lib/study/validation";
+import { getLocale } from "@/lib/i18n/server";
 
 /** Calculs par minute et par personne : le planificateur occupe le serveur. */
 const calculLimiter = createKeyedLimiter({ limit: 30, windowMs: 60_000 });
@@ -53,7 +54,12 @@ async function studyContext(heavy = false) {
     ok: true as const,
     ctx,
     store: supabaseStudyStore(ctx.supabase, ctx.user.id),
-    deps: { userId: ctx.user.id, now: new Date(), travel: getTravelProvider() },
+    deps: {
+      userId: ctx.user.id,
+      now: new Date(),
+      travel: getTravelProvider(),
+      locale: await getLocale(),
+    },
   };
 }
 

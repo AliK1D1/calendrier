@@ -7,6 +7,7 @@ import { getTransitRouter, getTravelProvider } from "@/lib/travel/server";
 
 import { computeLeaveBy, type LeaveByBlock, leaveByTargets, withLeaveBy } from "./leaveBy";
 import type { PlanView } from "./view";
+import type { Locale } from "@/lib/i18n/config";
 
 const BLOCK_COLUMNS =
   "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, repeat_unit, repeat_every, meetup_plan_id";
@@ -21,6 +22,7 @@ export async function addLeaveBy(
   myId: string,
   views: PlanView[],
   now: Date,
+  locale: Locale = "fr",
 ): Promise<PlanView[]> {
   const targets = leaveByTargets(views, now);
   if (targets.length === 0) return views;
@@ -70,6 +72,7 @@ export async function addLeaveBy(
         transit: getTransitRouter(),
         budgetKey: myId,
         now,
+        locale,
       },
     );
     return withLeaveBy(views, leaveBy);

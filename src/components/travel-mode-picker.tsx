@@ -2,7 +2,7 @@
 
 import { Bike, Bus, Car, Footprints } from "lucide-react";
 
-import { TRAVEL_MODE_LABELS } from "@/lib/places/validation";
+import { useI18n } from "@/lib/i18n/client";
 import type { TravelMode } from "@/lib/scheduling/types";
 import { cn } from "@/lib/utils";
 
@@ -23,11 +23,12 @@ export function TravelModePicker({
   onChange: (mode: TravelMode) => void;
   name?: string;
 }) {
+  const { t } = useI18n();
   return (
     <fieldset className="flex flex-col gap-2">
-      <legend className="mb-2 text-sm font-medium">Comment te déplaces-tu d&apos;habitude ?</legend>
+      <legend className="mb-2 text-sm font-medium">{t.common.travelModes.question}</legend>
       <div className="grille-4-demi">
-        {(Object.keys(TRAVEL_MODE_LABELS) as TravelMode[]).map((mode) => {
+        {(Object.keys(ICONS) as TravelMode[]).map((mode) => {
           const Icon = ICONS[mode];
           return (
             <label
@@ -46,7 +47,7 @@ export function TravelModePicker({
                 className="sr-only"
               />
               <Icon className="size-5 shrink-0" aria-hidden />
-              {TRAVEL_MODE_LABELS[mode]}
+              {t.common.travelModes[mode]}
             </label>
           );
         })}

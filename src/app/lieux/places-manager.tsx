@@ -14,9 +14,9 @@ import { Label } from "@/components/ui/label";
 import type { GeocodeResult } from "@/lib/geocoding/nominatim";
 import { PLACE_NAME_MAX, roundCoord } from "@/lib/places/validation";
 import type { MyPlace } from "@/lib/profile";
-import { plural } from "@/lib/ux/plural";
 
 import { ajouterLieu, definirMaison, renommerLieu, supprimerLieu } from "./actions";
+import { useI18n } from "@/lib/i18n/client";
 
 interface Props {
   places: MyPlace[];
@@ -33,6 +33,7 @@ interface Draft {
 }
 
 export function PlacesManager({ places, homeId }: Props) {
+  const { t } = useI18n();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<Flash>(null);
   const clearMessage = useCallback(() => setMessage(null), []);
@@ -64,7 +65,7 @@ export function PlacesManager({ places, homeId }: Props) {
       id: p.id,
       lat: p.lat,
       lng: p.lng,
-      label: p.id === homeId ? `${p.name} (maison)` : p.name,
+      label: p.id === homeId ? t.places.homeSuffix(p.name) : p.name,
       highlighted: !draft && p.id === focusId,
     }));
     if (draft) {
@@ -77,7 +78,7 @@ export function PlacesManager({ places, homeId }: Props) {
       });
     }
     return list;
-  }, [places, homeId, draft, focusId]);
+  }, [places, homeId, draft, focusId, t]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -94,9 +95,7 @@ export function PlacesManager({ places, homeId }: Props) {
 
       <section aria-labelledby="liste-lieux" className="flex flex-col gap-3">
         <h2 id="liste-lieux" className="text-lg font-semibold">
-          {places.length === 0
-            ? "Aucun lieu pour l'instant"
-            : plural(places.length, "lieu", "lieux")}
+          {places.length === 0 ? t.places.none : t.places.count(places.length)}
         </h2>
         <ul className="flex flex-col gap-2">
           {places.map((p) => (
@@ -106,11 +105,11 @@ export function PlacesManager({ places, homeId }: Props) {
                   className="flex flex-col gap-2 sm:flex-row"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    run(() => renommerLieu(p.id, editName), "Lieu renommé.");
+                    run(() => renommerLieu(p.id, editName), t.places.renamed);
                   }}
                 >
                   <Label htmlFor={`nom-${p.id}`} className="sr-only">
-                    Nouveau nom
+                    {t.places.newName}
                   </Label>
                   <Input
                     id={`nom-${p.id}`}
@@ -122,10 +121,10 @@ export function PlacesManager({ places, homeId }: Props) {
                   />
                   <div className="flex gap-2">
                     <Button type="submit" disabled={pending}>
-                      Enregistrer
+                      {t.common.save}
                     </Button>
                     <Button type="button" variant="ghost" onClick={() => setEditingId(null)}>
-                      Annuler
+                      {t.common.cancel}
                     </Button>
                   </div>
                 </form>
@@ -135,13 +134,13 @@ export function PlacesManager({ places, homeId }: Props) {
                     type="button"
                     className="flex items-center gap-2 text-left"
                     onClick={() => setFocusId(p.id)}
-                    title="Voir sur la carte"
+                    title={t.places.seeOnMap}
                   >
                     <MapPin className="text-muted-foreground size-4 shrink-0" />
                     <span className="font-medium break-words">{p.name}</span>
                     {p.id === homeId && (
                       <Badge variant="secondary">
-                        <Home /> Maison
+                        <Home /> {t.places.home}
                       </Badge>
                     )}
                   </button>
@@ -151,11 +150,9 @@ export function PlacesManager({ places, homeId }: Props) {
                         size="sm"
                         variant="outline"
                         disabled={pending}
-                        onClick={() =>
-                          run(() => definirMaison(p.id), `« ${p.name} » est ta maison.`)
-                        }
+                        onClick={() => run(() => definirMaison(p.id), t.places.isHome(p.name))}
                       >
-                        <Home /> Définir comme maison
+                        <Home /> {t.places.setHome}
                       </Button>
                     )}
                     <Button
@@ -167,21 +164,19 @@ export function PlacesManager({ places, homeId }: Props) {
                         setEditName(p.name);
                       }}
                     >
-                      <Pencil /> Renommer
+                      <Pencil /> {t.places.rename}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       disabled={pending}
                       onClick={() => {
-                        const avertissement =
-                          p.id === homeId ? " C'est ta maison : tu n'auras plus de maison." : "";
-                        if (window.confirm(`Supprimer « ${p.name} » ?${avertissement}`)) {
-                          run(() => supprimerLieu(p.id), "Lieu supprimé.");
+                        if (window.confirm(t.places.confirmDelete(p.name, p.id === homeId))) {
+                          run(() => supprimerLieu(p.id), t.places.deleted);
                         }
                       }}
                     >
-                      <Trash2 /> Supprimer
+                      <Trash2 /> {t.common.delete}
                     </Button>
                   </div>
                 </div>
@@ -193,15 +188,12 @@ export function PlacesManager({ places, homeId }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Ajouter un lieu</CardTitle>
-          <CardDescription>
-            Cherche une adresse ou un nom (ex. « Cégep Édouard-Montpetit »), vérifie le point sur la
-            carte (touche la carte pour le déplacer), puis enregistre.
-          </CardDescription>
+          <CardTitle>{t.places.addTitle}</CardTitle>
+          <CardDescription>{t.places.addHint}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <AddressSearch
-            label="Adresse ou nom du lieu"
+            label={t.places.searchLabel}
             selectedId={draft?.resultId ?? null}
             onSelect={choose}
           />
@@ -212,7 +204,7 @@ export function PlacesManager({ places, homeId }: Props) {
                 e.preventDefault();
                 run(
                   () => ajouterLieu({ name: draft.name, lat: draft.lat, lng: draft.lng }, asHome),
-                  `« ${draft.name.trim()} » est enregistré.`,
+                  t.places.saved(draft.name.trim()),
                 );
               }}
             >
@@ -220,7 +212,7 @@ export function PlacesManager({ places, homeId }: Props) {
                 {draft.address} ({draft.lat.toFixed(5)}, {draft.lng.toFixed(5)})
               </p>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="nouveau-nom">Nom du lieu</Label>
+                <Label htmlFor="nouveau-nom">{t.places.placeName}</Label>
                 <Input
                   id="nouveau-nom"
                   value={draft.name}
@@ -236,14 +228,14 @@ export function PlacesManager({ places, homeId }: Props) {
                   onChange={(e) => setAsHome(e.target.checked)}
                   className="size-4"
                 />
-                C&apos;est ma maison
+                {t.places.myHome}
               </label>
               <div className="flex gap-2">
                 <Button type="submit" disabled={pending}>
-                  {pending ? "Enregistrement…" : "Enregistrer ce lieu"}
+                  {pending ? t.common.saving : t.places.savePlace}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setDraft(null)}>
-                  Annuler
+                  {t.common.cancel}
                 </Button>
               </div>
             </form>

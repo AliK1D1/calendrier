@@ -3,9 +3,9 @@
 import { AlertTriangle, ArrowDown, ArrowUp, BookOpen, Check, Eye, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { formatStudyDuration } from "@/lib/scheduling/studyPlanner";
+import { useI18n } from "@/lib/i18n/client";
+import { formatDuration } from "@/lib/i18n/format";
 import type { ConflictView, SessionView, StudyPlanView } from "@/lib/study/service";
-import { plural } from "@/lib/ux/plural";
 import { cn } from "@/lib/utils";
 
 /** Style d'une séance proposée : pointillé, couleur « étude » (claire et sombre). */
@@ -27,7 +27,9 @@ export function ConflictNotice({
   /** À la place du bouton (ex. lien vers /horaire). */
   action?: React.ReactNode;
 }) {
+  const { t } = useI18n();
   if (conflicts.length === 0) return null;
+  const c = t.study.conflict;
   return (
     <section
       aria-labelledby="conflit-etude"
@@ -35,17 +37,9 @@ export function ConflictNotice({
     >
       <h2 id="conflit-etude" className="flex items-center gap-2 font-semibold">
         <AlertTriangle className="size-4 shrink-0" aria-hidden />
-        {conflicts.length > 1
-          ? "Séances en conflit : replanifier ?"
-          : "Séance en conflit : replanifier ?"}
+        {c.title(conflicts.length)}
       </h2>
-      <p>
-        Autre chose tombe maintenant sur{" "}
-        {conflicts.length > 1
-          ? "ces séances d'étude déplaçables"
-          : "cette séance d'étude déplaçable"}{" "}
-        (un plan de groupe, un cours ou le trajet pour y aller) :
-      </p>
+      <p>{c.body(conflicts.length)}</p>
       <ul className="list-disc pl-5">
         {conflicts.map((c) => (
           <li key={c.id}>
@@ -56,7 +50,7 @@ export function ConflictNotice({
       <div>
         {action ?? (
           <Button size="sm" onClick={onReplan} disabled={pending}>
-            {pending ? "Calcul…" : "Replanifier"}
+            {pending ? c.computing : c.replan}
           </Button>
         )}
       </div>
@@ -84,6 +78,8 @@ export function StudyPanel({
   onNudge: (key: string, minutes: number) => void;
   onShow: (s: SessionView) => void;
 }) {
+  const { locale, t, tr } = useI18n();
+  const p = t.study.panel;
   const total = plan.sessions.reduce((t, s) => t + (s.endMinute - s.startMinute), 0);
   const replan = plan.mode === "replan";
   const keys = plan.sessions.map((s) => s.key);
@@ -95,16 +91,14 @@ export function StudyPanel({
       <div className="flex flex-col gap-1">
         <h2 id="seances-proposees" className="flex items-center gap-2 text-lg font-semibold">
           <BookOpen className="text-study size-5 shrink-0" aria-hidden />
-          {replan ? "Nouvelles places proposées" : "Séances d'étude proposées"}
+          {replan ? p.titleReplan : p.titlePlan}
         </h2>
         {plan.sessions.length > 0 ? (
           <p className="text-muted-foreground text-sm">
-            {plural(plan.sessions.length, "séance", "séances")}, {formatStudyDuration(total)} en
-            tout, en pointillé dans la grille. Rien n&apos;est ajouté à ton horaire avant que tu
-            acceptes. Glisse une séance dans la grille (ou utilise les flèches) pour la déplacer.
+            {p.summary(plan.sessions.length, formatDuration(total, locale))}
           </p>
         ) : (
-          <p className="text-muted-foreground text-sm">Aucune séance à proposer.</p>
+          <p className="text-muted-foreground text-sm">{p.none}</p>
         )}
       </div>
 
@@ -113,7 +107,7 @@ export function StudyPanel({
           {plan.warnings.map((w) => (
             <li key={w} className="flex gap-2">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-              <span>{w}</span>
+              <span>{tr(w)}</span>
             </li>
           ))}
         </ul>
@@ -123,10 +117,10 @@ export function StudyPanel({
         <>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={busy} onClick={() => onAccept(keys)}>
-              <Check /> {replan ? "Tout déplacer" : "Tout accepter"}
+              <Check /> {replan ? p.moveAll : p.acceptAll}
             </Button>
             <Button size="sm" variant="outline" disabled={busy} onClick={() => onRefuse(keys)}>
-              <X /> Tout refuser
+              <X /> {p.refuseAll}
             </Button>
           </div>
           <ul className="flex flex-col gap-2">
@@ -157,7 +151,7 @@ export function StudyPanel({
                     size="icon"
                     variant="ghost"
                     disabled={busy}
-                    aria-label={`${s.title}, ${s.label} : 15 minutes plus tôt`}
+                    aria-label={p.earlier(`${s.title}, ${s.label}`)}
                     onClick={() => onNudge(s.key, -15)}
                   >
                     <ArrowUp />
@@ -166,7 +160,7 @@ export function StudyPanel({
                     size="icon"
                     variant="ghost"
                     disabled={busy}
-                    aria-label={`${s.title}, ${s.label} : 15 minutes plus tard`}
+                    aria-label={p.later(`${s.title}, ${s.label}`)}
                     onClick={() => onNudge(s.key, 15)}
                   >
                     <ArrowDown />
@@ -174,7 +168,7 @@ export function StudyPanel({
                   <Button
                     size="icon"
                     variant="ghost"
-                    aria-label={`Voir ${s.title}, ${s.label}, dans la grille`}
+                    aria-label={p.show(`${s.title}, ${s.label}`)}
                     onClick={() => onShow(s)}
                   >
                     <Eye />
@@ -183,18 +177,18 @@ export function StudyPanel({
                     size="sm"
                     disabled={busy}
                     onClick={() => onAccept([s.key])}
-                    aria-label={`${replan ? "Déplacer" : "Accepter"} ${s.title}, ${s.label}`}
+                    aria-label={`${replan ? p.move : p.accept} ${s.title}, ${s.label}`}
                   >
-                    {replan ? "Déplacer" : "Accepter"}
+                    {replan ? p.move : p.accept}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={busy}
                     onClick={() => onRefuse([s.key])}
-                    aria-label={`Refuser ${s.title}, ${s.label}`}
+                    aria-label={`${p.refuse} ${s.title}, ${s.label}`}
                   >
-                    Refuser
+                    {p.refuse}
                   </Button>
                 </div>
               </li>

@@ -24,6 +24,7 @@ import {
 } from "./recurrence";
 import { assertDay } from "./time";
 import type { DateRange, PlaceId } from "./types";
+import type { Locale } from "@/lib/i18n/config";
 
 /** Minutes dans une journée « normale » (borne de fin : 24:00). */
 export const MINUTES_PER_DAY = 24 * 60;
@@ -206,12 +207,12 @@ export function occursOn(block: BlockDays, day: string): boolean {
  * « chaque mois, le 31 (ou le dernier jour du mois) »… `null` pour un bloc ponctuel. Le jour de
  * semaine d'un bloc hebdomadaire n'est pas inclus (l'interface l'affiche à part).
  */
-export function repeatLabel(block: BlockDays): string | null {
+export function repeatLabel(block: BlockDays, locale: Locale = "fr"): string | null {
   if (!isRecurring(block)) return null;
   const every = block.repeatEvery ?? 1;
-  if (block.weekday != null) return describeEvery(every, "week");
+  if (block.weekday != null) return describeEvery(every, "week", locale);
   if (!block.repeatUnit || !block.validFrom) return null;
-  return describeRepeat({ unit: block.repeatUnit, every, anchor: block.validFrom });
+  return describeRepeat({ unit: block.repeatUnit, every, anchor: block.validFrom }, locale);
 }
 
 /** Blocs qui ont lieu le jour `day`, triés par heure de début puis de fin. */

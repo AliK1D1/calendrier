@@ -8,7 +8,6 @@
  * séance (déplacée ou non) et renvoie les lignes à écrire, que l'action serveur écrit.
  */
 import { formatInTimeZone } from "date-fns-tz";
-import { frCA } from "date-fns/locale";
 
 import {
   type BusyBlockInput,
@@ -37,7 +36,9 @@ import {
 import { minutesBetween, TIME_ZONE } from "@/lib/scheduling/time";
 import { prefetchRequestsFor, type TravelTimeProvider } from "@/lib/scheduling/travel";
 import type { Deadline, Person, StudyPreferences, StudySession } from "@/lib/scheduling/types";
-import { formatClockFr, shiftDay } from "@/lib/scheduling/weeklyBlocks";
+import { shiftDay } from "@/lib/scheduling/weeklyBlocks";
+import type { Locale } from "@/lib/i18n/config";
+import { formatClockLocale, formatInstantDay } from "@/lib/i18n/format";
 
 import type { SessionInput } from "./validation";
 
@@ -91,6 +92,8 @@ export interface StudyDeps {
   userId: string;
   now: Date;
   travel: TravelTimeProvider;
+  /** Langue des libellés (français par défaut). */
+  locale?: Locale;
 }
 
 /** Données chargées et converties. */
@@ -203,10 +206,29 @@ const dayMinute = (d: Date) => {
 };
 
 /** « mardi 16 septembre, 10 h à 11 h » */
-export function sessionLabel(start: Date, end: Date): string {
-  const day = formatInTimeZone(start, TIME_ZONE, "EEEE d MMMM", { locale: frCA });
+export function sessionLabel(start: Date, end: Date, locale: Locale = "fr"): string {
+  const day = formatInstantDay(start, "weekdayDayMonth", locale);
   const endMinute = localDay(end) === localDay(start) ? dayMinute(end) : 24 * 60;
-  return `${day}, ${formatClockFr(dayMinute(start))} à ${formatClockFr(endMinute)}`;
+  const to = locale === "en" ? "to" : "à";
+  return `${day}, ${formatClockLocale(dayMinute(start), locale)} ${to} ${formatClockLocale(endMinute, locale)}`;
+}
+
+/** Nom d'un lieu de séance (« Maison » si le lieu n'est plus lisible). */
+function studyPlaceName(
+  names: ReadonlyMap<string, string>,
+  placeId: string,
+  homePlaceId: string,
+  locale: Locale,
+): string {
+  const fallback =
+    placeId === homePlaceId
+      ? locale === "en"
+        ? "Home"
+        : "Maison"
+      : locale === "en"
+        ? "Place"
+        : "Lieu";
+  return names.get(placeId) ?? fallback;
 }
 
 export function toSessionView(
@@ -216,6 +238,7 @@ export function toSessionView(
   homePlaceId: string,
   key: string,
   replacesId: string | null = null,
+  locale: Locale = "fr",
 ): SessionView {
   const day = localDay(s.start);
   return {
@@ -230,8 +253,8 @@ export function toSessionView(
     startMinute: dayMinute(s.start),
     endMinute: localDay(s.end) === day ? dayMinute(s.end) : 24 * 60,
     placeId: s.placeId,
-    placeName: placeNames.get(s.placeId) ?? (s.placeId === homePlaceId ? "Maison" : "Lieu"),
-    label: sessionLabel(s.start, s.end),
+    placeName: studyPlaceName(placeNames, s.placeId, homePlaceId, locale),
+    label: sessionLabel(s.start, s.end, locale),
   };
 }
 
@@ -273,7 +296,15 @@ export async function planMyStudy(
     value: {
       mode: "plan",
       sessions: plan.sessions.map((s, i) =>
-        toSessionView(s, byId.get(s.deadlineId)!, l.placeNames, l.person.homePlaceId, keyOf(s, i)),
+        toSessionView(
+          s,
+          byId.get(s.deadlineId)!,
+          l.placeNames,
+          l.person.homePlaceId,
+          keyOf(s, i),
+          null,
+          deps.locale,
+        ),
       ),
       warnings: plan.warnings.map((w) => w.message),
     },
@@ -311,7 +342,7 @@ export async function conflictsOf(l: LoadedStudy, deps: StudyDeps): Promise<Conf
     .map((s) => ({
       id: s.id,
       title: studySessionTitle(s.kind, courses.get(s.deadlineId) ?? ""),
-      label: sessionLabel(s.start, s.end),
+      label: sessionLabel(s.start, s.end, deps.locale),
     }));
 }
 
@@ -364,6 +395,7 @@ export async function replanMyConflicts(
           l.person.homePlaceId,
           keyOf(m.session, i),
           m.id,
+          deps.locale,
         ),
       ),
       warnings: [
@@ -437,7 +469,7 @@ export async function prepareAcceptance(
       deps.now,
       l.ownPlaceIds,
     );
-    if (error) return fail(`${sessionLabel(input.start, input.end)} : ${error}`);
+    if (error) return fail(`${sessionLabel(input.start, input.end, deps.locale)} : ${error}`);
     busy.push(session);
     const row = studySessionToRow(session, studySessionTitle(input.kind, deadline.course));
     if (input.replacesId) plan.updates.push({ id: input.replacesId, row });
@@ -498,6 +530,7 @@ export async function checkMovedSession(
       l.person.homePlaceId,
       input.key,
       input.replacesId,
+      deps.locale,
     ),
   };
 }
@@ -559,6 +592,7 @@ export async function studyOverview(
   if (!deadlines.ok) return deadlines;
   const home = profile.value?.home_place_id ?? "";
   const names = new Map(places.value.map((p) => [p.id, p.name]));
+  const locale = deps.locale ?? "fr";
   const accepted = blocks.value
     .filter((b) => b.owner_id === deps.userId)
     .map((b) => toAcceptedSession(b, home))
@@ -582,7 +616,7 @@ export async function studyOverview(
         id: d.id,
         kind: d.kind,
         course: d.course,
-        dueLabel: `${formatInTimeZone(d.dueAt, TIME_ZONE, "EEEE d MMMM", { locale: frCA })} à ${formatClockFr(dayMinute(d.dueAt))}`,
+        dueLabel: `${formatInstantDay(d.dueAt, "weekdayDayMonth", locale)} ${locale === "en" ? "at" : "à"} ${formatClockLocale(dayMinute(d.dueAt), locale)}`,
         past: d.dueAt <= deps.now,
         requiredMinutes: required(d),
         estimated: d.estimatedHours !== null,
@@ -590,10 +624,10 @@ export async function studyOverview(
         acceptedMinutes: sessions.reduce((t, s) => t + minutesBetween(s.start, s.end), 0),
         sessions: sessions.map((s) => ({
           id: s.id,
-          label: sessionLabel(s.start, s.end),
+          label: sessionLabel(s.start, s.end, deps.locale),
           movable: s.movable,
           past: s.end <= deps.now,
-          placeName: names.get(s.placeId) ?? (s.placeId === home ? "Maison" : "Lieu"),
+          placeName: studyPlaceName(names, s.placeId, home, locale),
         })),
       };
     });

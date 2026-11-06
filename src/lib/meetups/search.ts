@@ -14,7 +14,6 @@
  * nombre de blocs concernés est renvoyé pour l'afficher. Ces lieux ne sont jamais proposés.
  */
 import { formatInTimeZone } from "date-fns-tz";
-import { frCA } from "date-fns/locale";
 
 import {
   type AvailabilitySlotInput,
@@ -45,7 +44,10 @@ import {
 import { minutesBetween, TIME_ZONE } from "@/lib/scheduling/time";
 import { prefetchRequestsFor, type TravelTimeProvider } from "@/lib/scheduling/travel";
 import type { DateRange, DayHours, MeetupProposal, Person, PersonId } from "@/lib/scheduling/types";
-import { formatClockFr, parseClock } from "@/lib/scheduling/weeklyBlocks";
+import { parseClock } from "@/lib/scheduling/weeklyBlocks";
+import type { Locale } from "@/lib/i18n/config";
+import { formatClockLocale, formatDuration, formatInstantDay } from "@/lib/i18n/format";
+import { getMessages } from "@/lib/i18n/messages";
 
 /** Durées minimales proposées, en minutes. */
 export const MEETUP_DURATIONS = [30, 45, 60, 90, 120] as const;
@@ -291,6 +293,8 @@ export interface SearchDeps {
   dayHours?: DayHours;
   /** Horloge pour mesurer le calcul (défaut : performance.now). */
   clock?: () => number;
+  /** Langue des libellés (français par défaut). */
+  locale?: Locale;
 }
 
 const NOT_MEMBER = "Groupe introuvable.";
@@ -314,6 +318,8 @@ export async function searchGroupMeetups(
 
   const range = periodRange(input.period, localDay(deps.now));
   const ids = input.participantIds;
+  const locale = deps.locale ?? "fr";
+  const t = getMessages(locale).meetups;
   const [profiles, personal, favorites, blocks, availabilities] = await Promise.all([
     store.profiles(ids),
     store.personalPlaces(ids),
@@ -341,10 +347,10 @@ export async function searchGroupMeetups(
   }
   const placeRows = dedupeById([...personalRows, ...favorites.value]);
 
-  const nameOf = new Map(profileRows.map((p) => [p.id, p.display_name || "Sans nom"]));
+  const nameOf = new Map(profileRows.map((p) => [p.id, p.display_name || t.noName]));
   const excluded: ExcludedView[] = ids
     .filter((id) => !nameOf.has(id))
-    .map((id) => ({ id, name: "Membre", reason: "profil illisible" }));
+    .map((id) => ({ id, name: t.member, reason: t.unreadableProfile }));
 
   const knownPlaceIds = new Set(placeRows.map((p) => p.id));
   const hiddenCount = new Map<string, number>();
@@ -363,11 +369,11 @@ export async function searchGroupMeetups(
     excluded.push({
       id: inc.id,
       name: nameOf.get(inc.id) ?? inc.name,
-      reason: "n'a pas encore choisi son lieu « maison »",
+      reason: t.noHome,
     });
   }
   const people = converted.people;
-  const participants = people.map((p) => ({ id: p.id, name: p.name || "Sans nom" }));
+  const participants = people.map((p) => ({ id: p.id, name: p.name || t.noName }));
   const displayName = new Map(participants.map((p) => [p.id, p.name]));
 
   const base: MeetupSearchView = {
@@ -379,7 +385,7 @@ export async function searchGroupMeetups(
     almost: [],
     hiddenPlaceBlocks: [...hiddenCount]
       .filter(([id]) => displayName.has(id))
-      .map(([id, count]) => ({ name: displayName.get(id) ?? "Membre", count })),
+      .map(([id, count]) => ({ name: displayName.get(id) ?? t.member, count })),
     grid: [],
     computeMs: 0,
   };
@@ -421,20 +427,20 @@ export async function searchGroupMeetups(
   const computeMs = clock() - t0;
 
   const placeName = new Map(placeRows.map((p) => [p.id, p.name]));
-  const views = proposals.map((p, i) => toView(p, i, placeName, displayName, participants));
+  const views = proposals.map((p, i) => toView(p, i, placeName, displayName, participants, locale));
   return {
     ok: true,
     value: {
       ...base,
       inPerson: views.filter((v) => v.kind === "in-person"),
       calls: views.filter((v) => v.kind === "call"),
-      almost: almost.map((a, i) => toAlmostView(a, i, placeName, displayName)),
+      almost: almost.map((a, i) => toAlmostView(a, i, placeName, displayName, locale)),
       grid: grid.map((d) => ({
         day: d.day,
-        dayLabel: dayLabel(d.slots[0]?.start ?? new Date(`${d.day}T12:00:00Z`)),
+        dayLabel: dayLabel(d.slots[0]?.start ?? new Date(`${d.day}T12:00:00Z`), locale),
         slots: d.slots.map((s) => ({
           start: s.start.toISOString(),
-          label: `${clockLabel(s.start)} – ${clockLabel(s.end)}`,
+          label: `${clockLabel(s.start, locale)} – ${clockLabel(s.end, locale)}`,
           free: s.freeIds.map((id) => displayName.get(id) ?? "?"),
         })),
       })),
@@ -491,15 +497,15 @@ function dedupeById<T extends { id: string }>(rows: T[]): T[] {
   return [...seen.values()];
 }
 
-/** « mardi 16 septembre » (fuseau de l'app). */
-export function dayLabel(instant: Date): string {
-  return formatInTimeZone(instant, TIME_ZONE, "EEEE d MMMM", { locale: frCA });
+/** « mardi 16 septembre » (fuseau de l'app ; « Tuesday, September 16 » en anglais). */
+export function dayLabel(instant: Date, locale: Locale = "fr"): string {
+  return formatInstantDay(instant, "weekdayDayMonth", locale);
 }
 
-/** « 12 h 30 » (fuseau de l'app ; minuit → « minuit »). */
-export function clockLabel(instant: Date): string {
+/** « 12 h 30 » (fuseau de l'app ; minuit → « minuit » ; « 12:30 PM » en anglais). */
+export function clockLabel(instant: Date, locale: Locale = "fr"): string {
   const minutes = parseClock(formatInTimeZone(instant, TIME_ZONE, "HH:mm"));
-  return minutes === null ? "" : formatClockFr(minutes);
+  return minutes === null ? "" : formatClockLocale(minutes, locale);
 }
 
 function toView(
@@ -508,16 +514,18 @@ function toView(
   placeName: ReadonlyMap<string, string>,
   displayName: ReadonlyMap<PersonId, string>,
   participants: { id: string; name: string }[],
+  locale: Locale,
 ): ProposalView {
+  const t = getMessages(locale).meetups;
   return {
     key: `${p.kind}-${p.placeId ?? "appel"}-${p.start.toISOString()}-${index}`,
     kind: p.kind,
     placeId: p.placeId,
-    placeName: p.placeId ? (placeName.get(p.placeId) ?? "Lieu") : null,
+    placeName: p.placeId ? (placeName.get(p.placeId) ?? t.place) : null,
     start: p.start.toISOString(),
     end: p.end.toISOString(),
-    dayLabel: dayLabel(p.start),
-    timeLabel: `${clockLabel(p.start)} – ${clockLabel(p.end)}`,
+    dayLabel: dayLabel(p.start, locale),
+    timeLabel: `${clockLabel(p.start, locale)} – ${clockLabel(p.end, locale)}`,
     durationMinutes: Math.round(minutesBetween(p.start, p.end)),
     travel: participants.map(({ id }) => ({
       personId: id,
@@ -533,20 +541,24 @@ function compromiseView(
   c: Compromise,
   placeName: ReadonlyMap<string, string>,
   displayName: ReadonlyMap<PersonId, string>,
+  locale: Locale,
 ): CompromiseView {
-  const duration = (start: Date, end: Date) => formatMinutesFr(minutesBetween(start, end));
+  const t = getMessages(locale).meetups;
+  const fmt = (m: number) => formatDuration(Math.floor(m), locale);
+  const duration = (start: Date, end: Date) => fmt(minutesBetween(start, end));
+  const clock = (d: Date) => clockLabel(d, locale);
   switch (c.kind) {
     case "shorten":
       return {
         kind: "shorten",
-        label: `Réduire à ${formatMinutesFr(c.durationMinutes)}`,
+        label: t.shortenTo(fmt(c.durationMinutes)),
         durationMinutes: c.durationMinutes,
       };
     case "other-place": {
-      const name = placeName.get(c.placeId) ?? "Lieu";
+      const name = placeName.get(c.placeId) ?? t.place;
       return {
         kind: "other-place",
-        label: `Se voir à ${name} (${clockLabel(c.start)}, ${duration(c.start, c.end)})`,
+        label: t.meetAt(name, clock(c.start), duration(c.start, c.end)),
         placeId: c.placeId,
         placeName: name,
         start: c.start.toISOString(),
@@ -554,10 +566,10 @@ function compromiseView(
       };
     }
     case "without": {
-      const name = displayName.get(c.personId) ?? "cette personne";
+      const name = displayName.get(c.personId) ?? t.thisPerson;
       return {
         kind: "without",
-        label: `Se voir sans ${name} (${duration(c.start, c.end)})`,
+        label: t.meetWithout(name, duration(c.start, c.end)),
         personId: c.personId,
         name,
         start: c.start.toISOString(),
@@ -567,7 +579,7 @@ function compromiseView(
     case "call":
       return {
         kind: "call",
-        label: `Faire un appel (${clockLabel(c.start)} – ${clockLabel(c.end)})`,
+        label: t.makeCall(clock(c.start), clock(c.end)),
         start: c.start.toISOString(),
         end: c.end.toISOString(),
       };
@@ -579,8 +591,9 @@ function toAlmostView(
   index: number,
   placeName: ReadonlyMap<string, string>,
   displayName: ReadonlyMap<PersonId, string>,
+  locale: Locale,
 ): AlmostView {
-  const place = placeName.get(a.placeId) ?? "Lieu";
+  const place = placeName.get(a.placeId) ?? getMessages(locale).meetups.place;
   const limitingName = a.limiting ? (displayName.get(a.limiting.personId) ?? null) : null;
   return {
     key: `presque-${a.placeId}-${a.start.toISOString()}-${index}`,
@@ -588,13 +601,13 @@ function toAlmostView(
     placeName: place,
     start: a.start.toISOString(),
     end: a.end.toISOString(),
-    dayLabel: dayLabel(a.start),
-    timeLabel: `${clockLabel(a.start)} – ${clockLabel(a.end)}`,
+    dayLabel: dayLabel(a.start, locale),
+    timeLabel: `${clockLabel(a.start, locale)} – ${clockLabel(a.end, locale)}`,
     sharedMinutes: a.sharedMinutes,
     missingMinutes: a.missingMinutes,
     limitingName,
-    sentence: explainSentence(a, limitingName, place),
-    compromises: a.compromises.map((c) => compromiseView(c, placeName, displayName)),
+    sentence: explainSentence(a, limitingName, place, locale),
+    compromises: a.compromises.map((c) => compromiseView(c, placeName, displayName, locale)),
   };
 }
 

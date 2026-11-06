@@ -1,10 +1,12 @@
 import { SiteHeader } from "@/components/site-header";
+import { getI18n } from "@/lib/i18n/server";
 
 /**
  * Affiché pendant le chargement d'une page (les pages lisent la BD à chaque visite) :
  * sans lui, un clic dans le menu semble ne rien faire pendant une ou deux secondes.
  */
-export default function Chargement() {
+export default async function Chargement() {
+  const { t } = await getI18n();
   return (
     <>
       <SiteHeader />
@@ -13,7 +15,7 @@ export default function Chargement() {
         aria-live="polite"
         className="grille-4 mx-auto max-w-3xl content-start gap-y-4 px-4 py-6"
       >
-        <span className="sr-only">Chargement…</span>
+        <span className="sr-only">{t.common.loading}</span>
         <div className="bg-muted h-8 w-1/2 animate-pulse rounded-md" />
         <div className="bg-muted h-4 w-3/4 animate-pulse rounded-md" />
         <div className="bg-muted h-40 w-full animate-pulse rounded-lg" />

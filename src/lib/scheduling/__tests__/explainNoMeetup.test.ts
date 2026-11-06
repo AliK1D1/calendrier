@@ -104,6 +104,9 @@ describe("explainNoMeetup", () => {
     expect(explainSentence(a, "Sam", "Cégep")).toBe(
       "C'est Sam qui écourte le moment à Cégep : occupé·e jusqu'à 12 h et il lui faut 35 min (+ 5 min de marge) pour s'y rendre.",
     );
+    expect(explainSentence(a, "Sam", "Cégep", "en")).toBe(
+      "Sam is the one who shortens the time at Cégep: busy until noon and needs 35 min (+ 5 min margin) to get there.",
+    );
   });
 
   it("une personne manque 10 min : réduire à 50 min ou se voir sans elle", async () => {
@@ -135,6 +138,9 @@ describe("explainNoMeetup", () => {
     ]);
     expect(explainSentence(a, "Léa", "Cégep")).toBe(
       "Léa n'a que 50 min à Cégep : occupé·e dès 12 h 50.",
+    );
+    expect(explainSentence(a, "Léa", "Cégep", "en")).toBe(
+      "Léa only has 50 min at Cégep: busy from 12:50 PM.",
     );
 
     // Confidentialité : ni titre de bloc ni lieu d'avant/après dans le résultat.

@@ -14,6 +14,7 @@
  * - Ans : même mois et même quantième ; un 29 février devient le 28 les années non bissextiles.
  */
 import { assertDay } from "./time";
+import type { Locale } from "@/lib/i18n/config";
 
 /** Unité de répétition. */
 export type RepeatUnit = "day" | "week" | "month" | "year";
@@ -33,6 +34,58 @@ export const REPEAT_UNIT_LABEL: Record<RepeatUnit, { one: string; many: string }
   month: { one: "mois", many: "mois" },
   year: { one: "an", many: "ans" },
 };
+
+/** Les mêmes unités en anglais (interface en anglais). */
+export const REPEAT_UNIT_LABEL_EN: Record<RepeatUnit, { one: string; many: string }> = {
+  day: { one: "day", many: "days" },
+  week: { one: "week", many: "weeks" },
+  month: { one: "month", many: "months" },
+  year: { one: "year", many: "years" },
+};
+
+/** Libellés d'unité dans une langue de l'interface. */
+export function repeatUnitLabels(
+  locale: Locale,
+): Record<RepeatUnit, { one: string; many: string }> {
+  return locale === "en" ? REPEAT_UNIT_LABEL_EN : REPEAT_UNIT_LABEL;
+}
+
+const MONTHS_FR = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+const MONTHS_EN = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** « 1st », « 2nd », « 3rd », « 4th », « 11th », « 22nd »… */
+function ordinalEn(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  const suffix = ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return `${n}${suffix}`;
+}
 
 /** Une règle de répétition. `weekday` (1 = lundi … 7 = dimanche) : unité « semaine » seulement. */
 export interface RepeatRule {
@@ -187,7 +240,16 @@ export function nthOccurrence(
  * « tous les jours », « tous les 3 jours », « toutes les 2 semaines », « chaque mois »,
  * « tous les 6 mois », « chaque année », « tous les 2 ans » (en minuscules).
  */
-export function describeEvery(every: number, unit: RepeatUnit): string {
+export function describeEvery(every: number, unit: RepeatUnit, locale: Locale = "fr"): string {
+  if (locale === "en") {
+    if (every === 1) {
+      if (unit === "day") return "every day";
+      if (unit === "week") return "every week";
+      if (unit === "month") return "every month";
+      return "every year";
+    }
+    return `every ${every} ${REPEAT_UNIT_LABEL_EN[unit].many}`;
+  }
   const label = REPEAT_UNIT_LABEL[unit];
   if (every === 1) {
     if (unit === "day") return "tous les jours";
@@ -204,10 +266,19 @@ export function describeEvery(every: number, unit: RepeatUnit): string {
  * « tous les 3 jours », « chaque mois, le 31 (ou le dernier jour du mois) »,
  * « chaque année, le 14 février ». Les semaines se décrivent avec leur jour (voir l'interface).
  */
-export function describeRepeat(rule: Omit<RepeatRule, "weekday">): string {
+export function describeRepeat(rule: Omit<RepeatRule, "weekday">, locale: Locale = "fr"): string {
   assertRule(rule);
-  const base = describeEvery(rule.every, rule.unit);
+  const base = describeEvery(rule.every, rule.unit, locale);
   const a = ymd(rule.anchor);
+  if (locale === "en") {
+    if (rule.unit === "month") {
+      return a.d > 28
+        ? `${base}, on the ${ordinalEn(a.d)} (or the last day of the month)`
+        : `${base}, on the ${ordinalEn(a.d)}`;
+    }
+    if (rule.unit === "year") return `${base}, on ${MONTHS_EN[a.m - 1]} ${a.d}`;
+    return base;
+  }
   if (rule.unit === "month") {
     const quantieme = a.d === 1 ? "1er" : String(a.d);
     return a.d > 28
@@ -215,21 +286,7 @@ export function describeRepeat(rule: Omit<RepeatRule, "weekday">): string {
       : `${base}, le ${quantieme}`;
   }
   if (rule.unit === "year") {
-    const months = [
-      "janvier",
-      "février",
-      "mars",
-      "avril",
-      "mai",
-      "juin",
-      "juillet",
-      "août",
-      "septembre",
-      "octobre",
-      "novembre",
-      "décembre",
-    ];
-    return `${base}, le ${a.d === 1 ? "1er" : a.d} ${months[a.m - 1]}`;
+    return `${base}, le ${a.d === 1 ? "1er" : a.d} ${MONTHS_FR[a.m - 1]}`;
   }
   return base;
 }

@@ -1,7 +1,5 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
-import { frCA } from "date-fns/locale";
 import { BookOpen, ChevronLeft, ChevronRight, MapPin, Pencil, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,13 +13,10 @@ import type { SessionView } from "@/lib/study/service";
 import {
   blocksOnDay,
   formatClock,
-  formatClockFr,
   isRecurring,
   repeatLabel,
   shiftDay,
   suggestSession,
-  WEEKDAY_LONG,
-  WEEKDAY_SHORT,
   type Weekday,
   weekDays,
   weekdayOf,
@@ -46,6 +41,15 @@ import {
 } from "./study-panel";
 import type { ScheduleBlock, ScheduleEditorProps } from "./types";
 import { useStudyPlan } from "./use-study-plan";
+import { useI18n } from "@/lib/i18n/client";
+import type { Locale } from "@/lib/i18n/config";
+import {
+  type DatePattern,
+  formatClockLocale,
+  formatDay,
+  weekdayLong,
+  weekdayShort,
+} from "@/lib/i18n/format";
 
 const RANGE = DEFAULT_GRID_RANGE;
 const HOURS = Array.from(
@@ -86,8 +90,6 @@ function sourceColor(b: ScheduleBlock, fallback: string): string {
   }
   return fallback;
 }
-
-const dayLabel = (day: string, pattern: string) => format(parseISO(day), pattern, { locale: frCA });
 
 /** Position d'un pointeur dans une colonne : fraction de la hauteur (0 = 7 h, 1 = 23 h). */
 function fractionIn(el: HTMLElement, clientY: number): number {
@@ -141,6 +143,10 @@ export function ScheduleEditor({
   study,
 }: ScheduleEditorProps) {
   const router = useRouter();
+  const { locale, t } = useI18n();
+  const ts = t.schedule;
+  const clock = (m: number) => formatClockLocale(m, locale);
+  const dayLabel = (day: string, pattern: DatePattern) => formatDay(day, pattern, locale);
   const [monday, setMonday] = useState(() => weekStart(today));
   const days = useMemo(() => weekDays(monday), [monday]);
   const [selectedDay, setSelectedDay] = useState(today);
@@ -196,7 +202,7 @@ export function ScheduleEditor({
     return (placeId: string | null) =>
       COLORS[Math.max(0, ids.indexOf(placeId ?? homeId ?? "")) % COLORS.length];
   }, [places, homeId]);
-  const placeLabel = (placeId: string | null) => (placeId && placeName.get(placeId)) || "Maison";
+  const placeLabel = (placeId: string | null) => (placeId && placeName.get(placeId)) || ts.home;
 
   const session = useMemo(() => suggestSession(blocks, today), [blocks, today]);
   const defaultPlace = useMemo(() => {
@@ -346,7 +352,7 @@ export function ScheduleEditor({
       ? selectionFromDrag(drag.from, drag.to, RANGE)
       : null;
 
-  const weekLabel = `${dayLabel(days[0], "d MMMM")} au ${dayLabel(days[6], "d MMMM yyyy")}`;
+  const weekLabel = ts.weekOf(dayLabel(days[0], "dayMonth"), dayLabel(days[6], "dayMonthYear"));
   const span = RANGE.end - RANGE.start;
   const pct = (m: number) => `${((m - RANGE.start) / span) * 100}%`;
 
@@ -396,9 +402,7 @@ export function ScheduleEditor({
       {study && studyPlan.loading && (
         <p role="status" className="text-muted-foreground flex items-center gap-2 text-sm">
           <BookOpen className="text-study size-4" aria-hidden />
-          {studyPlan.loading === "planifier"
-            ? "Calcul de tes séances d'étude…"
-            : "Recherche de nouvelles places…"}
+          {studyPlan.loading === "planifier" ? ts.computingStudy : ts.searchingSlots}
         </p>
       )}
       {study && !studyPlan.plan && !studyPlan.loading && (
@@ -425,18 +429,18 @@ export function ScheduleEditor({
         <Button
           variant="outline"
           size="icon"
-          aria-label="Semaine précédente"
+          aria-label={ts.prevWeek}
           onClick={() => setMonday(shiftDay(monday, -7))}
         >
           <ChevronLeft />
         </Button>
         <p className="flex-1 text-center text-sm font-medium" aria-live="polite">
-          Semaine du {weekLabel}
+          {weekLabel}
         </p>
         <Button
           variant="outline"
           size="icon"
-          aria-label="Semaine suivante"
+          aria-label={ts.nextWeek}
           onClick={() => setMonday(shiftDay(monday, 7))}
         >
           <ChevronRight />
@@ -454,7 +458,7 @@ export function ScheduleEditor({
               setSelectedDay(today);
             }}
           >
-            Revenir à cette semaine
+            {ts.backToThisWeek}
           </Button>
         )}
         <IcsImport
@@ -472,12 +476,12 @@ export function ScheduleEditor({
             setDraft(newDraft(activeDay, 9 * 60, 10 * 60));
           }}
         >
-          <Plus /> Ajouter un bloc
+          <Plus /> {ts.addBlock}
         </Button>
       </div>
 
       {/* Onglets des jours (téléphone seulement : un jour à la fois) */}
-      <div role="tablist" aria-label="Jour affiché" className="grid grid-cols-7 gap-1 md:hidden">
+      <div role="tablist" aria-label={ts.dayShown} className="grid grid-cols-7 gap-1 md:hidden">
         {days.map((day) => (
           <button
             key={day}
@@ -493,8 +497,8 @@ export function ScheduleEditor({
               day === today && day !== activeDay && "border-primary",
             )}
           >
-            <span>{WEEKDAY_SHORT[weekdayOf(day)].replace(".", "")}</span>
-            <span className="text-sm font-semibold">{dayLabel(day, "d")}</span>
+            <span>{weekdayShort(weekdayOf(day), locale).replace(".", "")}</span>
+            <span className="text-sm font-semibold">{dayLabel(day, "dayNumber")}</span>
             <span
               aria-hidden
               className={cn(
@@ -502,15 +506,15 @@ export function ScheduleEditor({
                 busyDays.has(day) ? "bg-current" : "bg-transparent",
               )}
             />
-            {busyDays.has(day) && <span className="sr-only"> (occupé)</span>}
+            {busyDays.has(day) && <span className="sr-only">{ts.busy}</span>}
           </button>
         ))}
       </div>
 
       <p className="text-muted-foreground text-xs">
-        <span className="hidden md:inline">Clique-glisse</span>
-        <span className="md:hidden">Touche</span> une case vide pour ajouter un bloc ; touche un
-        bloc pour le modifier.
+        <span className="hidden md:inline">{ts.hintClick}</span>
+        <span className="md:hidden">{ts.hintTouch}</span>
+        {ts.hintRest}
       </p>
 
       <WeekLegend
@@ -530,7 +534,7 @@ export function ScheduleEditor({
         id="grille-horaire"
         className="flex scroll-mt-16 select-none"
         role="region"
-        aria-label="Grille de la semaine"
+        aria-label={ts.weekGrid}
       >
         <div className="w-11 shrink-0 pt-8 md:pt-10" aria-hidden>
           <div className="relative h-[56rem]">
@@ -540,7 +544,7 @@ export function ScheduleEditor({
                 className="text-muted-foreground absolute right-1.5 -translate-y-1/2 text-xs"
                 style={{ top: pct(m) }}
               >
-                {formatClockFr(m)}
+                {clock(m)}
               </span>
             ))}
           </div>
@@ -579,13 +583,13 @@ export function ScheduleEditor({
                     isToday && "text-primary font-semibold",
                   )}
                 >
-                  <span className="md:hidden">{dayLabel(day, "EEEE d MMMM")}</span>
-                  <span className="hidden md:inline">{WEEKDAY_SHORT[weekdayOf(day)]}</span>
-                  <span className="hidden text-sm md:inline">{dayLabel(day, "d")}</span>
+                  <span className="md:hidden">{dayLabel(day, "weekdayDayMonth")}</span>
+                  <span className="hidden md:inline">{weekdayShort(weekdayOf(day), locale)}</span>
+                  <span className="hidden text-sm md:inline">{dayLabel(day, "dayNumber")}</span>
                 </div>
                 <div
                   data-day={day}
-                  aria-label={`${WEEKDAY_LONG[weekdayOf(day)]} ${dayLabel(day, "d MMMM")}`}
+                  aria-label={`${weekdayLong(weekdayOf(day), locale)} ${dayLabel(day, "dayMonth")}`}
                   className={cn(
                     "relative h-[56rem] cursor-crosshair border-t",
                     // Fond très pâle de la couleur du jour ; aujourd'hui un peu plus marqué.
@@ -624,7 +628,7 @@ export function ScheduleEditor({
                         <button
                           key={p.item.id}
                           type="button"
-                          aria-label={`Séance proposée : ${s.title}, ${s.label}, ${s.placeName}. Glisse pour la déplacer.`}
+                          aria-label={ts.proposedSession(s.title, s.label, s.placeName)}
                           onPointerDown={(e) => onProposalPointerDown(e, s)}
                           onPointerMove={onProposalPointerMove}
                           onPointerUp={onProposalPointerUp}
@@ -636,14 +640,14 @@ export function ScheduleEditor({
                             studyPlan.errorKey === s.key && "border-destructive",
                           )}
                           style={style}
-                          title={`${s.title} (proposée) · ${s.label} · ${s.placeName}`}
+                          title={ts.proposedTitle(s.title, s.label, s.placeName)}
                         >
                           <span className="text-study block truncate text-[10px] font-semibold tracking-wide uppercase">
-                            Proposée
+                            {ts.proposed}
                           </span>
                           <span className="block truncate font-semibold">{s.title}</span>
                           <span className="block truncate">
-                            {formatClockFr(s.startMinute)}–{formatClockFr(s.endMinute)}
+                            {clock(s.startMinute)}–{clock(s.endMinute)}
                           </span>
                           <span className="block truncate opacity-80">{s.placeName}</span>
                         </button>
@@ -674,11 +678,19 @@ export function ScheduleEditor({
                           p.cutBottom && "rounded-b-none",
                         )}
                         style={style}
-                        title={`${b.title} · ${formatClockFr(b.startMinute)} à ${formatClockFr(b.endMinute)} · ${b.subscription ? `${b.subscription.name}${b.subscription.countsAsBusy ? "" : " (ne bloque pas ton temps libre)"}` : placeLabel(b.placeId)}${conflictIds.has(b.id) ? " · en conflit" : ""}`}
+                        title={ts.blockTitle(
+                          b.title,
+                          clock(b.startMinute),
+                          clock(b.endMinute),
+                          b.subscription
+                            ? `${b.subscription.name}${b.subscription.countsAsBusy ? "" : ts.notBlocking}`
+                            : placeLabel(b.placeId),
+                          conflictIds.has(b.id),
+                        )}
                       >
                         <span className="block truncate font-semibold">{b.title}</span>
                         <span className="block truncate">
-                          {formatClockFr(b.startMinute)}–{formatClockFr(b.endMinute)}
+                          {clock(b.startMinute)}–{clock(b.endMinute)}
                         </span>
                         <span className="block truncate opacity-80">
                           {b.subscription ? b.subscription.name : placeLabel(b.placeId)}
@@ -695,7 +707,7 @@ export function ScheduleEditor({
                       }}
                     >
                       <span className="px-1">
-                        {formatClockFr(preview.startMinute)}–{formatClockFr(preview.endMinute)}
+                        {clock(preview.startMinute)}–{clock(preview.endMinute)}
                       </span>
                     </div>
                   )}
@@ -708,11 +720,11 @@ export function ScheduleEditor({
 
       {hiddenThisWeek.length > 0 && (
         <p className="text-muted-foreground text-xs">
-          Hors de la grille (avant 7 h ou après 23 h) cette semaine :{" "}
+          {ts.outsideGrid}
           {hiddenThisWeek
             .map(
               ({ day, b }) =>
-                `${WEEKDAY_SHORT[weekdayOf(day)]} ${formatClockFr(b.startMinute)}–${formatClockFr(b.endMinute)} ${b.title}`,
+                `${weekdayShort(weekdayOf(day), locale)} ${clock(b.startMinute)}–${clock(b.endMinute)} ${b.title}`,
             )
             .join(" ; ")}
           .
@@ -722,25 +734,26 @@ export function ScheduleEditor({
       {/* Liste : utile au clavier et pour voir les sessions d'un coup d'œil */}
       <section aria-labelledby="liste-blocs" className="flex flex-col gap-3">
         <h2 id="liste-blocs" className="text-lg font-semibold">
-          Chaque semaine et autres répétitions
+          {ts.recurringTitle}
         </h2>
         {weekly.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            Aucun cours ni engagement qui revient pour l&apos;instant.
-          </p>
+          <p className="text-muted-foreground text-sm">{ts.noRecurring}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {weekly.map((b) => (
               <BlockRow
                 key={b.id}
                 block={b}
-                when={`${recurringWhen(b)}, ${formatClockFr(b.startMinute)} à ${formatClockFr(b.endMinute)}`}
+                when={ts.whenAt(recurringWhen(b, locale), clock(b.startMinute), clock(b.endMinute))}
                 period={
                   b.validFrom && b.validUntil
-                    ? `du ${dayLabel(b.validFrom, "d MMM yyyy")} au ${dayLabel(b.validUntil, "d MMM yyyy")}`
+                    ? ts.periodFromTo(
+                        dayLabel(b.validFrom, "shortDayMonthYear"),
+                        dayLabel(b.validUntil, "shortDayMonthYear"),
+                      )
                     : b.validFrom
-                      ? `à partir du ${dayLabel(b.validFrom, "d MMM yyyy")}, sans fin`
-                      : "sans fin"
+                      ? ts.periodFrom(dayLabel(b.validFrom, "shortDayMonthYear"))
+                      : ts.noEnd
                 }
                 place={placeLabel(b.placeId)}
                 color={colorOf(b.placeId)}
@@ -756,35 +769,36 @@ export function ScheduleEditor({
             ))}
           </ul>
         )}
-        <h2 className="text-lg font-semibold">Une seule fois (à venir)</h2>
+        <h2 className="text-lg font-semibold">{ts.onceTitle}</h2>
         {outlookCount > 0 && (
           <p className="text-muted-foreground text-sm">
-            Plus {outlookCount} {outlookCount > 1 ? "blocs occupés lus" : "bloc occupé lu"} dans ton
-            calendrier Outlook (en gris dans la grille).{" "}
+            {ts.outlookMore(outlookCount)}
             <Link href="/profil#outlook" className="underline underline-offset-2">
-              Gérer Outlook
+              {ts.manageOutlook}
             </Link>
           </p>
         )}
         {subscriptionCount > 0 && (
           <p className="text-muted-foreground text-sm">
-            Plus {subscriptionCount} {subscriptionCount > 1 ? "événements" : "événement"} de tes
-            calendriers en ligne (en indigo dans la grille ; bordure pointillée : ne bloque pas ton
-            temps libre).{" "}
+            {ts.subscriptionsMore(subscriptionCount)}
             <Link href="/profil#abonnements" className="underline underline-offset-2">
-              Gérer mes calendriers
+              {ts.manageCalendars}
             </Link>
           </p>
         )}
         {once.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Aucun bloc ponctuel à venir.</p>
+          <p className="text-muted-foreground text-sm">{ts.noOnce}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {once.map((b) => (
               <BlockRow
                 key={b.id}
                 block={b}
-                when={`${dayLabel(b.validFrom ?? today, "EEEE d MMMM yyyy")}, ${formatClockFr(b.startMinute)} à ${formatClockFr(b.endMinute)}`}
+                when={ts.whenAt(
+                  dayLabel(b.validFrom ?? today, "weekdayDayMonthYear"),
+                  clock(b.startMinute),
+                  clock(b.endMinute),
+                )}
                 place={placeLabel(b.placeId)}
                 color={colorOf(b.placeId)}
                 onEdit={() => {
@@ -814,15 +828,12 @@ export function ScheduleEditor({
 }
 
 /** Pastille et texte d'une entrée de la légende. */
-const LEGEND_KINDS: Record<LegendKind, { swatch: string; label: string }> = {
-  plan: { swatch: MEETUP_COLOR, label: "Plan de groupe accepté" },
-  etude: { swatch: ACCEPTED_STUDY_COLOR, label: "Séance d'étude" },
-  outlook: { swatch: OUTLOOK_COLOR, label: "Occupé dans Outlook" },
-  abonnement: { swatch: SUBSCRIPTION_BUSY_COLOR, label: "Calendrier en ligne" },
-  "abonnement-libre": {
-    swatch: SUBSCRIPTION_INFO_COLOR,
-    label: "Calendrier en ligne, ne bloque pas ton temps libre",
-  },
+const LEGEND_SWATCHES: Record<LegendKind, string> = {
+  plan: MEETUP_COLOR,
+  etude: ACCEPTED_STUDY_COLOR,
+  outlook: OUTLOOK_COLOR,
+  abonnement: SUBSCRIPTION_BUSY_COLOR,
+  "abonnement-libre": SUBSCRIPTION_INFO_COLOR,
 };
 
 /** Ce que veulent dire les couleurs de la grille (seulement ce qui est dans la semaine). */
@@ -835,6 +846,8 @@ function WeekLegend({
   colorOf: (placeId: string | null) => string;
   placeLabel: (placeId: string | null) => string;
 }) {
+  const { t } = useI18n();
+  const tl = t.schedule.legend;
   if (legendIsEmpty(legend)) return null;
   const items: { key: string; swatch: string; label: string }[] = [
     ...legend.places.map((id) => ({
@@ -842,20 +855,20 @@ function WeekLegend({
       swatch: colorOf(id),
       label: placeLabel(id),
     })),
-    ...legend.kinds.map((k) => ({ key: k, ...LEGEND_KINDS[k] })),
+    ...legend.kinds.map((k) => ({ key: k, swatch: LEGEND_SWATCHES[k], label: tl[k] })),
     ...(legend.proposedStudy
       ? [
           {
             key: "proposee",
             swatch: PROPOSED_STUDY_COLOR,
-            label: "Séance proposée (pas encore acceptée)",
+            label: tl.proposed,
           },
         ]
       : []),
   ];
   return (
     <ul
-      aria-label="Légende des couleurs"
+      aria-label={tl.label}
       className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1.5 text-xs"
     >
       {items.map((i) => (
@@ -873,7 +886,7 @@ function WeekLegend({
             aria-hidden
             className="h-3.5 w-4 shrink-0 rounded-[3px] border bg-[repeating-linear-gradient(135deg,transparent_0_2px,color-mix(in_oklab,var(--muted-foreground)_45%,transparent)_2px_3px)]"
           />
-          Tu ne sors pas (réglé dans le profil)
+          {tl.quiet}
         </li>
       )}
     </ul>
@@ -881,10 +894,11 @@ function WeekLegend({
 }
 
 function QuietZone({ top, bottom }: { top: number | string; bottom: string }) {
+  const { t } = useI18n();
   return (
     <div
       aria-hidden
-      title="Je ne sors pas (réglé dans le profil)"
+      title={t.schedule.quietTitle}
       className="pointer-events-none absolute inset-x-0 bg-[repeating-linear-gradient(135deg,transparent_0_6px,color-mix(in_oklab,var(--muted-foreground)_18%,transparent)_6px_8px)]"
       style={{ top, height: `calc(${bottom} - ${typeof top === "number" ? `${top}%` : top})` }}
     />
@@ -903,10 +917,10 @@ const CUSTOM_DEFAULTS = {
  * Quand revient un bloc, pour la liste : « lundi », « mardi, toutes les 2 semaines »,
  * « Chaque mois, le 31 (ou le dernier jour du mois) ».
  */
-function recurringWhen(b: ScheduleBlock): string {
-  const label = repeatLabel(b) ?? "";
+function recurringWhen(b: ScheduleBlock, locale: Locale): string {
+  const label = repeatLabel(b, locale) ?? "";
   if (b.weekday == null) return label.charAt(0).toUpperCase() + label.slice(1);
-  const day = WEEKDAY_LONG[b.weekday as Weekday];
+  const day = weekdayLong(b.weekday as Weekday, locale);
   return (b.repeatEvery ?? 1) > 1 ? `${day}, ${label}` : day;
 }
 
@@ -925,6 +939,8 @@ function BlockRow({
   color: string;
   onEdit: () => void;
 }) {
+  const { t } = useI18n();
+  const ts = t.schedule;
   return (
     <li className="bg-card flex items-start gap-3 rounded-lg border p-3">
       <span
@@ -936,16 +952,16 @@ function BlockRow({
           {block.title}{" "}
           {block.source === "meetup" ? (
             <Badge variant="secondary" className="ml-1">
-              <Users /> plan de groupe
+              <Users /> {ts.badgePlan}
             </Badge>
           ) : block.source === "study" ? (
             <Badge variant="secondary" className="ml-1">
-              <BookOpen /> étude
+              <BookOpen /> {ts.badgeStudy}
             </Badge>
           ) : (
             block.source !== "manual" && (
               <Badge variant="secondary" className="ml-1">
-                importé
+                {ts.badgeImported}
               </Badge>
             )
           )}
@@ -953,30 +969,25 @@ function BlockRow({
         <span>{when}</span>
         <span className="text-muted-foreground flex items-center gap-1 text-xs">
           <MapPin className="size-3" />{" "}
-          {block.source === "meetup" && !block.placeId ? "Lieu indiqué dans le plan" : place}
+          {block.source === "meetup" && !block.placeId ? ts.placeInPlan : place}
           {period && <> · {period}</>}
         </span>
       </div>
       {block.source === "meetup" ? (
         <Button asChild size="sm" variant="outline">
-          <Link href="/plans" aria-label={`Voir le plan « ${block.title} »`}>
-            Voir le plan
+          <Link href="/plans" aria-label={ts.seePlanLabel(block.title)}>
+            {ts.seePlan}
           </Link>
         </Button>
       ) : block.source === "study" ? (
         <Button asChild size="sm" variant="outline">
-          <Link href="/etude" aria-label={`Gérer la séance « ${block.title} »`}>
-            Gérer
+          <Link href="/etude" aria-label={ts.manageSessionLabel(block.title)}>
+            {ts.manage}
           </Link>
         </Button>
       ) : (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onEdit}
-          aria-label={`Modifier « ${block.title} »`}
-        >
-          <Pencil /> Modifier
+        <Button size="sm" variant="outline" onClick={onEdit} aria-label={ts.editLabel(block.title)}>
+          <Pencil /> {t.common.edit}
         </Button>
       )}
     </li>

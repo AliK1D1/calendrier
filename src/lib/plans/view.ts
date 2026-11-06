@@ -2,7 +2,10 @@
  * Segment 12 : mise en forme des plans pour l'interface (fonctions pures, sans BD ni React).
  */
 import { formatInTimeZone } from "date-fns-tz";
-import { frCA } from "date-fns/locale";
+
+import type { Locale } from "@/lib/i18n/config";
+import { formatInstantClock, formatInstantDay, weekdayLong } from "@/lib/i18n/format";
+import { getMessages } from "@/lib/i18n/messages";
 
 import {
   describeEvery,
@@ -10,11 +13,10 @@ import {
   nextOccurrence,
   type RepeatUnit,
 } from "@/lib/scheduling/recurrence";
-import { parseClock, formatClockFr, shiftDay } from "@/lib/scheduling/weeklyBlocks";
+import { shiftDay, type Weekday } from "@/lib/scheduling/weeklyBlocks";
 import { addMinutesTo, TIME_ZONE, zonedTime } from "@/lib/scheduling/time";
 
 import type { LeaveByView } from "./leaveBy";
-import { PLAN_FALLBACK_TITLE } from "./validation";
 
 /** Ligne de `meetup_plans` lue par l'app. */
 export interface PlanRow {
@@ -102,9 +104,9 @@ export interface PlanContext {
   placeNames: ReadonlyMap<string, string>;
   /** Membres actuels de chaque groupe (pour savoir si « tout le groupe » est invité). */
   groupMembers: ReadonlyMap<string, readonly string[]>;
+  /** Langue des libellés (français par défaut). */
+  locale?: Locale;
 }
-
-const WEEKDAY_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 
 /** Fait commencer une phrase par une majuscule. */
 function capitalize(s: string): string {
@@ -114,22 +116,25 @@ function capitalize(s: string): string {
 /** Répétition d'un plan en mots, ou `null` (une seule fois). */
 export function planRepeatLabel(
   p: Pick<PlanRow, "starts_at" | "repeat_unit" | "repeat_every" | "repeat_until">,
+  locale: Locale = "fr",
 ): string | null {
   if (!p.repeat_unit) return null;
+  const t = getMessages(locale).plans;
   const every = p.repeat_every ?? 1;
   const anchor = formatInTimeZone(new Date(p.starts_at), TIME_ZONE, "yyyy-MM-dd");
   let label: string;
   if (p.repeat_unit === "week") {
     const weekday = Number(formatInTimeZone(new Date(p.starts_at), TIME_ZONE, "i"));
-    label = `${describeEvery(every, "week")}, le ${WEEKDAY_FR[weekday - 1]}`;
+    label = t.weeklyOn(
+      describeEvery(every, "week", locale),
+      weekdayLong(weekday as Weekday, locale),
+    );
   } else {
-    label = describeRepeat({ unit: p.repeat_unit, every, anchor });
+    label = describeRepeat({ unit: p.repeat_unit, every, anchor }, locale);
   }
   if (p.repeat_until) {
-    const until = formatInTimeZone(zonedTime(p.repeat_until, "12:00"), TIME_ZONE, "d MMMM yyyy", {
-      locale: frCA,
-    });
-    label += `, jusqu'au ${until}`;
+    const until = formatInstantDay(zonedTime(p.repeat_until, "12:00"), "dayMonthYear", locale);
+    label = t.until(label, until);
   }
   return capitalize(label);
 }
@@ -167,11 +172,6 @@ export function nextPlanOccurrence(
   return null;
 }
 
-function clock(instant: Date): string {
-  const m = parseClock(formatInTimeZone(instant, TIME_ZONE, "HH:mm"));
-  return m === null ? "" : formatClockFr(m);
-}
-
 /** Construit les vues des plans (triés par début ; plan récurrent : par sa prochaine fois). */
 export function buildPlanViews(
   plans: readonly PlanRow[],
@@ -179,7 +179,10 @@ export function buildPlanViews(
   votes: readonly PlanVoteInput[],
   ctx: PlanContext,
 ): PlanView[] {
-  const name = (id: string) => ctx.names.get(id) || "Sans nom";
+  const locale = ctx.locale ?? "fr";
+  const t = getMessages(locale).plans;
+  const clock = (instant: Date) => formatInstantClock(instant, locale);
+  const name = (id: string) => ctx.names.get(id) || t.noName;
   const invitedBy = new Map<string, string[]>();
   for (const i of invitees)
     invitedBy.set(i.plan_id, [...(invitedBy.get(i.plan_id) ?? []), i.user_id]);
@@ -207,18 +210,17 @@ export function buildPlanViews(
       const state: PlanState =
         p.status === "cancelled" ? "cancelled" : next === null ? "past" : "upcoming";
       const placeName = p.place_id ? ctx.placeNames.get(p.place_id) : undefined;
-      const endLabel =
-        formatInTimeZone(end, TIME_ZONE, "HH:mm") === "00:00" ? "minuit" : clock(end);
+      const endLabel = clock(end);
       return {
         id: p.id,
         groupId: p.group_id,
-        groupName: ctx.groupNames.get(p.group_id) ?? "Groupe",
-        title: p.title.trim() || PLAN_FALLBACK_TITLE,
-        dayLabel: formatInTimeZone(start, TIME_ZONE, "EEEE d MMMM", { locale: frCA }),
+        groupName: ctx.groupNames.get(p.group_id) ?? t.group,
+        title: p.title.trim() || t.fallbackTitle,
+        dayLabel: formatInstantDay(start, "weekdayDayMonth", locale),
         timeLabel: `${clock(start)} – ${endLabel}`,
         startsAt: start.toISOString(),
         endsAt: end.toISOString(),
-        where: placeName || p.location.trim() || (p.place_id ? "Lieu" : "Lieu à préciser"),
+        where: placeName || p.location.trim() || (p.place_id ? t.place : t.placeTbd),
         creatorName: name(p.created_by),
         isMine: p.created_by === ctx.myId,
         invited: people.includes(ctx.myId),
@@ -228,7 +230,7 @@ export function buildPlanViews(
         declined,
         waiting,
         wholeGroup: members.length > 0 && members.every((m) => people.includes(m)),
-        repeatLabel: planRepeatLabel(p),
+        repeatLabel: planRepeatLabel(p, locale),
         series: p.repeat_unit
           ? {
               unit: p.repeat_unit,

@@ -31,8 +31,12 @@ import { type AvailabilityItem, AvailabilityPanel } from "./availability-panel";
 import { apercuIcs, confirmerIcs } from "./import-actions";
 import { ScheduleEditor } from "./schedule-editor";
 import type { ScheduleBlock } from "./types";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Mon horaire · Temps libre commun" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.schedule.metaTitle };
+}
 export const dynamic = "force-dynamic";
 
 export default async function MonHoraire({
@@ -47,6 +51,8 @@ export default async function MonHoraire({
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/connexion?next=/horaire");
   const userId = data.user.id;
+  const { locale, t } = await getI18n();
+  const ts = t.schedule;
 
   const [profile, places, rows, quietRow, subs, subEvents] = await Promise.all([
     getMyProfile(supabase, userId),
@@ -91,6 +97,7 @@ export default async function MonHoraire({
       userId,
       now: new Date(),
       travel: getTravelProvider(),
+      locale,
     }).catch((e: unknown) => {
       console.error("Conflits d'étude :", e);
       return null;
@@ -132,10 +139,11 @@ export default async function MonHoraire({
   if (slotError) console.error("Disponibilités :", slotError.code, slotError.message);
   const availabilities: AvailabilityItem[] = (slotRows ?? []).map((r) => ({
     id: r.id,
-    dayLabel: dayLabel(zonedTime(r.day, "12:00")),
+    dayLabel: dayLabel(zonedTime(r.day, "12:00"), locale),
     timeLabel: availabilityLabel(
       parseClock(toHHmm(r.start_time)) ?? 0,
       parseClock(toHHmm(r.end_time)) ?? 0,
+      locale,
     ),
     note: r.note,
   }));
@@ -145,26 +153,25 @@ export default async function MonHoraire({
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-5xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">Mon horaire</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{ts.title}</h1>
           <p className="text-muted-foreground text-sm">
-            Tes cours, ton travail et tes autres engagements. Les membres de tes groupes voient
-            quand tu es occupé et où. Tes séances d&apos;étude se planifient dans{" "}
+            {ts.introA}
             <Link href="/etude" className="underline underline-offset-2">
-              Étude
+              {ts.introStudy}
             </Link>
-            . Les zones hachurées sont tes{" "}
+            {ts.introB}
             <Link href="/profil" className="underline underline-offset-2">
-              heures où tu ne sors pas
+              {ts.introQuiet}
             </Link>
-            .
+            {ts.introC}
           </p>
           {places.length === 0 && (
             <p className="text-sm">
-              Astuce : ajoute ton cégep dans{" "}
+              {ts.tipA}
               <Link href="/lieux" className="underline underline-offset-2">
-                Mes lieux
-              </Link>{" "}
-              pour y placer tes cours.
+                {ts.tipLink}
+              </Link>
+              {ts.tipB}
             </p>
           )}
         </header>
@@ -187,11 +194,7 @@ export default async function MonHoraire({
           items={availabilities}
           today={today}
           lastDay={shiftDay(today, 365)}
-          unavailable={
-            slotError
-              ? "Les disponibilités ponctuelles demandent la migration supabase/migration-0012.sql (voir README)."
-              : null
-          }
+          unavailable={slotError ? ts.availabilityMigration : null}
           actions={{ ajouter: ajouterDisponibilite, supprimer: supprimerDisponibilite }}
         />
       </main>

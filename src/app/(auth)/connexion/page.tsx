@@ -4,13 +4,18 @@ import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LOGIN_ERRORS, safeNextPath } from "@/lib/auth/paths";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { safeNextPath } from "@/lib/auth/paths";
+import { getI18n } from "@/lib/i18n/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentUser } from "@/lib/supabase/server";
 
 import { connexionGoogle, connexionMotDePasse, envoyerLienMagique } from "./actions";
 
-export const metadata: Metadata = { title: "Connexion · Temps libre commun" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.auth.metaTitle };
+}
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -20,26 +25,27 @@ function first(v: string | string[] | undefined): string | undefined {
 
 export default async function Connexion({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
+  const { t } = await getI18n();
   const next = safeNextPath(first(params.next));
   const configured = isSupabaseConfigured();
   const erreurCode = configured ? first(params.erreur) : "config";
-  const erreur = erreurCode ? LOGIN_ERRORS[erreurCode] : undefined;
+  const erreur = erreurCode ? t.auth.errors[erreurCode] : undefined;
   const envoye = first(params.envoye) === "1";
 
   if (configured && (await getCurrentUser())) redirect(next);
 
   return (
     <main className="grille-4 mx-auto min-h-dvh max-w-md content-center gap-y-6 px-4 py-12">
-      <Link href="/" className="text-muted-foreground text-sm hover:underline">
-        ← Temps libre commun
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link href="/" className="text-muted-foreground text-sm hover:underline">
+          ← {t.common.appName}
+        </Link>
+        <LanguageSwitcher />
+      </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Connexion</CardTitle>
-          <CardDescription>
-            Le plus simple : on t&apos;envoie un lien de connexion par courriel. Pas encore de
-            compte ? Il est créé automatiquement.
-          </CardDescription>
+          <CardTitle className="text-2xl">{t.auth.title}</CardTitle>
+          <CardDescription>{t.auth.description}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           {erreur && (
@@ -55,15 +61,16 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               role="status"
               className="border-success/50 bg-success/10 rounded-md border p-3 text-sm"
             >
-              Lien envoyé ! Ouvre le courriel <strong>dans ce même navigateur</strong> pour te
-              connecter. Pense à regarder dans les indésirables.
+              {t.auth.sentBefore}
+              <strong>{t.auth.sentStrong}</strong>
+              {t.auth.sentAfter}
             </p>
           )}
 
           <form action={envoyerLienMagique} className="flex flex-col gap-3">
             <input type="hidden" name="next" value={next} />
             <label htmlFor="email" className="text-sm font-medium">
-              Adresse courriel
+              {t.auth.email}
             </label>
             <input
               id="email"
@@ -72,36 +79,36 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               required
               autoComplete="email"
               inputMode="email"
-              placeholder="toi@exemple.ca"
+              placeholder={t.auth.emailPlaceholder}
               disabled={!configured}
               className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
             />
             <Button type="submit" disabled={!configured}>
-              Recevoir un lien de connexion
+              {t.auth.sendLink}
             </Button>
           </form>
 
           <div className="text-muted-foreground flex items-center gap-3 text-xs uppercase">
             <span className="bg-border h-px flex-1" />
-            ou
+            {t.auth.or}
             <span className="bg-border h-px flex-1" />
           </div>
 
           <form action={connexionGoogle}>
             <input type="hidden" name="next" value={next} />
             <Button type="submit" variant="outline" className="w-full" disabled={!configured}>
-              Continuer avec Google
+              {t.auth.google}
             </Button>
           </form>
 
           <details className="text-sm">
             <summary className="text-muted-foreground cursor-pointer">
-              Se connecter avec un mot de passe
+              {t.auth.withPassword}
             </summary>
             <form action={connexionMotDePasse} className="mt-3 flex flex-col gap-3">
               <input type="hidden" name="next" value={next} />
               <label htmlFor="pw-email" className="font-medium">
-                Adresse courriel
+                {t.auth.email}
               </label>
               <input
                 id="pw-email"
@@ -114,7 +121,7 @@ export default async function Connexion({ searchParams }: { searchParams: Search
                 className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
               />
               <label htmlFor="pw-password" className="font-medium">
-                Mot de passe
+                {t.auth.password}
               </label>
               <input
                 id="pw-password"
@@ -127,7 +134,7 @@ export default async function Connexion({ searchParams }: { searchParams: Search
                 className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
               />
               <Button type="submit" variant="outline" disabled={!configured}>
-                Se connecter
+                {t.auth.signIn}
               </Button>
             </form>
           </details>

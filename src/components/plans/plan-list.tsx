@@ -6,6 +6,7 @@ import { type Flash, FlashMessage } from "@/components/flash-message";
 import type { PlanView } from "@/lib/plans/view";
 
 import { PlanCard } from "./plan-card";
+import { useI18n } from "@/lib/i18n/client";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -25,6 +26,8 @@ export function PlanList({
   actions: PlanActions;
   showGroup?: boolean;
 }) {
+  const { t } = useI18n();
+  const tp = t.plans;
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<Flash>(null);
@@ -55,26 +58,22 @@ export function PlanList({
                 () => actions.repondre(p.id, accept, p.groupId),
                 accept
                   ? p.repeatLabel
-                    ? `« ${p.title} » est ajouté à ton horaire, chaque fois.`
-                    : `« ${p.title} » est ajouté à ton horaire.`
+                    ? tp.addedSeries(p.title)
+                    : tp.added(p.title)
                   : p.repeatLabel
-                    ? `Tu ne fais plus partie de « ${p.title} ». La série n'est plus dans ton horaire.`
-                    : `Tu as refusé « ${p.title} ». Il n'est pas dans ton horaire.`,
+                    ? tp.leftSeries(p.title)
+                    : tp.declinedMsg(p.title),
               )
             }
             onCancel={() => {
               const series = p.repeatLabel !== null;
               if (
-                window.confirm(
-                  series
-                    ? `Arrêter la série « ${p.title} » pour tout le monde ? Elle sera retirée de l'horaire de tous ceux qui l'avaient acceptée. (Pour la quitter toi seul·e, touche plutôt « Quitter la série ».)`
-                    : `Annuler « ${p.title} » ? Il sera retiré de l'horaire de tous ceux qui l'avaient accepté.`,
-                )
+                window.confirm(series ? tp.confirmStopSeries(p.title) : tp.confirmCancel(p.title))
               ) {
                 run(
                   p.id,
                   () => actions.annuler(p.id, p.groupId),
-                  series ? "Série arrêtée pour tout le monde." : "Plan annulé.",
+                  series ? tp.seriesStopped : tp.cancelledMsg,
                 );
               }
             }}

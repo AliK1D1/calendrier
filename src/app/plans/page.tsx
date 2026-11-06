@@ -7,8 +7,12 @@ import { loadPlans } from "@/lib/plans/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { PlansView } from "./plans-view";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Mes plans · Temps libre commun" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.plans.metaTitle };
+}
 export const dynamic = "force-dynamic";
 
 export default async function MesPlans() {
@@ -18,20 +22,18 @@ export default async function MesPlans() {
   if (!data.user) redirect("/connexion?next=/plans");
 
   const now = new Date();
-  const plans = await loadPlans(supabase, data.user.id, now);
+  const { locale, t, tr } = await getI18n();
+  const plans = await loadPlans(supabase, data.user.id, now, { locale });
   // Story 6 : « Pars de … à HH:MM » sur mes prochains plans en personne.
-  const views = plans.ok ? await addLeaveBy(supabase, data.user.id, plans.views, now) : [];
+  const views = plans.ok ? await addLeaveBy(supabase, data.user.id, plans.views, now, locale) : [];
 
   return (
     <>
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">Mes plans</h1>
-          <p className="text-muted-foreground text-sm">
-            Les moments proposés dans tes groupes. Accepte ou refuse ceux où tu es invité·e : tu
-            peux changer d&apos;avis tant que le moment n&apos;est pas passé.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t.plans.title}</h1>
+          <p className="text-muted-foreground text-sm">{t.plans.intro}</p>
         </header>
         {plans.ok ? (
           <PlansView plans={views} />
@@ -40,7 +42,7 @@ export default async function MesPlans() {
             role="alert"
             className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
           >
-            {plans.error}
+            {tr(plans.error)}
           </p>
         )}
       </main>

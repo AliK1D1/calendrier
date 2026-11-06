@@ -1,0 +1,61 @@
+import type { common as fr } from "../fr/common";
+
+export const common: typeof fr = {
+  appName: "Common Free Time",
+  appShortName: "Free Time",
+  appDescription: "Find realistic times and places to meet up with friends.",
+  nav: {
+    main: "Main navigation",
+    tabs: "Tabs",
+    home: "Home",
+    groups: "Groups",
+    plans: "Plans",
+    schedule: "Schedule",
+    study: "Study",
+    places: "Places",
+    profile: "Profile",
+    onThisPage: "On this page",
+  },
+  language: {
+    label: "Language",
+    switchTo: (name: string) => `Switch to ${name}`,
+  },
+  plansBadge: (n: number) => `${n} waiting for your answer`,
+  loading: "Loading…",
+  closeMessage: "Close message",
+  close: "Close",
+  cancel: "Cancel",
+  save: "Save",
+  saving: "Saving…",
+  delete: "Delete",
+  edit: "Edit",
+  add: "Add",
+  backHome: "Back to home",
+  myGroups: "My groups",
+  error: {
+    title: "Oops, something broke",
+    body: "Nothing was lost. Try again; if it keeps happening, wait a minute (the connection or the server may be slow).",
+    retry: "Try again",
+    code: (digest: string) => `Error code: ${digest}`,
+  },
+  notFound: {
+    title: "Page not found",
+    body: "This page doesn't exist, or you don't have access to it (for example a group you're not part of).",
+  },
+  actions: {
+    dbNotConfigured: "The database is not configured.",
+    sessionExpired: "Your session has expired. Please sign in again.",
+    notAllowed: "Action not allowed.",
+    valueRefused: "Value refused by the database.",
+    dbOutdated:
+      "The database is out of date: run the missing supabase/migration-000N.sql files (see README).",
+    saveFailed: "Saving didn't work. Please try again.",
+  },
+  travelModes: {
+    question: "How do you usually get around?",
+    transit: "Public transit",
+    walk: "Walking",
+    bike: "Bike",
+    car: "Car",
+  },
+};

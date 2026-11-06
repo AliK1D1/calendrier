@@ -32,6 +32,7 @@ import {
   type SearchDeps,
   type StoreResult,
 } from "./search";
+import { getMessages } from "@/lib/i18n/messages";
 
 /** Groupes lus au plus (les plus anciens d'abord). */
 export const MAX_FREE_NOW_GROUPS = 10;
@@ -114,6 +115,9 @@ export async function searchFreeNow(
   deps: FreeNowDeps,
 ): Promise<Result<FreeNowView>> {
   const horizon = deps.horizonMinutes ?? FREE_NOW_HORIZON_MINUTES;
+  const locale = deps.locale ?? "fr";
+  const t = getMessages(locale).meetups;
+  const clock = (d: Date) => clockLabel(d, locale);
   const minDuration = deps.minDurationMinutes ?? FREE_NOW_MIN_DURATION_MINUTES;
   const until = new Date(deps.now.getTime() + horizon * 60_000);
 
@@ -172,7 +176,7 @@ export async function searchFreeNow(
   const base: FreeNowView = {
     from: deps.now.toISOString(),
     until: until.toISOString(),
-    windowLabel: `${clockLabel(deps.now)} – ${clockLabel(until)}`,
+    windowLabel: `${clock(deps.now)} – ${clock(until)}`,
     matches: [],
     checked: 0,
     incomplete: [],
@@ -208,10 +212,10 @@ export async function searchFreeNow(
       error: "Choisis d'abord ton lieu « maison » (page Mes lieux) pour que le calcul marche.",
     };
   }
-  const nameOf = new Map(profileRows.map((p) => [p.id, p.display_name || "Sans nom"]));
+  const nameOf = new Map(profileRows.map((p) => [p.id, p.display_name || t.noName]));
   base.incomplete = converted.incomplete
     .filter((i) => i.id !== deps.userId)
-    .map((i) => nameOf.get(i.id) ?? "Membre");
+    .map((i) => nameOf.get(i.id) ?? t.member);
 
   // Vrais temps de trajet (segment 15) : une préparation par groupe, avant les calculs.
   // Au-delà de ma limite d'appels du jour, les trajets sont estimés (FallbackTravelProvider).
@@ -259,15 +263,15 @@ export async function searchFreeNow(
     if (!best) continue;
     matches.push({
       personId: id,
-      name: nameOf.get(id) ?? "Membre",
+      name: nameOf.get(id) ?? t.member,
       groups: groupsOf.get(id) ?? [],
       kind: best.kind,
       placeId: best.placeId,
-      placeName: best.placeId ? (placeName.get(best.placeId) ?? "Lieu") : null,
+      placeName: best.placeId ? (placeName.get(best.placeId) ?? t.place) : null,
       start: best.start.toISOString(),
       end: best.end.toISOString(),
-      timeLabel: `${clockLabel(best.start)} – ${clockLabel(best.end)}`,
-      dayLabel: dayLabel(best.start),
+      timeLabel: `${clock(best.start)} – ${clock(best.end)}`,
+      dayLabel: dayLabel(best.start, locale),
       durationMinutes: Math.round(minutesBetween(best.start, best.end)),
       myTravel: best.travelByPerson[me.id]?.to ?? 0,
       theirTravel: best.travelByPerson[id]?.to ?? 0,

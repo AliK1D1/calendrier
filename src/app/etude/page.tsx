@@ -11,8 +11,12 @@ import { supabaseStudyStore } from "@/lib/study/supabaseStore";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { StudyView } from "./study-view";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Étude · Temps libre commun" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.study.metaTitle };
+}
 export const dynamic = "force-dynamic";
 
 export default async function Etude() {
@@ -22,10 +26,11 @@ export default async function Etude() {
   if (!data.user) redirect("/connexion?next=/etude");
   const userId = data.user.id;
   const now = new Date();
+  const { locale, t, tr } = await getI18n();
 
   const overview = await studyOverview(
     supabaseStudyStore(supabase, userId),
-    { userId, now, travel: getTravelProvider() },
+    { userId, now, travel: getTravelProvider(), locale },
     requiredMinutes,
   );
 
@@ -34,11 +39,8 @@ export default async function Etude() {
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">Étude</h1>
-          <p className="text-muted-foreground text-sm">
-            Entre tes examens et tes travaux : l&apos;app propose des séances d&apos;étude dans tes
-            vrais moments libres, là où tu es déjà (au cégep entre deux cours, ou à la maison).
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t.study.title}</h1>
+          <p className="text-muted-foreground text-sm">{t.study.intro}</p>
         </header>
         {overview.ok ? (
           <StudyView
@@ -50,7 +52,7 @@ export default async function Etude() {
             role="alert"
             className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
           >
-            {overview.error}
+            {tr(overview.error)}
           </p>
         )}
       </main>

@@ -20,6 +20,8 @@ export interface SetupStep {
   hint: string;
   href: string;
   done: boolean;
+  /** Étape « moment » : le groupe où chercher (pour un texte dans la langue choisie). */
+  groupName?: string;
 }
 
 export interface SetupPlan {
@@ -72,6 +74,7 @@ export function setupSteps(input: SetupInput): SetupPlan {
         ? `Cherche quand vous pouvez vous voir dans « ${withFriends.name} ».`
         : "Possible dès que vous êtes deux dans un groupe.",
       href: withFriends ? `/groupes/${withFriends.id}#se-voir` : "/groupes",
+      groupName: withFriends?.name,
       // Jamais « fait » : c'est l'action que l'accueil propose une fois le reste prêt.
       done: false,
     },

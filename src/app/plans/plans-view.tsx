@@ -4,9 +4,9 @@ import Link from "next/link";
 
 import { type PlanActions, PlanList } from "@/components/plans/plan-list";
 import { groupPlans, type PlanView } from "@/lib/plans/view";
-import { plural } from "@/lib/ux/plural";
 
 import { annulerPlan, repondrePlan } from "./actions";
+import { useI18n } from "@/lib/i18n/client";
 
 const DEFAULT_ACTIONS: PlanActions = { repondre: repondrePlan, annuler: annulerPlan };
 
@@ -18,38 +18,40 @@ export function PlansView({
   plans: PlanView[];
   actions?: PlanActions;
 }) {
+  const { t } = useI18n();
+  const tp = t.plans;
   const { awaiting, upcoming, others, past } = groupPlans(plans);
   if (plans.length === 0) {
     return (
       <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
-        Aucun plan pour l&apos;instant. Dans un{" "}
+        {tp.emptyBefore}
         <Link href="/groupes" className="underline underline-offset-2">
-          groupe
+          {tp.emptyLink}
         </Link>
-        , cherche « Quand on peut se voir » puis touche « Proposer ce moment ».
+        {tp.emptyAfter}
       </p>
     );
   }
   const sections: { id: string; title: string; hint?: string; list: PlanView[] }[] = [
     {
       id: "en-attente",
-      title: "En attente de ta réponse",
-      hint: "Si tu acceptes, le moment s'ajoute à ton horaire.",
+      title: tp.sections.awaiting,
+      hint: tp.sections.awaitingHint,
       list: awaiting,
     },
     {
       id: "a-venir",
-      title: "À venir",
-      hint: "Les plans que tu as acceptés ou proposés.",
+      title: tp.sections.upcoming,
+      hint: tp.sections.upcomingHint,
       list: upcoming,
     },
     {
       id: "autres",
-      title: "Autres plans de tes groupes",
-      hint: "Refusés, ou auxquels tu n'es pas invité·e.",
+      title: tp.sections.others,
+      hint: tp.sections.othersHint,
       list: others,
     },
-    { id: "passes", title: "Passés et annulés", list: past },
+    { id: "passes", title: tp.sections.past, list: past },
   ];
   return (
     <div className="flex flex-col gap-6">
@@ -72,16 +74,13 @@ export function PlansView({
               )}
             </div>
             {s.list.length === 0 ? (
-              <p className="text-muted-foreground text-sm">Rien à répondre pour l&apos;instant.</p>
+              <p className="text-muted-foreground text-sm">{tp.nothingToAnswer}</p>
             ) : (
               <PlanList plans={s.list} actions={actions} showGroup />
             )}
           </section>
         ))}
-      <p className="text-muted-foreground text-xs">
-        {plural(plans.length, "plan")} dans tes groupes (les plans passés depuis plus de 60 jours ne
-        sont plus affichés).
-      </p>
+      <p className="text-muted-foreground text-xs">{tp.footer(plans.length)}</p>
     </div>
   );
 }

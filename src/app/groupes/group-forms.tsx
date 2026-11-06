@@ -9,10 +9,12 @@ import { Label } from "@/components/ui/label";
 import { GROUP_NAME_MAX, invitePath, normalizeInviteCode } from "@/lib/groups/validation";
 
 import { creerGroupe } from "./actions";
+import { useI18n } from "@/lib/i18n/client";
 
 /** Création d'un groupe, puis ouverture de sa page (pour copier le lien d'invitation). */
 export function CreateGroupForm() {
   const router = useRouter();
+  const { t, tr } = useI18n();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -31,23 +33,23 @@ export function CreateGroupForm() {
       }}
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="nom-groupe">Nom du groupe</Label>
+        <Label htmlFor="nom-groupe">{t.groups.nameLabel}</Label>
         <Input
           id="nom-groupe"
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={GROUP_NAME_MAX}
-          placeholder="ex. La gang du cégep"
+          placeholder={t.groups.namePlaceholder}
           required
         />
       </div>
       {error && (
         <p role="alert" className="text-destructive text-sm">
-          {error}
+          {tr(error)}
         </p>
       )}
       <Button type="submit" disabled={pending} className="sm:self-start">
-        {pending ? "Création…" : "Créer le groupe"}
+        {pending ? t.groups.creating : t.groups.create}
       </Button>
     </form>
   );
@@ -56,6 +58,7 @@ export function CreateGroupForm() {
 /** Coller un lien ou un code d'invitation : ouvre la page /rejoindre/[code] (confirmation). */
 export function JoinByCodeForm() {
   const router = useRouter();
+  const { t, tr } = useI18n();
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -74,7 +77,7 @@ export function JoinByCodeForm() {
       }}
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="code-invitation">Lien ou code d&apos;invitation</Label>
+        <Label htmlFor="code-invitation">{t.groups.codeLabel}</Label>
         <Input
           id="code-invitation"
           value={value}
@@ -86,11 +89,11 @@ export function JoinByCodeForm() {
       </div>
       {error && (
         <p role="alert" className="text-destructive text-sm">
-          {error}
+          {tr(error)}
         </p>
       )}
       <Button type="submit" variant="outline" className="sm:self-start">
-        Continuer
+        {t.groups.continue}
       </Button>
     </form>
   );

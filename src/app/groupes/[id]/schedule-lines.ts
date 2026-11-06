@@ -1,13 +1,7 @@
-import { format, parseISO } from "date-fns";
-import { frCA } from "date-fns/locale";
-
-import {
-  type BlockSpec,
-  formatClockFr,
-  isRecurring,
-  repeatLabel,
-  WEEKDAY_SHORT,
-} from "@/lib/scheduling/weeklyBlocks";
+import type { Locale } from "@/lib/i18n/config";
+import { formatClockLocale, formatDay, weekdayShort } from "@/lib/i18n/format";
+import { getMessages } from "@/lib/i18n/messages";
+import { type BlockSpec, isRecurring, repeatLabel } from "@/lib/scheduling/weeklyBlocks";
 
 /** Une ligne d'horaire affichée dans la page du groupe. */
 export interface ScheduleLine {
@@ -27,21 +21,24 @@ export function scheduleLines(
   blocks: { spec: BlockSpec; titleHidden: boolean }[],
   placeNames: Record<string, string>,
   range: { from: string; to: string },
+  locale: Locale = "fr",
 ): ScheduleLine[] {
-  const hours = (b: BlockSpec) => `${formatClockFr(b.startMinute)} – ${formatClockFr(b.endMinute)}`;
+  const t = getMessages(locale);
+  const clock = (m: number) => formatClockLocale(m, locale);
+  const hours = (b: BlockSpec) => `${clock(b.startMinute)} – ${clock(b.endMinute)}`;
   const line = (b: BlockSpec, hidden: boolean, when: string): ScheduleLine => ({
     key: b.id ?? `${when}-${b.title}`,
     when,
-    title: b.title || "Occupé",
+    title: b.title || t.groups.busy,
     titleHidden: hidden,
     place: b.placeId ? (placeNames[b.placeId] ?? null) : null,
   });
 
   const when = (b: BlockSpec) => {
-    const label = repeatLabel(b) ?? "";
+    const label = repeatLabel(b, locale) ?? "";
     if (b.weekday == null) return `${label.charAt(0).toUpperCase()}${label.slice(1)} · ${hours(b)}`;
     const every = (b.repeatEvery ?? 1) > 1 ? ` (${label})` : "";
-    return `${WEEKDAY_SHORT[b.weekday]} ${hours(b)}${every}`;
+    return `${weekdayShort(b.weekday, locale)} ${hours(b)}${every}`;
   };
   const weekly = blocks
     .filter(({ spec }) => isRecurring(spec) && (!spec.validUntil || spec.validUntil >= range.from))
@@ -69,7 +66,7 @@ export function scheduleLines(
       line(
         spec,
         titleHidden,
-        `${format(parseISO(spec.validFrom ?? range.from), "EEE d MMM", { locale: frCA })} ${hours(spec)}`,
+        `${formatDay(spec.validFrom ?? range.from, "shortWeekdayDayMonth", locale)} ${hours(spec)}`,
       ),
     );
   return [...weekly, ...oneOff];

@@ -1,0 +1,82 @@
+import type { study as fr } from "../fr/study";
+
+const n1 = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+export const study: typeof fr = {
+  metaTitle: "Study · Common Free Time",
+  title: "Study",
+  intro:
+    "Between your exams and assignments: the app suggests study sessions in your real free time, where you already are (at college between two classes, or at home).",
+  kinds: { exam: "Exam", assignment: "Assignment" },
+  difficulty: { 1: "Easy", 2: "Medium", 3: "Hard" },
+  conflict: {
+    title: (n) => (n > 1 ? "Sessions in conflict: replan?" : "Session in conflict: replan?"),
+    body: (n) =>
+      `Something else now falls on ${n > 1 ? "these movable study sessions" : "this movable study session"} (a group plan, a class or the trip to get there):`,
+    replan: "Replan",
+    computing: "Computing…",
+  },
+  panel: {
+    titlePlan: "Suggested study sessions",
+    titleReplan: "Suggested new times",
+    summary: (n, total) =>
+      `${n1(n, "session", "sessions")}, ${total} in all, dashed in the grid. Nothing is added to your schedule until you accept. Drag a session in the grid (or use the arrows) to move it.`,
+    none: "No session to suggest.",
+    acceptAll: "Accept all",
+    moveAll: "Move all",
+    refuseAll: "Decline all",
+    accept: "Accept",
+    move: "Move",
+    refuse: "Decline",
+    earlier: (what) => `${what}: 15 minutes earlier`,
+    later: (what) => `${what}: 15 minutes later`,
+    show: (what) => `Show ${what} in the grid`,
+  },
+  view: {
+    planTitle: "Plan my study",
+    planDesc:
+      "Suggested sessions show up in your schedule, dashed. Nothing is added until you accept; you can move or decline them.",
+    noHomeBefore: "First choose your home in ",
+    noHomeLink: "My places",
+    noHomeAfter: ": sessions happen where you already are, or at home.",
+    addFirst: "Add an exam or an assignment below to get started.",
+    prefsBefore: "Session length, daily maximum and study hours: ",
+    prefsLink: "study preferences",
+    addTitle: "Add an exam or an assignment",
+    added: (kind) => `${kind} added. Tap “Plan my study” to see the sessions.`,
+    upcoming: "Upcoming",
+    noUpcoming: "No upcoming exam or assignment.",
+    past: (n) => `Past (${n})`,
+    toPlan: (d) => `${d} to plan`,
+    yourEstimate: " (your estimate)",
+    inSchedule: (d) => `${d} in your schedule`,
+    delete: "Delete",
+    deleteLabel: (course) => `Delete ${course}`,
+    deleteConfirm: (course, sessions) =>
+      `Delete “${course}”?${sessions > 0 ? `\nIts ${n1(sessions, "study session", "study sessions")} will be removed from your schedule.` : ""}`,
+    deleted: "Deleted.",
+    acceptedUpcoming: (n) => n1(n, "accepted upcoming session", "accepted upcoming sessions"),
+    movable: "Movable",
+    nowMovable: "Session is movable.",
+    nowFixed: "Session is fixed.",
+    remove: "Remove",
+    removeLabel: (label) => `Remove the session on ${label}`,
+    removed: "Session removed.",
+  },
+  form: {
+    type: "Type",
+    exam: "Exam",
+    assignment: "Assignment due",
+    course: "Course",
+    coursePlaceholder: "e.g. General chemistry",
+    examDate: "Exam date",
+    dueDate: "Due date",
+    time: "Time",
+    hours: "Estimated study hours",
+    hoursPlaceholder: "I don't know",
+    hoursHelp: "Leave empty if you don't know: we'll go by difficulty.",
+    difficulty: "Difficulty",
+    saving: "Saving…",
+    add: "Add",
+  },
+};

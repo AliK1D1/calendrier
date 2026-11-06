@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/lib/i18n/client";
 import type { GeocodeResult } from "@/lib/geocoding/nominatim";
 import { PLACE_NAME_MAX, roundCoord } from "@/lib/places/validation";
 import type { TravelMode } from "@/lib/scheduling/types";
@@ -22,8 +23,6 @@ interface Choice {
   lat: number;
   lng: number;
 }
-
-const ETAPES = ["Ta maison", "Ton cégep ou ton école", "Ton mode de transport"] as const;
 
 function fromResult(r: GeocodeResult, name?: string): Choice {
   return { resultId: r.id, name: name ?? r.name, address: r.address, lat: r.lat, lng: r.lng };
@@ -43,6 +42,7 @@ function PlaceStep({
   onChange: (c: Choice) => void;
   defaultName?: string;
 }) {
+  const { t } = useI18n();
   const points = useMemo<MapPoint[]>(
     () =>
       value
@@ -69,9 +69,9 @@ function PlaceStep({
       {value && (
         <div className="flex flex-col gap-2">
           <p className="text-muted-foreground text-xs">
-            {value.address} — touche la carte pour ajuster le point.
+            {value.address} — {t.onboarding.adjustPoint}
           </p>
-          <Label htmlFor="nom-lieu">Nom affiché</Label>
+          <Label htmlFor="nom-lieu">{t.onboarding.displayName}</Label>
           <Input
             id="nom-lieu"
             value={value.name}
@@ -86,6 +86,8 @@ function PlaceStep({
 }
 
 export function OnboardingForm({ next, initialMode }: { next: string; initialMode: TravelMode }) {
+  const { t, tr } = useI18n();
+  const ETAPES = t.onboarding.steps;
   const [step, setStep] = useState(0);
   const [home, setHome] = useState<Choice | null>(null);
   const [school, setSchool] = useState<Choice | null>(null);
@@ -120,29 +122,25 @@ export function OnboardingForm({ next, initialMode }: { next: string; initialMod
     <Card>
       <CardHeader>
         <p className="text-muted-foreground text-xs" aria-live="polite">
-          Étape {step + 1} sur {ETAPES.length}
+          {t.onboarding.stepOf(step + 1, ETAPES.length)}
         </p>
         <CardTitle>{ETAPES[step]}</CardTitle>
-        <CardDescription>
-          {step === 0 && "D'où pars-tu le matin et où reviens-tu le soir ?"}
-          {step === 1 && "Là où tu passes tes journées. Tu peux passer cette étape."}
-          {step === 2 && "On s'en sert pour estimer tes temps de trajet."}
-        </CardDescription>
+        <CardDescription>{t.onboarding.stepHints[step]}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {step === 0 && (
           <PlaceStep
-            label="Adresse de ta maison"
-            placeholder="Ex. 945 chemin de Chambly, Longueuil"
+            label={t.onboarding.homeLabel}
+            placeholder={t.onboarding.homePlaceholder}
             value={home}
             onChange={setHome}
-            defaultName="Maison"
+            defaultName={t.onboarding.homeDefaultName}
           />
         )}
         {step === 1 && (
           <PlaceStep
-            label="Nom ou adresse de ton cégep ou école"
-            placeholder="Ex. Cégep Édouard-Montpetit"
+            label={t.onboarding.schoolLabel}
+            placeholder={t.onboarding.schoolPlaceholder}
             value={school}
             onChange={setSchool}
           />
@@ -151,25 +149,25 @@ export function OnboardingForm({ next, initialMode }: { next: string; initialMod
 
         {error && (
           <p role="alert" className="text-destructive text-sm">
-            {error}
+            {tr(error)}
           </p>
         )}
 
         <div className="flex flex-wrap gap-2">
           {step > 0 && (
             <Button variant="outline" onClick={() => setStep(step - 1)} disabled={pending}>
-              Retour
+              {t.onboarding.back}
             </Button>
           )}
           {step === 0 && (
             <Button onClick={() => setStep(1)} disabled={!home || !home.name.trim()}>
-              Continuer
+              {t.onboarding.continue}
             </Button>
           )}
           {step === 1 && school && (
             <>
               <Button onClick={() => setStep(2)} disabled={!school.name.trim()}>
-                Continuer
+                {t.onboarding.continue}
               </Button>
               <Button
                 variant="ghost"
@@ -178,18 +176,18 @@ export function OnboardingForm({ next, initialMode }: { next: string; initialMod
                   setStep(2);
                 }}
               >
-                Je n&apos;en ai pas
+                {t.onboarding.noSchool}
               </Button>
             </>
           )}
           {step === 1 && !school && (
             <Button variant="ghost" onClick={() => setStep(2)}>
-              Passer cette étape
+              {t.onboarding.skipStep}
             </Button>
           )}
           {step === 2 && (
             <Button onClick={submit} disabled={pending || !home}>
-              {pending ? "Enregistrement…" : "Terminer"}
+              {pending ? t.common.saving : t.onboarding.finish}
             </Button>
           )}
         </div>
@@ -199,7 +197,7 @@ export function OnboardingForm({ next, initialMode }: { next: string; initialMod
           disabled={pending}
           className="text-muted-foreground self-start text-xs underline-offset-4 hover:underline"
         >
-          Plus tard (je le ferai dans « Mes lieux »)
+          {t.onboarding.later}
         </button>
       </CardContent>
     </Card>

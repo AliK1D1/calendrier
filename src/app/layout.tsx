@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n/client";
 import { HTML_LANG } from "@/lib/i18n/config";
 import { getI18n } from "@/lib/i18n/server";
+import { COULEUR_BARRE, SCRIPT_APPARENCE } from "@/lib/ux/apparence";
 
 import "./globals.css";
 
@@ -33,14 +34,17 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-/** Couleur de la barre du navigateur sur téléphone, assortie au fond (clair ou sombre). */
+/**
+ * Couleur de la barre du navigateur sur téléphone, assortie au fond (clair ou sombre). Si la
+ * personne force un thème (Profil > Apparence), le script du <head> remplace ces couleurs.
+ */
 export const viewport: Viewport = {
   // Le contenu va jusqu'aux bords (encoche, geste d'accueil) ; les marges sûres sont gérées
   // avec `env(safe-area-inset-*)` dans l'en-tête, la barre d'onglets et les messages.
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f8f9fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f1218" },
+    { media: "(prefers-color-scheme: light)", color: COULEUR_BARRE.clair },
+    { media: "(prefers-color-scheme: dark)", color: COULEUR_BARRE.sombre },
   ],
 };
 
@@ -51,7 +55,13 @@ export default async function RootLayout({
 }>) {
   const { locale } = await getI18n();
   return (
-    <html lang={HTML_LANG[locale]}>
+    // Le script d'apparence ajoute data-theme et data-accent à <html> avant React : React ne
+    // doit pas s'en plaindre à l'hydratation (seulement sur cette balise).
+    <html lang={HTML_LANG[locale]} suppressHydrationWarning>
+      <head>
+        {/* Texte fixe écrit par nous (aucune donnée de l'utilisateur) : sans risque d'injection. */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_APPARENCE }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>

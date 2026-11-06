@@ -22,6 +22,7 @@ import { getMySubscriptions } from "@/lib/subscriptions/supabaseStore";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+import { AppearanceForm } from "./appearance-form";
 import { PrivacyForm } from "./privacy-form";
 import { OutlookCard } from "./outlook-card";
 import { ProfileForm } from "./profile-form";
@@ -89,6 +90,7 @@ export default async function Profil({
             { id: "outlook", label: "Outlook" },
             { id: "abonnements", label: "Calendriers en ligne" },
             { id: "etude", label: "Étude" },
+            { id: "apparence", label: "Apparence" },
             { id: "maison", label: "Maison et déconnexion" },
           ]}
         />
@@ -202,6 +204,17 @@ export default async function Profil({
                 (voir README).
               </p>
             )}
+          </CardContent>
+        </Card>
+        <Card id="apparence" className="scroll-mt-16">
+          <CardHeader>
+            <CardTitle>Apparence</CardTitle>
+            <CardDescription>
+              Mode clair ou sombre, et la couleur des boutons. Le changement se voit tout de suite.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AppearanceForm />
           </CardContent>
         </Card>
         <Card id="maison" className="scroll-mt-16">

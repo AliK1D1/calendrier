@@ -3,6 +3,8 @@
  * `EN_TEXTS` : messages fixes. `EN_PATTERNS` : messages avec des valeurs (nom, nombre…).
  * Un message composé (« Préfixe : message ») est traduit morceau par morceau.
  */
+import { ownText } from "./lookup";
+
 export const EN_TEXTS: Record<string, string> = {
   "Action non permise.": "Action not allowed.",
   "Ajoute d'abord un examen ou un travail à venir.": "First add an upcoming exam or assignment.",
@@ -357,7 +359,7 @@ function capitalizeEn(s: string): string {
 
 /** Traduit un morceau de message (exact ou motif), sinon le laisse tel quel. */
 function translateInner(text: string): string {
-  const exact = EN_TEXTS[text];
+  const exact = ownText(EN_TEXTS, text);
   if (exact !== undefined) return exact;
   for (const [re, to] of EN_PATTERNS) {
     const m = re.exec(text);

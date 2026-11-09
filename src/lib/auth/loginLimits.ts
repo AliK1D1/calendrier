@@ -3,7 +3,7 @@
  * Supabase depuis le serveur : Supabase voit donc l'adresse IP du SERVEUR pour tout le monde.
  * Sa propre limite par IP (quelques dizaines de connexions par 5 min) est alors partagée par
  * tous les utilisateurs, et une seule personne qui essaie des mots de passe en boucle (ou
- * demande des liens en boucle) bloquerait la connexion de tous. On limite donc d'abord ici,
+ * crée des comptes en boucle) bloquerait la connexion de tous. On limite donc d'abord ici,
  * par adresse IP du visiteur et par courriel.
  *
  * En mémoire, une par instance du serveur : c'est une protection de base, pas un compteur
@@ -29,10 +29,10 @@ export function createPasswordLimiters(now?: () => number): LoginLimiters {
   };
 }
 
-/** Lien magique : 30 envois par heure par IP, 5 par heure par courriel. */
-export function createMagicLinkLimiters(now?: () => number): LoginLimiters {
+/** Création de compte : 20 par heure par IP, 5 essais par heure par courriel. */
+export function createSignupLimiters(now?: () => number): LoginLimiters {
   return {
-    perIp: createKeyedLimiter({ limit: 30, windowMs: 60 * MINUTE, now }),
+    perIp: createKeyedLimiter({ limit: 20, windowMs: 60 * MINUTE, now }),
     perEmail: createKeyedLimiter({ limit: 5, windowMs: 60 * MINUTE, now }),
   };
 }

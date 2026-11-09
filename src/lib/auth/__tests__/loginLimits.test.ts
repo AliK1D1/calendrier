@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   allowLoginAttempt,
   clientIp,
-  createMagicLinkLimiters,
+  createSignupLimiters,
   createPasswordLimiters,
 } from "@/lib/auth/loginLimits";
 
@@ -27,12 +27,12 @@ describe("limites de connexion (revue)", () => {
     expect(allowLoginAttempt(l, "9.9.9.9", "nouveau@x.com")).toBe(true);
   });
 
-  it("lien magique : 5 par courriel et 30 par IP en une heure", () => {
-    const l = createMagicLinkLimiters(() => 0);
+  it("création de compte : 5 par courriel et 20 par IP en une heure", () => {
+    const l = createSignupLimiters(() => 0);
     for (let i = 0; i < 5; i++) expect(allowLoginAttempt(l, "1.1.1.1", "ali@x.com")).toBe(true);
     expect(allowLoginAttempt(l, "1.1.1.1", "ali@x.com")).toBe(false);
-    const m = createMagicLinkLimiters(() => 0);
-    for (let i = 0; i < 30; i++) expect(allowLoginAttempt(m, "2.2.2.2", `u${i}@x.com`)).toBe(true);
+    const m = createSignupLimiters(() => 0);
+    for (let i = 0; i < 20; i++) expect(allowLoginAttempt(m, "2.2.2.2", `u${i}@x.com`)).toBe(true);
     expect(allowLoginAttempt(m, "2.2.2.2", "autre@x.com")).toBe(false);
   });
 

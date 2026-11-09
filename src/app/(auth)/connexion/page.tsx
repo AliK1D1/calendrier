@@ -11,7 +11,7 @@ import { getI18n } from "@/lib/i18n/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentUser } from "@/lib/supabase/server";
 
-import { connexionGoogle, connexionMotDePasse, envoyerLienMagique } from "./actions";
+import { connexionGoogle, connexionMotDePasse } from "./actions";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getI18n();
@@ -31,7 +31,9 @@ export default async function Connexion({ searchParams }: { searchParams: Search
   const configured = isSupabaseConfigured();
   const erreurCode = configured ? first(params.erreur) : "config";
   const erreur = authErrorMessage(t, erreurCode);
-  const envoye = first(params.envoye) === "1";
+  const cree = first(params.cree);
+  const creeMessage =
+    cree === "1" ? t.auth.created : cree === "confirmer" ? t.auth.createdConfirm : undefined;
 
   if (configured && (await getCurrentUser())) redirect(next);
 
@@ -57,37 +59,57 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               {erreur}
             </p>
           )}
-          {envoye && (
+          {creeMessage && (
             <p
               role="status"
               className="border-success/50 bg-success/10 rounded-md border p-3 text-sm"
             >
-              {t.auth.sentBefore}
-              <strong>{t.auth.sentStrong}</strong>
-              {t.auth.sentAfter}
+              {creeMessage}
             </p>
           )}
 
-          <form action={envoyerLienMagique} className="flex flex-col gap-3">
+          <form action={connexionMotDePasse} className="flex flex-col gap-3 text-sm">
             <input type="hidden" name="next" value={next} />
-            <label htmlFor="email" className="text-sm font-medium">
+            <label htmlFor="pw-email" className="font-medium">
               {t.auth.email}
             </label>
             <input
-              id="email"
+              id="pw-email"
               name="email"
               type="email"
               required
               autoComplete="email"
               inputMode="email"
-              placeholder={t.auth.emailPlaceholder}
+              disabled={!configured}
+              className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
+            />
+            <label htmlFor="pw-password" className="font-medium">
+              {t.auth.password}
+            </label>
+            <input
+              id="pw-password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              maxLength={200}
               disabled={!configured}
               className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
             />
             <Button type="submit" disabled={!configured}>
-              {t.auth.sendLink}
+              {t.auth.signIn}
             </Button>
           </form>
+
+          <p className="text-muted-foreground text-center text-sm">
+            {t.auth.noAccount}{" "}
+            <Link
+              href={`/inscription?${new URLSearchParams({ next }).toString()}`}
+              className="text-foreground font-medium underline"
+            >
+              {t.auth.createAccount}
+            </Link>
+          </p>
 
           <div className="text-muted-foreground flex items-center gap-3 text-xs uppercase">
             <span className="bg-border h-px flex-1" />
@@ -101,44 +123,6 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               {t.auth.google}
             </Button>
           </form>
-
-          <details className="text-sm">
-            <summary className="text-muted-foreground cursor-pointer">
-              {t.auth.withPassword}
-            </summary>
-            <form action={connexionMotDePasse} className="mt-3 flex flex-col gap-3">
-              <input type="hidden" name="next" value={next} />
-              <label htmlFor="pw-email" className="font-medium">
-                {t.auth.email}
-              </label>
-              <input
-                id="pw-email"
-                name="email"
-                type="email"
-                required
-                autoComplete="email"
-                inputMode="email"
-                disabled={!configured}
-                className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
-              />
-              <label htmlFor="pw-password" className="font-medium">
-                {t.auth.password}
-              </label>
-              <input
-                id="pw-password"
-                name="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                maxLength={200}
-                disabled={!configured}
-                className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
-              />
-              <Button type="submit" variant="outline" disabled={!configured}>
-                {t.auth.signIn}
-              </Button>
-            </form>
-          </details>
         </CardContent>
       </Card>
     </main>

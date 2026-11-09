@@ -141,6 +141,13 @@
       "when": 1793908781342,
       "tag": "0019_review_series_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794230967376,
+      "tag": "0020_usernames",
+      "breakpoints": true
     }
   ]
 }

@@ -16,3 +16,8 @@ export function ownText(record: Readonly<Record<string, string>>, key: string): 
 export function authErrorMessage(t: Messages, code: string | undefined): string | undefined {
   return code ? ownText(t.auth.errors, code) : undefined;
 }
+
+/** Message d'erreur de création de compte pour un code (`SignupErrorCode`), ou `undefined`. */
+export function signupErrorMessage(t: Messages, code: string | undefined): string | undefined {
+  return code ? ownText(t.auth.signup.errors, code) : undefined;
+}

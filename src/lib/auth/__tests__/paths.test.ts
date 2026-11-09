@@ -1,23 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  afterLoginPath,
-  isApiPath,
-  isPlausibleEmail,
-  isPublicPath,
-  otpErrorCode,
-  safeNextPath,
-} from "../paths";
+import { afterLoginPath, isApiPath, isPlausibleEmail, isPublicPath, safeNextPath } from "../paths";
 
 describe("isPublicPath", () => {
-  it("laisse passer l'accueil, /connexion et /auth/*", () => {
-    for (const p of ["/", "/connexion", "/auth/callback", "/auth/deconnexion"]) {
+  it("laisse passer l'accueil, /connexion, /inscription et /auth/*", () => {
+    for (const p of ["/", "/connexion", "/inscription", "/auth/callback", "/auth/deconnexion"]) {
       expect(isPublicPath(p)).toBe(true);
     }
   });
 
   it("protège tout le reste", () => {
-    for (const p of ["/horaire", "/lieux", "/groupes/123", "/etude", "/connexions", "/authx"]) {
+    for (const p of [
+      "/horaire",
+      "/lieux",
+      "/groupes/123",
+      "/etude",
+      "/connexions",
+      "/inscriptions",
+      "/authx",
+    ]) {
       expect(isPublicPath(p)).toBe(false);
     }
   });
@@ -87,16 +88,5 @@ describe("afterLoginPath", () => {
     expect(afterLoginPath("/bienvenue", false)).toBe("/bienvenue");
     expect(afterLoginPath("https://mechant.com", false)).toBe("/bienvenue?next=%2F");
     expect(afterLoginPath("/.//mechant.com", true)).toBe("/");
-  });
-});
-
-describe("otpErrorCode", () => {
-  it("reconnaît la limite d'envoi de courriels de Supabase", () => {
-    expect(otpErrorCode({ status: 429, message: "email rate limit exceeded" })).toBe("limite");
-    expect(otpErrorCode({ code: "over_email_send_rate_limit" })).toBe("limite");
-  });
-
-  it("renvoie l'erreur générique sinon", () => {
-    expect(otpErrorCode({ status: 500, message: "Error sending magic link email" })).toBe("envoi");
   });
 });

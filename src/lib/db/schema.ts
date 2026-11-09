@@ -87,6 +87,11 @@ export const profiles = pgTable(
       .primaryKey()
       .references(() => authUsers.id, { onDelete: "cascade" }),
     display_name: text("display_name").notNull().default(""),
+    /**
+     * Nom d'utilisateur choisi à l'inscription (unique, minuscules, voir `lib/auth/signup.ts`).
+     * Vide pour les comptes créés avant la migration 0020 ou avec Google.
+     */
+    username: text("username"),
     travel_mode: travelModeEnum("travel_mode").notNull().default("transit"),
     home_place_id: uuid("home_place_id").references((): AnyPgColumn => places.id, {
       onDelete: "set null",
@@ -104,6 +109,9 @@ export const profiles = pgTable(
   (t) => [
     // Même limite que validateDisplayName (le nom est visible par les membres des groupes).
     check("profiles_display_name_length", sql`length(${t.display_name}) <= 60`),
+    // Même règle que USERNAME_PATTERN (lib/auth/signup.ts).
+    check("profiles_username_format", sql`${t.username} ~ '^[a-z0-9][a-z0-9_.]{2,19}$'`),
+    uniqueIndex("profiles_username_key").on(t.username),
     check(
       "profiles_unavailable_order",
       sql`${t.unavailable_before} is null or ${t.unavailable_after} is null or ${t.unavailable_after} > ${t.unavailable_before}`,

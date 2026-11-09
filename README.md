@@ -91,25 +91,27 @@ Dans le tableau de bord Supabase :
    - **Site URL** : `http://localhost:3000` (à remplacer par l'adresse Vercel au déploiement).
    - **Redirect URLs** → **Add URL** : `http://localhost:3000/auth/callback` (plus tard aussi
      `https://<ton-site>/auth/callback`).
-2. **Authentication → Sign In / Providers → Email** : laisser activé (lien magique). Le
-   service de courriel intégré de Supabase est limité à 2 courriels par heure : assez pour
-   tester (voir « Déploiement » plus bas).
+2. **Authentication → Sign In / Providers → Email** : laisser le fournisseur activé, mais
+   **désactiver « Confirm email »**. Les comptes se créent sur `/inscription` (courriel, nom
+   d'utilisateur, mot de passe) et on se connecte avec le courriel et le mot de passe : aucun
+   lien par courriel. Si « Confirm email » reste activé, Supabase envoie quand même un lien
+   de confirmation et la page de connexion le signale.
+   Dans **Authentication → Sign In / Providers → Email** (ou **Policies**, selon la version),
+   régler aussi **Minimum password length = 8** et **Password requirements = « Lowercase,
+   uppercase letters and digits »** : la même règle que le formulaire, appliquée aussi par
+   Supabase.
 3. **Google (facultatif)** : Authentication → Sign In / Providers → **Google** → activer, puis
    coller le **Client ID** et le **Client Secret** créés dans Google Cloud Console
    (APIs & Services → Credentials → OAuth client ID → « Web application »). Dans Google,
    l'**Authorized redirect URI** est l'adresse de rappel affichée par Supabase sur cette même
    page (`https://xxxx.supabase.co/auth/v1/callback`), pas celle de l'app.
 
-Le lien magique doit être ouvert **dans le même navigateur** que celui où il a été demandé
-(flux PKCE). Pour que ça marche aussi d'un navigateur à l'autre, on peut modifier le modèle
-**Authentication → Emails → Magic Link** pour pointer vers
-`{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=magiclink` : la route
-`/auth/callback` gère les deux formes.
+La route `/auth/callback` ne sert plus qu'au retour de Google.
 
 ### 4. Vérifier
 
-`npm run dev`, aller sur <http://localhost:3000>, **Se connecter**, entrer son courriel,
-cliquer le lien reçu : l'accueil affiche « Connecté en tant que … » et un bouton **Se
+`npm run dev`, aller sur <http://localhost:3000>, **Se connecter** → **Créer un compte**,
+remplir le formulaire : l'accueil de première connexion s'ouvre, puis l'accueil affiche « Connecté en tant que … » et un bouton **Se
 déconnecter**. Une ligne apparaît dans `profiles` (créée par un trigger à l'inscription).
 
 ### Comment c'est construit
@@ -690,8 +692,9 @@ variable : **Deployments → ⋯ → Redeploy** (les `NEXT_PUBLIC_` sont figées
    - **Redirect URLs** : `https://calendrier-opal.vercel.app/auth/callback` et
      `http://localhost:3000/auth/callback` (développement). Pour les aperçus Vercel, on peut
      ajouter `https://*-<équipe>.vercel.app/**`.
-2. **Authentication → Emails (modèles)** : pour que le lien marche dans n'importe quel
-   navigateur (téléphone, autre appareil), utiliser `token_hash` plutôt que le lien par défaut :
+2. **Authentication → Emails (modèles)** : plus nécessaire depuis la création de compte par
+   mot de passe (« Confirm email » désactivé). Seulement si on réactive un lien par courriel,
+   utiliser `token_hash` plutôt que le lien par défaut :
    - **Magic Link** :
      `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=magiclink`
    - **Confirm signup** :

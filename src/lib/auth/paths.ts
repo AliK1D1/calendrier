@@ -2,12 +2,14 @@
  * Règles de navigation liées à la connexion (fonctions pures, testées).
  */
 
-/** Pages accessibles sans être connecté : l'accueil, /connexion et tout /auth/*. */
+/** Pages accessibles sans être connecté : l'accueil, /connexion, /inscription et /auth/*. */
 export function isPublicPath(pathname: string): boolean {
   return (
     pathname === "/" ||
     pathname === "/connexion" ||
     pathname.startsWith("/connexion/") ||
+    pathname === "/inscription" ||
+    pathname.startsWith("/inscription/") ||
     pathname === "/auth" ||
     pathname.startsWith("/auth/")
   );
@@ -38,33 +40,6 @@ export function safeNextPath(next: string | null | undefined): string {
   } catch {
     return DEFAULT_AFTER_LOGIN;
   }
-}
-
-/** Messages d'erreur affichés sur /connexion, selon le code dans l'URL (`?erreur=`). */
-export const LOGIN_ERRORS: Record<string, string> = {
-  config:
-    "La connexion n'est pas encore configurée (variables Supabase manquantes). Voir le README.",
-  lien: "Ce lien de connexion est invalide ou expiré. Demande un nouveau lien.",
-  courriel: "Adresse courriel invalide.",
-  envoi: "Impossible d'envoyer le lien pour l'instant. Réessaie dans une minute.",
-  limite:
-    "Trop de liens envoyés récemment (limite du service de courriel). Réessaie dans une heure, ou utilise le dernier lien reçu.",
-  motdepasse: "Courriel ou mot de passe incorrect.",
-  essais: "Trop d'essais de mot de passe. Attends 15 minutes, ou utilise le lien par courriel.",
-  echec: "La connexion n'a pas abouti. Réessaie.",
-  google: "La connexion avec Google n'a pas fonctionné. Réessaie ou utilise ton courriel.",
-};
-
-/**
- * Code d'erreur de /connexion pour un échec d'envoi du lien magique. Supabase limite les
- * courriels de son service intégré (quelques-uns par heure) : on le dit clairement.
- */
-export function otpErrorCode(error: { code?: string; status?: number; message?: string }): string {
-  const text = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
-  if (error.status === 429 || text.includes("rate limit") || text.includes("rate_limit")) {
-    return "limite";
-  }
-  return "envoi";
 }
 
 /** Validation simple d'une adresse courriel (le vrai contrôle est fait par Supabase). */

@@ -116,7 +116,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0019.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0020.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -137,6 +137,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0017.sql",
       "supabase/migration-0018.sql",
       "supabase/migration-0019.sql",
+      "supabase/migration-0020.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -2782,5 +2783,55 @@ describe("Calendriers abonnés (migration 0017) : privés, occupé au choix, ret
     expect(await as(A, () => rows("SELECT kind FROM calendar_subscriptions"))).toEqual([
       { kind: "ics" },
     ]);
+  });
+});
+
+describe("noms d'utilisateur (migration 0020)", () => {
+  const D = "00000000-0000-4000-8000-00000000000d";
+  const E = "00000000-0000-4000-8000-00000000000e";
+
+  async function signUp(id: string, email: string, meta: Record<string, string>) {
+    await db.query("INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES ($1, $2, $3)", [
+      id,
+      email,
+      JSON.stringify(meta),
+    ]);
+  }
+
+  async function profile(id: string) {
+    const [p] = await rows<{ username: string | null; display_name: string }>(
+      "SELECT username, display_name FROM profiles WHERE id = $1",
+      [id],
+    );
+    return p;
+  }
+
+  it("copie le nom choisi (en minuscules) dans le profil et s'en sert comme nom affiché", async () => {
+    await signUp(D, "d@example.com", { username: "  Ali.K " });
+    expect(await profile(D)).toEqual({ username: "ali.k", display_name: "ali.k" });
+  });
+
+  it("compte sans nom (Google, anciens comptes) : username vide", async () => {
+    expect(await profile(A)).toEqual({ username: null, display_name: "Ali" });
+    await signUp(D, "d@example.com", { username: "x" });
+    expect(await profile(D)).toEqual({ username: null, display_name: "d" });
+  });
+
+  it("un nom déjà pris fait échouer l'inscription", async () => {
+    await signUp(D, "d@example.com", { username: "ali" });
+    await expect(signUp(E, "e@example.com", { username: "ALI" })).rejects.toThrow();
+    expect(await rows("SELECT id FROM auth.users WHERE id = $1", [E])).toEqual([]);
+  });
+
+  it("je peux changer mon nom, mais pas pour un nom pris ou mal formé", async () => {
+    await signUp(D, "d@example.com", { username: "ali" });
+    await as(B, () => rows("UPDATE profiles SET username = 'sam' WHERE id = $1", [B]));
+    expect((await profile(B)).username).toBe("sam");
+    await expect(
+      as(B, () => rows("UPDATE profiles SET username = 'ali' WHERE id = $1", [B])),
+    ).rejects.toThrow();
+    await expect(
+      as(B, () => rows("UPDATE profiles SET username = 'Sam!' WHERE id = $1", [B])),
+    ).rejects.toThrow();
   });
 });

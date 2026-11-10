@@ -168,6 +168,21 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
           <MapPin className="text-muted-foreground size-4 shrink-0" aria-hidden />
           <span className="break-words">{p.where}</span>
         </p>
+        {live && p.review && (
+          <div
+            className="border-warning/70 bg-warning/10 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm max-sm:-ml-[3.75rem]"
+            role="note"
+            aria-label={tp.reviewLabel}
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <p className="font-semibold">{tp.reviewBadge}</p>
+              {p.review.mine && <p className="break-words">{p.review.mine}</p>}
+              {p.review.others && <p className="break-words">{p.review.others}</p>}
+              <p className="text-muted-foreground text-xs">{tp.reviewHint}</p>
+            </div>
+          </div>
+        )}
         {live && p.leaveBy && <LeaveBy leaveBy={p.leaveBy} />}
         <p className="text-muted-foreground flex items-start gap-2 text-sm">
           <Users className="mt-0.5 size-4 shrink-0" aria-hidden />

@@ -75,6 +75,7 @@ manquent, chacune dans une nouvelle requête du SQL Editor :
 | `supabase/migration-0011.sql` | Segments 13-14 : examens et travaux, séances d'étude dans l'horaire, préférences d'étude          |
 | `supabase/migration-0012.sql` | Segment 18 : disponibilités ponctuelles (table `availability_slots`, `group_availability_slots`)  |
 | `supabase/migration-0017.sql` | Story 3 : calendriers en ligne abonnés (`calendar_subscriptions`, `subscription_events`)          |
+| `supabase/migration-0021.sql` | Cours annulé cette fois-ci : `busy_blocks.skip_days`, renvoyé aussi par `group_busy_blocks`       |
 
 Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
 (« already exists »).
@@ -339,13 +340,49 @@ anciens codes d'invitation (12 caractères) sont remplacés par des codes de 32 
   ≤ 100, durée 15 min à 12 h, dans l'année qui vient, fin au plus tard à minuit, 10 propositions
   par personne et par groupe en 24 h, 30 par groupe en 24 h, 50 plans à venir par groupe. La
   limite de 1000 blocs (0008) s'applique : accepter avec un horaire plein donne un message clair.
-- **Pas fait** : la revalidation « à revoir » (plan devenu impossible après un changement
-  d'horaire) ; le statut `confirmed` n'est pas utilisé (chaque invité répond pour lui-même) ;
+- **Plans « à revoir »** : voir la section du même nom plus bas. **Pas fait** : le statut `confirmed` n'est pas utilisé (chaque invité répond pour lui-même) ;
   une personne qui rejoint le groupe après une proposition « tout le groupe » la voit mais n'est
   pas invitée.
 - Tests : `src/lib/db/__tests__/plans.test.ts` (PGlite, requêtes directes comme par l'API REST,
   y compris la migration 0009 sur une base en 0008 avec des données) et
   `src/lib/plans/__tests__/` (validation, mise en forme, `.ics`).
+
+## Plans « à revoir » et cours annulé cette fois-ci
+
+### Plans « à revoir »
+
+Un plan accepté peut devenir impossible quand l'horaire de quelqu'un change après coup (nouveau
+cours, quart de travail, deuxième plan au même moment). Sur mes prochains plans (acceptés ou
+proposés par moi), une note **« À revoir »** dit alors qui est pris : « Tu as maintenant
+« Labo » de 17 h à 19 h, en même temps que ce plan. » ou « Sam n'est plus libre à ce
+moment-là. » Affichée dans `/plans`, sur l'accueil et dans la page du groupe. Aucune migration.
+
+- Logique pure : `src/lib/scheduling/planConflicts.ts` (`conflictingBlock`, `planConflicts`).
+  Le bloc du plan lui-même (mêmes heures exactement) est écarté une fois par personne.
+- Assemblage : `src/lib/plans/review.ts` (au plus 12 plans, 6 groupes, 60 jours) ; lecture par
+  `group_busy_blocks` dans `reviewQueries.ts` (la page du groupe réutilise l'horaire déjà lu).
+- Vie privée : pour les autres, seulement le nom (ni titre ni heures de leur bloc) ; le titre
+  et les heures ne sont montrés que pour mon propre bloc.
+- Limite : seuls les chevauchements sont signalés, pas un trajet devenu trop long.
+
+### Cours annulé cette fois-ci
+
+**Migration à appliquer : `supabase/migration-0021.sql`** (SQL Editor, une seule fois).
+
+« Mon cours de jeudi est annulé » : dans `/horaire`, ouvrir un bloc qui revient puis
+**« Annulé le jeudi 12 novembre seulement »**. Ce jour-là, le bloc disparaît de la grille et
+ne compte plus comme occupé (« Quand on peut se voir », « Je suis libre maintenant », plans « à
+revoir ») ; les autres semaines ne changent pas. La section **« Annulés cette fois-ci »**
+liste les occurrences annulées à venir, avec **Rétablir**.
+
+- Colonne `busy_blocks.skip_days` (`date[]`, 60 jours au plus, seulement sur un bloc qui
+  revient), écrite par la personne (droit par colonne + RLS) et renvoyée aux membres de ses
+  groupes par `group_busy_blocks`.
+- Logique pure : `occursOn` ignore les jours de `skipDays` (`weeklyBlocks.ts`) ;
+  `src/lib/scheduling/skipDays.ts` (`skipOccurrence`, `restoreOccurrence`, `upcomingSkips`).
+- Seulement mes blocs saisis ou importés (pas un plan de groupe ni une séance d'étude).
+- Sans la migration, l'app marche comme avant (le bouton dit qu'il manque la migration).
+- Pas pris en compte par le planificateur d'étude ni par « Pars de … à HH:MM ».
 
 ## Planificateur d'étude : la logique (segment 13)
 

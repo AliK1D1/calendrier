@@ -39,6 +39,13 @@ export const schedule: typeof fr = {
   outsideGrid: "Outside the grid (before 7 AM or after 11 PM) this week: ",
   recurringTitle: "Every week and other repeats",
   noRecurring: "No recurring classes or commitments yet.",
+  skippedTitle: "Cancelled this time only",
+  skippedHint: "On those days the block doesn't count as busy: your friends see you as free.",
+  skippedItem: (title: string, day: string, from: string, to: string) =>
+    `${title} · ${day}, ${from} to ${to}`,
+  restore: "Restore",
+  restoreLabel: (title: string, day: string) => `Restore “${title}” on ${day}`,
+  restored: (title: string, day: string) => `“${title}” is back on ${day}.`,
   whenAt: (when: string, from: string, to: string) => `${when}, ${from} to ${to}`,
   periodFromTo: (from: string, to: string) => `from ${from} to ${to}`,
   periodFrom: (from: string) => `from ${from}, no end`,
@@ -77,6 +84,10 @@ export const schedule: typeof fr = {
     confirmDelete: (kind: "weekly" | "custom" | "once", title: string) =>
       `Delete ${kind === "weekly" ? "every week of this block" : kind === "custom" ? "every repeat of this block" : "this block"} (“${title}”)?`,
     deleted: (title: string) => `“${title}” was deleted.`,
+    skipOnce: (day: string) => `Cancelled on ${day} only`,
+    skipHint: "Class cancelled, day off? The other weeks don't change.",
+    skipped: (title: string, day: string) =>
+      `“${title}” is cancelled on ${day}: you're free at that time.`,
     editTitle: "Edit the block",
     newTitle: "New block",
     title: "Title",

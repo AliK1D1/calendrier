@@ -25,7 +25,13 @@ import {
   verifierSeance,
 } from "../etude/actions";
 
-import { ajouterBlocs, modifierBloc, supprimerBloc } from "./actions";
+import {
+  ajouterBlocs,
+  annulerOccurrence,
+  modifierBloc,
+  retablirOccurrence,
+  supprimerBloc,
+} from "./actions";
 import { ajouterDisponibilite, supprimerDisponibilite } from "./availability-actions";
 import { type AvailabilityItem, AvailabilityPanel } from "./availability-panel";
 import { apercuIcs, confirmerIcs } from "./import-actions";
@@ -181,7 +187,13 @@ export default async function MonHoraire({
           homeId={profile?.home_place_id ?? null}
           quiet={quiet}
           today={today}
-          actions={{ ajouterBlocs, modifierBloc, supprimerBloc }}
+          actions={{
+            ajouterBlocs,
+            modifierBloc,
+            supprimerBloc,
+            annulerOccurrence,
+            retablirOccurrence,
+          }}
           icsActions={{ apercuIcs, confirmerIcs }}
           extraPlaceNames={extraPlaceNames}
           study={{

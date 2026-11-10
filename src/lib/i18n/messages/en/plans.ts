@@ -38,6 +38,16 @@ export const plans: typeof fr = {
     `Cancel “${title}”? It will be removed from the schedule of everyone who accepted it.`,
   seriesStopped: "Series stopped for everyone.",
   cancelledMsg: "Plan cancelled.",
+  reviewBadge: "Needs review",
+  reviewLabel: "Plan to review",
+  reviewMine: (title: string, from: string, to: string) =>
+    `You now have “${title}” from ${from} to ${to}, at the same time as this plan.`,
+  reviewSomething: "something else",
+  reviewOthers: (names: string[]) =>
+    names.length === 1
+      ? `${names[0]} is no longer free at that time.`
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are no longer free at that time.`,
+  reviewHint: "A schedule changed since this plan was accepted. Talk it over to move it.",
   leaveBy: "When to leave",
   status: {
     seriesStopped: "Series stopped",

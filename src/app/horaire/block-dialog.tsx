@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Trash2, X } from "lucide-react";
+import { AlertTriangle, CalendarOff, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { useConfirm } from "@/components/confirm-dialog";
@@ -20,7 +20,10 @@ import {
   type BlockSpec,
   findOverlaps,
   formatClock,
+  isRecurring,
+  occursOn,
   repeatLabel,
+  shiftDay,
   validateBlockForm,
   WEEKDAYS,
 } from "@/lib/scheduling/weeklyBlocks";
@@ -48,6 +51,8 @@ interface Props {
   blocks: ScheduleBlock[];
   places: SchedulePlace[];
   homeId: string | null;
+  /** Aujourd'hui (`yyyy-MM-dd`), pour « Annulé ce jour-là seulement ». */
+  today: string;
   actions: ScheduleActions;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -85,6 +90,7 @@ function BlockForm({
   blocks,
   places,
   homeId,
+  today,
   actions,
   onClose,
   onSaved,
@@ -110,6 +116,31 @@ function BlockForm({
     }
     return [...seen.values()];
   }, [d, blocks, editing]);
+
+  // « Cours annulé cette fois-ci » : le jour ouvert dans la grille s'il est à venir, sinon la
+  // prochaine fois (dans les 60 jours). Seulement pour mes blocs qui reviennent.
+  const skipDay = useMemo(() => {
+    const block = blocks.find((b) => b.id === initial.id);
+    if (!block || !isRecurring(block) || !["manual", "ics", "image"].includes(block.source)) {
+      return null;
+    }
+    if (initial.date >= today && occursOn(block, initial.date)) return initial.date;
+    for (let i = 0; i < 60; i++) {
+      const day = shiftDay(today, i);
+      if (occursOn(block, day)) return day;
+    }
+    return null;
+  }, [blocks, initial.id, initial.date, today]);
+
+  function skip() {
+    if (!d.id || !skipDay) return;
+    setError(null);
+    startTransition(async () => {
+      const r = await actions.annulerOccurrence(d.id, skipDay);
+      if (!r.ok) setError(tr(r.error));
+      else onSaved(tb.skipped(initial.title, formatDay(skipDay, "weekdayDayMonth", locale)));
+    });
+  }
 
   const homeName = places.find((p) => p.id === homeId)?.name;
 
@@ -347,6 +378,15 @@ function BlockForm({
         <p role="alert" className="text-destructive text-sm">
           {error}
         </p>
+      )}
+
+      {skipDay && (
+        <div className="bg-muted flex flex-col items-start gap-2 rounded-md p-3">
+          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={skip}>
+            <CalendarOff /> {tb.skipOnce(formatDay(skipDay, "weekdayDayMonth", locale))}
+          </Button>
+          <p className="text-muted-foreground text-xs">{tb.skipHint}</p>
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">

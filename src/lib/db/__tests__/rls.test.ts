@@ -116,7 +116,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0020.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0021.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -138,6 +138,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0018.sql",
       "supabase/migration-0019.sql",
       "supabase/migration-0020.sql",
+      "supabase/migration-0021.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -2832,6 +2833,72 @@ describe("noms d'utilisateur (migration 0020)", () => {
     ).rejects.toThrow();
     await expect(
       as(B, () => rows("UPDATE profiles SET username = 'Sam!' WHERE id = $1", [B])),
+    ).rejects.toThrow();
+  });
+});
+
+describe("cours annulé cette fois-ci (migration 0021)", () => {
+  async function weekly(uid: string): Promise<string> {
+    const [{ id }] = await as(uid, () =>
+      rows<{ id: string }>(
+        "INSERT INTO busy_blocks (owner_id, title, start_time, end_time, weekday, valid_from, valid_until) VALUES ($1, 'Maths', '10:00', '12:00', 4, '2026-08-24', '2026-12-18') RETURNING id",
+        [uid],
+      ),
+    );
+    return id;
+  }
+
+  it("j'annule une occurrence de mon cours ; mon groupe la voit par group_busy_blocks", async () => {
+    const id = await weekly(A);
+    const g = await createGroup(A, "Amis");
+    await join_(B, g.code);
+    await as(A, () =>
+      rows("UPDATE busy_blocks SET skip_days = '{2026-11-12}' WHERE id = $1", [id]),
+    );
+    const seen = await as(B, () =>
+      rows<{ id: string; skip_days: string[] }>(
+        "SELECT id, skip_days::text[] AS skip_days FROM public.group_busy_blocks($1) WHERE id = $2",
+        [g.id, id],
+      ),
+    );
+    expect(seen).toEqual([{ id, skip_days: ["2026-11-12"] }]);
+  });
+
+  it("personne d'autre ne peut annuler mon cours", async () => {
+    const id = await weekly(A);
+    const g = await createGroup(A, "Amis");
+    await join_(B, g.code);
+    await as(B, () =>
+      rows("UPDATE busy_blocks SET skip_days = '{2026-11-12}' WHERE id = $1", [id]),
+    );
+    const [b] = await rows<{ n: number }>(
+      "SELECT cardinality(skip_days) AS n FROM busy_blocks WHERE id = $1",
+      [id],
+    );
+    expect(b.n).toBe(0);
+  });
+
+  it("refuse sur un bloc ponctuel et au-delà de 60 jours", async () => {
+    const id = await weekly(A);
+    const many = Array.from(
+      { length: 61 },
+      (_, i) => `2027-01-${String((i % 28) + 1).padStart(2, "0")}`,
+    );
+    await expect(
+      as(A, () =>
+        rows("UPDATE busy_blocks SET skip_days = $2::date[] WHERE id = $1", [
+          id,
+          `{${many.join(",")}}`,
+        ]),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      as(A, () =>
+        rows(
+          "INSERT INTO busy_blocks (owner_id, title, start_time, end_time, valid_from) VALUES ($1, 'RDV', '10:00', '11:00', '2026-11-12')",
+          [A],
+        ).then(() => rows("UPDATE busy_blocks SET skip_days = '{2026-11-12}' WHERE title = 'RDV'")),
+      ),
     ).rejects.toThrow();
   });
 });

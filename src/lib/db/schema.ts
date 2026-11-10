@@ -199,10 +199,24 @@ export const busyBlocks = pgTable(
       (): AnyPgColumn => calendarSubscriptions.id,
       { onDelete: "cascade" },
     ),
+    /**
+     * Occurrences annulées d'un bloc qui revient (« cours annulé cette fois-ci », migration
+     * 0021) : ces jours-là, le bloc n'a pas lieu. Vide pour un bloc ponctuel.
+     */
+    skip_days: date("skip_days", { mode: "string" })
+      .array()
+      .notNull()
+      .default(sql`'{}'::date[]`),
     created_at: createdAt(),
   },
   (t) => [
     index("busy_blocks_owner_idx").on(t.owner_id),
+    // Migration 0021 : au plus 60 occurrences annulées, seulement sur un bloc qui revient.
+    check("busy_blocks_skip_days_count", sql`cardinality(${t.skip_days}) <= 60`),
+    check(
+      "busy_blocks_skip_days_recurring",
+      sql`cardinality(${t.skip_days}) = 0 or ${t.weekday} is not null or ${t.repeat_unit} is not null`,
+    ),
     uniqueIndex("busy_blocks_meetup_plan_owner_key").on(t.meetup_plan_id, t.owner_id),
     index("busy_blocks_deadline_idx").on(t.deadline_id),
     index("busy_blocks_subscription_idx").on(t.subscription_id),

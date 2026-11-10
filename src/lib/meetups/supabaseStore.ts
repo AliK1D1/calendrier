@@ -33,13 +33,13 @@ export function supabaseMeetupStore(supabase: SupabaseClient): MeetupStore {
       return { ok: true, value: (data ?? []).map((m) => m.user_id) };
     },
     async profiles(ids) {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(
-          "id, display_name, travel_mode, home_place_id, unavailable_before, unavailable_after",
-        )
-        .in("id", ids)
-        .returns<ProfileInput[]>();
+      const columns =
+        "id, display_name, travel_mode, home_place_id, unavailable_before, unavailable_after";
+      const read = (cols: string) =>
+        supabase.from("profiles").select(cols).in("id", ids).returns<ProfileInput[]>();
+      // Limite de sorties (migration 0022) : sans les colonnes, on lit comme avant.
+      let { data, error } = await read(`${columns}, max_outings_per_day, max_outings_per_week`);
+      if (error?.code === "42703") ({ data, error } = await read(columns));
       if (error) return fail("Moments (profils)", error);
       return { ok: true, value: data ?? [] };
     },

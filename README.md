@@ -61,21 +61,22 @@ pour une base **vide** (le relancer échoue sur « type already exists »).
 `setup.sql`. Coller plutôt, **dans l'ordre et une seule fois chacun**, les migrations qui
 manquent, chacune dans une nouvelle requête du SQL Editor :
 
-| Fichier                       | Contenu                                                                                           |
-| ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| `supabase/migration-0002.sql` | Revue sécurité du segment 6 (droits par colonne, EXECUTE retiré à anon)                           |
-| `supabase/migration-0003.sql` | Segment 7 : `profiles.onboarded_at`, nom de lieu ≤ 100 caractères, fonction `complete_onboarding` |
-| `supabase/migration-0004.sql` | Segment 8 : `profiles.unavailable_before` / `unavailable_after` (heures où je ne sors pas)        |
-| `supabase/migration-0005.sql` | Revue du segment 8 : limites des formulaires appliquées aussi par la BD                           |
-| `supabase/migration-0006.sql` | Segment 10 : groupes (confidentialité de l'horaire, lieux du groupe, code d'invitation, départs)  |
-| `supabase/migration-0007.sql` | Revue du segment 10 : nouveau lien d'invitation quand un admin retire un membre                   |
-| `supabase/migration-0008.sql` | Revue du segment 11 : nombre maximal de lieux et de blocs                                         |
-| `supabase/migration-0009.sql` | Segment 12 : proposer un moment au groupe (invités, réponses, blocs « plan » dans l'horaire)      |
-| `supabase/migration-0010.sql` | Revue du segment 12 : caractères de contrôle refusés, titre d'un plan gardé dans son groupe       |
-| `supabase/migration-0011.sql` | Segments 13-14 : examens et travaux, séances d'étude dans l'horaire, préférences d'étude          |
-| `supabase/migration-0012.sql` | Segment 18 : disponibilités ponctuelles (table `availability_slots`, `group_availability_slots`)  |
-| `supabase/migration-0017.sql` | Story 3 : calendriers en ligne abonnés (`calendar_subscriptions`, `subscription_events`)          |
-| `supabase/migration-0021.sql` | Cours annulé cette fois-ci : `busy_blocks.skip_days`, renvoyé aussi par `group_busy_blocks`       |
+| Fichier                       | Contenu                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `supabase/migration-0002.sql` | Revue sécurité du segment 6 (droits par colonne, EXECUTE retiré à anon)                                |
+| `supabase/migration-0003.sql` | Segment 7 : `profiles.onboarded_at`, nom de lieu ≤ 100 caractères, fonction `complete_onboarding`      |
+| `supabase/migration-0004.sql` | Segment 8 : `profiles.unavailable_before` / `unavailable_after` (heures où je ne sors pas)             |
+| `supabase/migration-0005.sql` | Revue du segment 8 : limites des formulaires appliquées aussi par la BD                                |
+| `supabase/migration-0006.sql` | Segment 10 : groupes (confidentialité de l'horaire, lieux du groupe, code d'invitation, départs)       |
+| `supabase/migration-0007.sql` | Revue du segment 10 : nouveau lien d'invitation quand un admin retire un membre                        |
+| `supabase/migration-0008.sql` | Revue du segment 11 : nombre maximal de lieux et de blocs                                              |
+| `supabase/migration-0009.sql` | Segment 12 : proposer un moment au groupe (invités, réponses, blocs « plan » dans l'horaire)           |
+| `supabase/migration-0010.sql` | Revue du segment 12 : caractères de contrôle refusés, titre d'un plan gardé dans son groupe            |
+| `supabase/migration-0011.sql` | Segments 13-14 : examens et travaux, séances d'étude dans l'horaire, préférences d'étude               |
+| `supabase/migration-0012.sql` | Segment 18 : disponibilités ponctuelles (table `availability_slots`, `group_availability_slots`)       |
+| `supabase/migration-0017.sql` | Story 3 : calendriers en ligne abonnés (`calendar_subscriptions`, `subscription_events`)               |
+| `supabase/migration-0021.sql` | Cours annulé cette fois-ci : `busy_blocks.skip_days`, renvoyé aussi par `group_busy_blocks`            |
+| `supabase/migration-0022.sql` | Limite de sorties : `profiles.max_outings_per_day` / `_per_week`, `is_outing` dans `group_busy_blocks` |
 
 Chaque fichier est dans une transaction et échoue sans rien changer s'il a déjà été appliqué
 (« already exists »).
@@ -382,7 +383,50 @@ liste les occurrences annulées à venir, avec **Rétablir**.
   `src/lib/scheduling/skipDays.ts` (`skipOccurrence`, `restoreOccurrence`, `upcomingSkips`).
 - Seulement mes blocs saisis ou importés (pas un plan de groupe ni une séance d'étude).
 - Sans la migration, l'app marche comme avant (le bouton dit qu'il manque la migration).
-- Pas pris en compte par le planificateur d'étude ni par « Pars de … à HH:MM ».
+- Pris en compte aussi par le planificateur d'étude (du temps libre pour étudier) et par
+  « Pars de … à HH:MM » (on ne part plus d'un cours annulé).
+
+### Trouver un autre moment
+
+Sur un plan « à revoir », le bouton **« Trouver un autre moment »** ouvre la page du groupe
+(`/groupes/[id]?replanifier=<plan>#se-voir`) et lance la recherche avec les mêmes personnes et
+la même durée (`src/lib/plans/replan.ts`). On propose le nouveau moment comme d'habitude ; si
+l'ancien plan est le mien, l'app offre ensuite de l'annuler. Sinon, la personne qui l'a proposé
+l'annule elle-même (seul le créateur annule, migration 0009).
+
+### Limite de sorties
+
+**Migration à appliquer : `supabase/migration-0022.sql`** (SQL Editor, une seule fois).
+
+Dans **Profil → Limite de sorties** : « pas plus de N plans de groupe par jour » et « par
+semaine » (du lundi au dimanche). Une sortie est un plan accepté ou proposé par moi. Quand la
+limite d'un jour ou d'une semaine est atteinte, je compte comme occupé à la maison tout ce
+jour-là : « Quand on peut se voir » et « Je suis libre maintenant » ne proposent plus rien.
+Les autres voient seulement que je ne suis pas libre.
+
+- Logique pure : `src/lib/scheduling/outingLimits.ts`, appliquée par `toPeople`
+  (`convert.ts`). Les sorties sont comptées sur les semaines complètes touchées par la plage.
+- BD : `profiles.max_outings_per_day` (1 à 5) et `max_outings_per_week` (1 à 21) ;
+  `group_busy_blocks` renvoie `is_outing` pour compter les sorties des autres membres, sans
+  révéler le titre ni le groupe d'un plan d'ailleurs.
+- Sans la migration, aucune limite n'est appliquée et le profil dit qu'elle manque.
+- Limite : en cherchant un autre moment pour un plan, l'ancien plan compte encore comme une
+  sortie tant qu'il n'est pas annulé.
+
+## Tests de bout en bout (navigateur)
+
+`npm run test:e2e` construit l'app puis lance Playwright (`e2e/`, config dans
+`playwright.config.ts`) dans Chromium, en format ordinateur et téléphone (Pixel 7), sur le
+serveur de production (port 3100). Première fois sur une machine : `npx playwright install
+chromium`.
+
+Ces tests tournent **sans Supabase** : accueil, changement de langue (FR ↔ EN, gardé dans le
+cookie), redirection de chaque page protégée vers `/connexion?next=…`, message « connexion non
+configurée », manifeste PWA, pas de défilement horizontal ni d'erreur dans la console.
+
+**Pas couvert** : les pages connectées (horaire, groupes, plans, profil). Elles demandent un
+projet Supabase de test (jamais celui de production) avec deux comptes ; à ajouter dans
+`e2e/` quand il existera. La logique derrière ces pages reste couverte par Vitest et PGlite.
 
 ## Planificateur d'étude : la logique (segment 13)
 

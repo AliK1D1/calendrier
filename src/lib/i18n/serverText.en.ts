@@ -97,6 +97,7 @@ export const EN_TEXTS: Record<string, string> = {
   "Indique le début et la fin de la session.": "Enter the start and end of the term.",
   "Jour de la semaine invalide.": "Invalid day of the week.",
   "Jour invalide.": "Invalid day.",
+  "Limite de sorties invalide.": "Invalid outing limit.",
   "L'enregistrement n'a pas fonctionné. Réessaie.": "Saving didn't work. Try again.",
   "L'heure de fin doit être après l'heure de début.": "The end time must be after the start time.",
   "La base de données n'est pas configurée.": "The database is not configured.",

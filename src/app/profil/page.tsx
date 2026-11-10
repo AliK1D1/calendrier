@@ -12,6 +12,7 @@ import {
   getMyPlaces,
   getMyPrivacy,
   getMyProfile,
+  getMyOutingLimits,
   getMyQuietHours,
   getMyStudyPreferences,
 } from "@/lib/profile";
@@ -19,11 +20,14 @@ import { getOutlookConfig } from "@/lib/outlook/config";
 import { getOutlookStatus } from "@/lib/outlook/supabaseStore";
 import { SUBSCRIPTION_MAX_PER_USER } from "@/lib/scheduling/subscriptions";
 import { getMySubscriptions } from "@/lib/subscriptions/supabaseStore";
+import { getI18n } from "@/lib/i18n/server";
+import { outingLimitsFromDb } from "@/lib/scheduling/outingLimits";
 import { quietHoursFromDb } from "@/lib/scheduling/quietHours";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { AppearanceForm } from "./appearance-form";
 import { PrivacyForm } from "./privacy-form";
+import { OutingLimitsForm } from "./outing-limits-form";
 import { OutlookCard } from "./outlook-card";
 import { ProfileForm } from "./profile-form";
 import { QuietHoursForm } from "./quiet-hours-form";
@@ -59,16 +63,30 @@ export default async function Profil({
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/connexion?next=/profil");
 
-  const [profile, places, quietRow, hideTitles, studyPrefs, outlookStatus, subscriptions] =
-    await Promise.all([
-      getMyProfile(supabase, data.user.id),
-      getMyPlaces(supabase, data.user.id),
-      getMyQuietHours(supabase, data.user.id),
-      getMyPrivacy(supabase, data.user.id),
-      getMyStudyPreferences(supabase, data.user.id),
-      getOutlookStatus(supabase, data.user.id),
-      getMySubscriptions(supabase, data.user.id),
-    ]);
+  const { t } = await getI18n();
+  const [
+    profile,
+    places,
+    quietRow,
+    hideTitles,
+    studyPrefs,
+    outlookStatus,
+    subscriptions,
+    outingRow,
+  ] = await Promise.all([
+    getMyProfile(supabase, data.user.id),
+    getMyPlaces(supabase, data.user.id),
+    getMyQuietHours(supabase, data.user.id),
+    getMyPrivacy(supabase, data.user.id),
+    getMyStudyPreferences(supabase, data.user.id),
+    getOutlookStatus(supabase, data.user.id),
+    getMySubscriptions(supabase, data.user.id),
+    getMyOutingLimits(supabase, data.user.id),
+  ]);
+  const outingLimits = outingLimitsFromDb(
+    outingRow?.max_outings_per_day,
+    outingRow?.max_outings_per_week,
+  );
   const now = new Date();
   const ago = (at: string | null) =>
     at ? formatDistanceStrict(new Date(at), now, { addSuffix: true, locale: frCA }) : null;
@@ -86,6 +104,7 @@ export default async function Profil({
           items={[
             { id: "toi", label: "Toi" },
             { id: "heures", label: "Heures où je ne sors pas" },
+            { id: "sorties", label: t.plans.outingLimit.title },
             { id: "confidentialite", label: "Confidentialité" },
             { id: "outlook", label: "Outlook" },
             { id: "abonnements", label: "Calendriers en ligne" },
@@ -124,6 +143,21 @@ export default async function Profil({
               <p role="alert" className="text-destructive text-sm">
                 La base de données n&apos;est pas à jour : applique supabase/migration-0004.sql
                 (voir README).
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card id="sorties" className="scroll-mt-32">
+          <CardHeader>
+            <CardTitle>{t.plans.outingLimit.title}</CardTitle>
+            <CardDescription>{t.plans.outingLimit.description}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {outingRow ? (
+              <OutingLimitsForm perDay={outingLimits.perDay} perWeek={outingLimits.perWeek} />
+            ) : (
+              <p role="alert" className="text-destructive text-sm">
+                {t.plans.outingLimit.outdated}
               </p>
             )}
           </CardContent>

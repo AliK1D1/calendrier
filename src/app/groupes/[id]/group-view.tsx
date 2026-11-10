@@ -53,6 +53,7 @@ import {
   supprimerFavori,
 } from "../actions";
 import { annulerPlan, proposerMoment, repondrePlan } from "../../plans/actions";
+import type { ReplanRequest } from "@/lib/plans/replan";
 import { MeetupFinder } from "./meetup-finder";
 import type { ScheduleLine } from "./schedule-lines";
 import { useI18n } from "@/lib/i18n/client";
@@ -78,6 +79,8 @@ interface Props {
   /** Actions des plans (remplaçables pour une page de démonstration). */
   planActions?: PlanActions;
   propose?: ProposeAction;
+  /** « Trouver un autre moment » : plan à déplacer (recherche préremplie), sinon `null`. */
+  replan?: ReplanRequest | null;
   search?: Parameters<typeof MeetupFinder>[0]["search"];
   /** Action « Je suis libre maintenant » (remplaçable pour une page de démonstration). */
   freeNowSearch?: Parameters<typeof FreeNow>[0]["search"];
@@ -111,6 +114,25 @@ export function GroupView(props: Props) {
   const [proposeDraft, setProposeDraft] = useState<ProposeDraft | null>(null);
   const [extraPlace, setExtraPlace] = useState<{ id: string; name: string } | null>(null);
   const planActions = props.planActions ?? DEFAULT_PLAN_ACTIONS;
+  const replan = props.replan ?? null;
+  // L'ancien plan n'est proposé à l'annulation qu'une fois.
+  const [replanDone, setReplanDone] = useState(false);
+
+  /** Après avoir proposé le nouveau moment : j'annule l'ancien plan si c'est le mien. */
+  async function cancelOldPlan() {
+    if (!replan?.isMine || replanDone) return;
+    const yes = await confirm({
+      message: t.plans.replanCancelOld(replan.title, replan.when),
+      action: t.plans.replanCancelAction,
+    });
+    if (!yes) return;
+    setReplanDone(true);
+    const r = await planActions.annuler(replan.planId, groupId);
+    setMessage(
+      r.ok ? { type: "ok", text: t.plans.replanDone } : { type: "erreur", text: tr(r.error) },
+    );
+    if (r.ok) router.replace(`/groupes/${groupId}`, { scroll: false });
+  }
 
   const placeOptions = useMemo(() => {
     const list = favorites.map((f) => ({ id: f.id, name: f.name }));
@@ -123,7 +145,7 @@ export function GroupView(props: Props) {
     setExtraPlace(p.placeId && p.placeName ? { id: p.placeId, name: p.placeName } : null);
     const everyone = members.every((m) => participantIds.includes(m.userId));
     setProposeDraft({
-      title: call ? tg.callTitle : t.plans.defaultTitle,
+      title: call ? tg.callTitle : (replan?.title ?? t.plans.defaultTitle),
       ...draftFromSlot(p.start, p.durationMinutes),
       placeId: call ? null : p.placeId,
       location: call ? tg.callLocation : "",
@@ -390,6 +412,7 @@ export function GroupView(props: Props) {
             myId={myId}
             members={members}
             onPropose={proposeFromSlot}
+            replan={replan}
             {...(props.search ? { search: props.search } : {})}
           />
           {invite}
@@ -405,6 +428,7 @@ export function GroupView(props: Props) {
               setProposeDraft(null);
               setMessage({ type: "ok", text });
               document.getElementById("propositions")?.scrollIntoView({ behavior: "smooth" });
+              void cancelOldPlan();
             }}
           />
         </>

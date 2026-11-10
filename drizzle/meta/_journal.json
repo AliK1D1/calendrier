@@ -155,6 +155,13 @@
       "when": 1794323161112,
       "tag": "0021_skip_days",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794324672030,
+      "tag": "0022_outing_limits",
+      "breakpoints": true
     }
   ]
 }

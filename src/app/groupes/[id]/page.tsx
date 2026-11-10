@@ -9,6 +9,9 @@ import { toBlockSpec } from "@/lib/db/convert";
 import { getGroupDetail } from "@/lib/groups/queries";
 import { inviteUrl, validateUuid } from "@/lib/groups/validation";
 import { loadPlans } from "@/lib/plans/queries";
+import { MAX_MEETUP_DURATION } from "@/lib/meetups/search";
+import { replanRequest } from "@/lib/plans/replan";
+import { MIN_SHORTENED_MINUTES } from "@/lib/scheduling/explainNoMeetup";
 import { computePlanReviews, reviewTargets, withReview } from "@/lib/plans/review";
 import { TIME_ZONE } from "@/lib/scheduling/time";
 import { shiftDay } from "@/lib/scheduling/weeklyBlocks";
@@ -27,8 +30,15 @@ export const dynamic = "force-dynamic";
 /** Jours d'avance pour lesquels on montre les blocs ponctuels. */
 const ONE_OFF_DAYS = 14;
 
-export default async function PageGroupe({ params }: { params: Promise<{ id: string }> }) {
+export default async function PageGroupe({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ replanifier?: string | string[] }>;
+}) {
   const { id } = await params;
+  const { replanifier } = await searchParams;
   const gid = validateUuid(id);
   if (!gid.ok) notFound();
 
@@ -58,6 +68,13 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
         ),
       )
     : null;
+  // « Trouver un autre moment » (lien d'un plan à revoir) : recherche préremplie.
+  const replan = replanRequest(
+    planViews ?? [],
+    typeof replanifier === "string" ? replanifier : undefined,
+    group.members.map((m) => m.userId),
+    { min: MIN_SHORTENED_MINUTES, max: MAX_MEETUP_DURATION },
+  );
   const today = formatInTimeZone(now, TIME_ZONE, "yyyy-MM-dd");
   const schedules: MemberSchedule[] = group.members.map((m) => ({
     userId: m.userId,
@@ -95,6 +112,7 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
           schedules={schedules}
           plans={planViews ? planViews.filter((p) => p.state !== "cancelled") : null}
           plansError={plans.ok ? null : tr(plans.error)}
+          replan={replan}
         />
       </main>
     </>

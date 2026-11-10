@@ -7,6 +7,12 @@
  * après le changement d'heure (l'instant UTC, lui, change). Voir `zonedTime` pour les heures
  * qui n'existent pas ou existent deux fois.
  */
+import {
+  hasOutingLimit,
+  outingCountRange,
+  outingLimitBlocks,
+  outingLimitsFromDb,
+} from "@/lib/scheduling/outingLimits";
 import { formatInTimeZone } from "date-fns-tz";
 
 import {
@@ -60,7 +66,12 @@ export type ProfileInput = Pick<
   ProfileRow,
   "id" | "display_name" | "travel_mode" | "home_place_id"
 > &
-  Partial<Pick<ProfileRow, "unavailable_before" | "unavailable_after">>;
+  Partial<
+    Pick<
+      ProfileRow,
+      "unavailable_before" | "unavailable_after" | "max_outings_per_day" | "max_outings_per_week"
+    >
+  >;
 /** Colonnes utiles d'un lieu. */
 export type PlaceInput = Pick<PlaceRow, "id" | "owner_id" | "name" | "lat" | "lng">;
 /**
@@ -82,7 +93,16 @@ export type BusyBlockInput = Pick<
   Partial<Pick<BusyBlockRow, "repeat_unit" | "repeat_every">> & {
     /** Occurrences annulées (migration 0021) ; absentes avant. */
     skip_days?: string[] | null;
+    /** Origine du bloc (mes propres lignes) : « meetup » = une sortie (plan de groupe). */
+    source?: string;
+    /** `group_busy_blocks` (migration 0022) : le bloc est une sortie (plan de groupe). */
+    is_outing?: boolean | null;
   };
+
+/** Vrai si la ligne est une sortie : un plan de groupe accepté ou proposé. */
+export function isOutingRow(row: Pick<BusyBlockInput, "source" | "is_outing">): boolean {
+  return row.is_outing === true || row.source === "meetup";
+}
 
 /** Jours annulés d'une ligne (rien pour un bloc ponctuel ou avant la migration 0021). */
 function skipDaysOf(row: Pick<BusyBlockInput, "skip_days">): { skipDays?: string[] } {
@@ -337,9 +357,22 @@ export function toPeople(
       home,
       timeZone,
     );
+    // Limite de sorties (migration 0022) : les jours où elle est atteinte comptent comme
+    // occupés à la maison, même pendant une disponibilité ponctuelle.
+    const limits = outingLimitsFromDb(profile.max_outings_per_day, profile.max_outings_per_week);
+    const outingRows = hasOutingLimit(limits) ? ownBlocks.filter(isOutingRow) : [];
+    const limitBlocks = outingRows.length
+      ? outingLimitBlocks(
+          expandBusyBlocks(outingRows, outingCountRange(range), home, timeZone),
+          limits,
+          range,
+          home,
+          timeZone,
+        )
+      : [];
     const busyBlocks = applyOneOffAvailability(
       [...weekly, ...quietHoursBlocks(quiet, range, home, timeZone)],
-      oneOff,
+      [...oneOff, ...limitBlocks],
       (availabilitiesByOwner.get(profile.id) ?? []).map(toOneOffAvailability),
       home,
       timeZone,

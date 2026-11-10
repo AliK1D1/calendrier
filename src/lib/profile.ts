@@ -169,3 +169,23 @@ export async function getMyStudyPreferences(
   }
   return toStudyPreferences(data);
 }
+
+/**
+ * Ma limite de sorties (colonnes de la migration 0022). `null` si on ne peut pas la lire
+ * (migration pas encore appliquée) : la page l'indique au lieu de planter.
+ */
+export async function getMyOutingLimits(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Pick<ProfileRow, "max_outings_per_day" | "max_outings_per_week"> | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("max_outings_per_day, max_outings_per_week")
+    .eq("id", userId)
+    .maybeSingle<Pick<ProfileRow, "max_outings_per_day" | "max_outings_per_week">>();
+  if (error) {
+    console.error("Profil (limite de sorties) :", error.code, error.message);
+    return null;
+  }
+  return data ?? { max_outings_per_day: null, max_outings_per_week: null };
+}

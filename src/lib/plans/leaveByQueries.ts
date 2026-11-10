@@ -12,6 +12,19 @@ import type { Locale } from "@/lib/i18n/config";
 const BLOCK_COLUMNS =
   "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, repeat_unit, repeat_every, meetup_plan_id";
 
+/** Mes blocs, avec les occurrences annulées (migration 0021) si la colonne existe. */
+async function readBlocks(supabase: SupabaseClient, myId: string) {
+  const read = (columns: string) =>
+    supabase
+      .from("busy_blocks")
+      .select(columns)
+      .eq("owner_id", myId)
+      .limit(2000)
+      .returns<LeaveByBlock[]>();
+  const withSkips = await read(`${BLOCK_COLUMNS}, skip_days`);
+  return withSkips.error?.code === "42703" ? read(BLOCK_COLUMNS) : withSkips;
+}
+
 /**
  * Story 6 : ajoute « Pars de … à HH:MM » à mes prochains plans en personne. Lit, au nom de la
  * personne connectée (RLS), SON profil, SES blocs et les lieux nécessaires (les siens et ceux
@@ -32,12 +45,7 @@ export async function addLeaveBy(
         home_place_id: string | null;
         travel_mode: "walk" | "bike" | "transit" | "car";
       }>(),
-      supabase
-        .from("busy_blocks")
-        .select(BLOCK_COLUMNS)
-        .eq("owner_id", myId)
-        .limit(2000)
-        .returns<LeaveByBlock[]>(),
+      readBlocks(supabase, myId),
     ]);
     if (profile.error || blocks.error) {
       const e = profile.error ?? blocks.error;

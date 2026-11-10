@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { type ActionResult, dbErrorMessage, fail, requireUser } from "@/lib/actions";
 import { validateDisplayName, validateTravelMode } from "@/lib/places/validation";
+import { validateOutingLimits } from "@/lib/scheduling/outingLimits";
 import { quietHoursToDb, validateQuietHours } from "@/lib/scheduling/quietHours";
 
 /** Met à jour mon nom affiché et mon mode de transport. */
@@ -58,6 +59,28 @@ export async function enregistrerConfidentialite(hideTitles: unknown): Promise<A
     .eq("id", ctx.user.id)
     .select("id");
   if (error) return fail(dbErrorMessage("Confidentialité", error));
+  if (!data?.length) return fail("Profil introuvable.");
+  revalidatePath("/profil");
+  revalidatePath("/groupes", "layout");
+  return { ok: true };
+}
+
+/** Limite de sorties : plans de groupe par jour et par semaine au plus (vide : pas de limite). */
+export async function enregistrerLimiteSorties(input: unknown): Promise<ActionResult> {
+  const limits = validateOutingLimits(input);
+  if (!limits.ok) return fail(limits.error);
+  const ctx = await requireUser();
+  if (!ctx.ok) return fail(ctx.error);
+
+  const { data, error } = await ctx.supabase
+    .from("profiles")
+    .update({
+      max_outings_per_day: limits.value.perDay,
+      max_outings_per_week: limits.value.perWeek,
+    })
+    .eq("id", ctx.user.id)
+    .select("id");
+  if (error) return fail(dbErrorMessage("Limite de sorties", error));
   if (!data?.length) return fail("Profil introuvable.");
   revalidatePath("/profil");
   revalidatePath("/groupes", "layout");

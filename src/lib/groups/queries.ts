@@ -44,6 +44,8 @@ export interface GroupBusyBlock {
   repeat_every?: number;
   /** Occurrences annulées (migration 0021 ; absentes avant). */
   skip_days?: string[] | null;
+  /** Le bloc est une sortie, un plan de groupe (migration 0022 ; absent avant). */
+  is_outing?: boolean | null;
 }
 
 export interface GroupDetail {

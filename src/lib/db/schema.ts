@@ -104,9 +104,24 @@ export const profiles = pgTable(
      * lieu, pas le titre de mes blocs. Appliqué par la BD (fonction `group_busy_blocks`).
      */
     hide_block_titles: boolean("hide_block_titles").notNull().default(true),
+    /**
+     * Limite de sorties (migration 0022) : plans de groupe par jour et par semaine au plus.
+     * Nulle = pas de limite. Atteinte, la personne compte comme occupée tout le jour.
+     */
+    max_outings_per_day: smallint("max_outings_per_day"),
+    max_outings_per_week: smallint("max_outings_per_week"),
     created_at: createdAt(),
   },
   (t) => [
+    // Mêmes bornes que OUTING_LIMIT_RANGE (lib/scheduling/outingLimits.ts).
+    check(
+      "profiles_max_outings_per_day_range",
+      sql`${t.max_outings_per_day} is null or ${t.max_outings_per_day} between 1 and 5`,
+    ),
+    check(
+      "profiles_max_outings_per_week_range",
+      sql`${t.max_outings_per_week} is null or ${t.max_outings_per_week} between 1 and 21`,
+    ),
     // Même limite que validateDisplayName (le nom est visible par les membres des groupes).
     check("profiles_display_name_length", sql`length(${t.display_name}) <= 60`),
     // Même règle que USERNAME_PATTERN (lib/auth/signup.ts).

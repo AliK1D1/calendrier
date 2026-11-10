@@ -5,6 +5,7 @@ import {
   Bike,
   Bus,
   CalendarPlus,
+  CalendarSearch,
   Car,
   Check,
   Clock,
@@ -19,6 +20,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { LeaveByView } from "@/lib/plans/leaveBy";
+import { replanHref } from "@/lib/plans/replan";
 import type { PlanView } from "@/lib/plans/view";
 import { formatInstantDay } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
@@ -180,6 +182,11 @@ export function PlanCard({ plan: p, pending, onRespond, onCancel, showGroup }: P
               {p.review.mine && <p className="break-words">{p.review.mine}</p>}
               {p.review.others && <p className="break-words">{p.review.others}</p>}
               <p className="text-muted-foreground text-xs">{tp.reviewHint}</p>
+              <Button asChild variant="outline" size="sm" className="mt-1 self-start">
+                <Link href={replanHref(p)}>
+                  <CalendarSearch /> {tp.findAnother}
+                </Link>
+              </Button>
             </div>
           </div>
         )}

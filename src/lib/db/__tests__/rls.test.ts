@@ -116,7 +116,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0021.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0022.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -139,6 +139,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0019.sql",
       "supabase/migration-0020.sql",
       "supabase/migration-0021.sql",
+      "supabase/migration-0022.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -2900,5 +2901,51 @@ describe("cours annulé cette fois-ci (migration 0021)", () => {
         ).then(() => rows("UPDATE busy_blocks SET skip_days = '{2026-11-12}' WHERE title = 'RDV'")),
       ),
     ).rejects.toThrow();
+  });
+});
+
+describe("limite de sorties (migration 0022)", () => {
+  it("je règle ma limite ; hors bornes refusé ; personne ne règle celle d'un autre", async () => {
+    await as(A, () =>
+      rows("UPDATE profiles SET max_outings_per_day = 1, max_outings_per_week = 3 WHERE id = $1", [
+        A,
+      ]),
+    );
+    await expect(
+      as(A, () => rows("UPDATE profiles SET max_outings_per_day = 0 WHERE id = $1", [A])),
+    ).rejects.toThrow();
+    await expect(
+      as(A, () => rows("UPDATE profiles SET max_outings_per_week = 22 WHERE id = $1", [A])),
+    ).rejects.toThrow();
+    await as(B, () => rows("UPDATE profiles SET max_outings_per_day = 5 WHERE id = $1", [A]));
+    const [p] = await rows<{ d: number; w: number }>(
+      "SELECT max_outings_per_day AS d, max_outings_per_week AS w FROM profiles WHERE id = $1",
+      [A],
+    );
+    expect(p).toEqual({ d: 1, w: 3 });
+  });
+
+  it("group_busy_blocks dit quels blocs sont des sorties, sans révéler le plan d'un autre groupe", async () => {
+    await seedSchedule(A, "Maths");
+    const g = await createGroup(A, "Amis");
+    await join_(B, g.code);
+    const autre = await createGroup(A, "Famille");
+    await join_(C, autre.code);
+    await as(A, () =>
+      rows(
+        "SELECT public.propose_meetup($1, (date_trunc('day', now() AT TIME ZONE 'America/Toronto') + interval '2 days 18 hours') AT TIME ZONE 'America/Toronto', (date_trunc('day', now() AT TIME ZONE 'America/Toronto') + interval '2 days 20 hours') AT TIME ZONE 'America/Toronto', 'Souper secret', NULL, 'Chez nous', NULL)",
+        [autre.id],
+      ),
+    );
+    const seen = await as(B, () =>
+      rows<{ title: string; is_outing: boolean }>(
+        "SELECT title, is_outing FROM public.group_busy_blocks($1) WHERE owner_id = $2 ORDER BY is_outing",
+        [g.id, A],
+      ),
+    );
+    expect(seen).toEqual([
+      { title: "Occupé", is_outing: false },
+      { title: "Occupé", is_outing: true },
+    ]);
   });
 });

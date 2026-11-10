@@ -39,6 +39,28 @@ export const plans = {
   seriesStopped: "Série arrêtée pour tout le monde.",
   cancelledMsg: "Plan annulé.",
   // Carte d'un plan
+  outingLimit: {
+    title: "Limite de sorties",
+    description:
+      "Pas plus de tant de plans de groupe par jour ou par semaine (du lundi au dimanche). Une fois la limite atteinte, l'app ne te propose plus rien ce jour-là ; tes amis voient seulement que tu n'es pas libre.",
+    perDay: "Sorties par jour, au plus",
+    perWeek: "Sorties par semaine, au plus",
+    none: "Pas de limite",
+    count: (n: number) => (n === 1 ? "1 sortie" : `${n} sorties`),
+    save: "Enregistrer la limite",
+    saved: "Limite enregistrée.",
+    outdated:
+      "La base de données n'est pas à jour : applique supabase/migration-0022.sql (voir README).",
+  },
+  findAnother: "Trouver un autre moment",
+  replanTitle: (title: string, when: string) => `Nouveau moment pour « ${title} » (${when})`,
+  replanHint: "Même durée, mêmes personnes. Choisis un moment ci-dessous et propose-le au groupe.",
+  replanHintOther:
+    "Même durée, mêmes personnes. Choisis un moment ci-dessous et propose-le au groupe ; la personne qui a proposé l'ancien plan pourra ensuite l'annuler.",
+  replanCancelOld: (title: string, when: string) =>
+    `Le nouveau moment est proposé. Annuler l'ancien plan « ${title} » (${when}) ?`,
+  replanCancelAction: "Annuler l'ancien plan",
+  replanDone: "Nouveau moment proposé et ancien plan annulé.",
   reviewBadge: "À revoir",
   reviewLabel: "Plan à revoir",
   reviewMine: (title: string, from: string, to: string) =>

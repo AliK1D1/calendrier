@@ -28,6 +28,7 @@ import {
 import type { Result } from "@/lib/places/validation";
 import { MEETUP_PERIODS, type MeetupPeriod } from "@/lib/scheduling/period";
 
+import type { ReplanRequest } from "@/lib/plans/replan";
 import { chercherMoments } from "../meetup-actions";
 import { useI18n } from "@/lib/i18n/client";
 import { formatDuration as formatDurationLocale } from "@/lib/i18n/format";
@@ -42,6 +43,8 @@ interface Props {
   search?: Search;
   /** « Proposer ce moment » sur une carte (avec les participants de la recherche). */
   onPropose?: (p: ProposalView, participantIds: string[]) => void;
+  /** « Trouver un autre moment » : plan à déplacer ; la recherche part toute seule. */
+  replan?: ReplanRequest | null;
 }
 
 /** Propositions montrées avant « Voir les N propositions ». */
@@ -74,14 +77,17 @@ export function MeetupFinder({
   members,
   search = chercherMoments,
   onPropose,
+  replan = null,
 }: Props) {
   const formId = useId();
   const { locale, t, tr } = useI18n();
   const tm = t.meetups;
   const formatDuration = (m: number) => formatDurationLocale(Math.floor(m), locale);
-  const [selected, setSelected] = useState<string[]>(members.map((m) => m.userId));
+  const [selected, setSelected] = useState<string[]>(
+    replan?.participantIds ?? members.map((m) => m.userId),
+  );
   const [period, setPeriod] = useState<MeetupPeriod>("this-week");
-  const [duration, setDuration] = useState<number>(60);
+  const [duration, setDuration] = useState<number>(replan?.durationMinutes ?? 60);
   const [buffer, setBuffer] = useState(String(DEFAULT_BUFFER_MINUTES));
   const [view, setView] = useState<MeetupSearchView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +124,16 @@ export function MeetupFinder({
       }
     });
   }
+
+  // « Trouver un autre moment » : on lance la recherche une fois, à l'arrivée sur la page.
+  const replanStarted = useRef(false);
+  useEffect(() => {
+    if (!replan || replanStarted.current) return;
+    replanStarted.current = true;
+    run({ participantIds: replan.participantIds, durationMinutes: replan.durationMinutes }, null);
+    // Seulement à l'arrivée : `run` change à chaque rendu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replan]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -183,6 +199,16 @@ export function MeetupFinder({
       <h2 id="se-voir" className="titre-section scroll-mt-32">
         {tm.title}
       </h2>
+      {replan && (
+        <div className="bg-accent/50 flex flex-col gap-1 rounded-lg px-3 py-2 text-sm" role="note">
+          <p className="font-medium break-words">
+            {t.plans.replanTitle(replan.title, replan.when)}
+          </p>
+          <p className="text-muted-foreground">
+            {replan.isMine ? t.plans.replanHint : t.plans.replanHintOther}
+          </p>
+        </div>
+      )}
       <form
         onSubmit={submit}
         className="rangee flex flex-col gap-4 p-4"

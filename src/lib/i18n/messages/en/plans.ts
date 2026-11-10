@@ -38,6 +38,27 @@ export const plans: typeof fr = {
     `Cancel “${title}”? It will be removed from the schedule of everyone who accepted it.`,
   seriesStopped: "Series stopped for everyone.",
   cancelledMsg: "Plan cancelled.",
+  outingLimit: {
+    title: "Outing limit",
+    description:
+      "No more than this many group plans per day or per week (Monday to Sunday). Once you reach the limit, the app stops suggesting anything that day; your friends only see that you're not free.",
+    perDay: "Outings per day, at most",
+    perWeek: "Outings per week, at most",
+    none: "No limit",
+    count: (n: number) => (n === 1 ? "1 outing" : `${n} outings`),
+    save: "Save the limit",
+    saved: "Limit saved.",
+    outdated: "The database is not up to date: apply supabase/migration-0022.sql (see the README).",
+  },
+  findAnother: "Find another time",
+  replanTitle: (title: string, when: string) => `New time for “${title}” (${when})`,
+  replanHint: "Same length, same people. Pick a time below and propose it to the group.",
+  replanHintOther:
+    "Same length, same people. Pick a time below and propose it to the group; the person who proposed the old plan can then cancel it.",
+  replanCancelOld: (title: string, when: string) =>
+    `The new time is proposed. Cancel the old plan “${title}” (${when})?`,
+  replanCancelAction: "Cancel the old plan",
+  replanDone: "New time proposed and old plan cancelled.",
   reviewBadge: "Needs review",
   reviewLabel: "Plan to review",
   reviewMine: (title: string, from: string, to: string) =>

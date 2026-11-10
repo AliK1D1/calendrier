@@ -49,7 +49,9 @@ export default async function Connexion({ searchParams }: { searchParams: Search
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl sm:text-[1.75rem]">{t.auth.title}</CardTitle>
+          <CardTitle role="heading" aria-level={1} className="text-2xl sm:text-[1.75rem]">
+            {t.auth.title}
+          </CardTitle>
           <CardDescription>{t.auth.description}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">

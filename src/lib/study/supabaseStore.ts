@@ -51,13 +51,18 @@ export function supabaseStudyStore(supabase: SupabaseClient, userId: string): St
       return { ok: true, value: data ?? [] };
     },
     async blocks() {
-      const { data, error } = await supabase
-        .from("busy_blocks")
-        .select(
-          "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, repeat_unit, repeat_every, source, deadline_id, movable",
-        )
-        .eq("owner_id", userId)
-        .returns<StudyBlockInput[]>();
+      const columns =
+        "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, repeat_unit, repeat_every, source, deadline_id, movable";
+      const read = (cols: string) =>
+        supabase
+          .from("busy_blocks")
+          .select(cols)
+          .eq("owner_id", userId)
+          .returns<StudyBlockInput[]>();
+      // Cours annulé cette fois-ci (migration 0021) : libre pour étudier ; sans la colonne, on
+      // lit comme avant.
+      let { data, error } = await read(`${columns}, skip_days`);
+      if (error?.code === "42703") ({ data, error } = await read(columns));
       if (error) return fail("Étude (horaire)", error);
       return { ok: true, value: data ?? [] };
     },

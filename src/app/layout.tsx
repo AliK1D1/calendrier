@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n/client";
 import { HTML_LANG } from "@/lib/i18n/config";
 import { getI18n } from "@/lib/i18n/server";
@@ -7,14 +7,18 @@ import { COULEUR_BARRE, SCRIPT_APPARENCE } from "@/lib/ux/apparence";
 
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Texte : Instrument Sans, un peu étroite, pour que les titres de cours tiennent dans la grille
+// de l'horaire. Titres : Bricolage Grotesque, plus de caractère.
+const texte = Instrument_Sans({
+  variable: "--font-texte",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const titres = Bricolage_Grotesque({
+  variable: "--font-titres",
   subsets: ["latin"],
+  display: "swap",
 });
 
 /** Titre et description dans la langue choisie. */
@@ -62,7 +66,7 @@ export default async function RootLayout({
         {/* Texte fixe écrit par nous (aucune donnée de l'utilisateur) : sans risque d'injection. */}
         <script dangerouslySetInnerHTML={{ __html: SCRIPT_APPARENCE }} />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${texte.variable} ${titres.variable} antialiased`}>
         <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>
     </html>

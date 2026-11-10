@@ -67,18 +67,18 @@ export function NavLinks({ plansBadge }: { plansBadge?: ReactNode }) {
             href={l.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "hover:text-foreground items-center rounded-md transition-colors sm:h-8 sm:px-2.5",
+              "hover:text-foreground items-center rounded-full transition-colors sm:h-9 sm:px-3",
               // Téléphone : seulement les liens secondaires, avec une zone de 44 px de large.
               secondaire
                 ? "flex gap-1.5 max-sm:min-w-11 max-sm:justify-center max-sm:px-1"
                 : "hidden sm:flex",
               "max-sm:h-full",
               active
-                ? "text-foreground sm:bg-accent sm:text-accent-foreground font-medium"
-                : "text-muted-foreground sm:hover:bg-accent/60",
+                ? "text-primary sm:bg-primary/10 font-semibold"
+                : "text-muted-foreground sm:hover:bg-accent/70 font-medium",
             )}
           >
-            <Icon className="size-5 sm:hidden" aria-hidden />
+            <Icon className="size-5 shrink-0 sm:hidden" aria-hidden />
             {t.common.nav[l.label]}
             {l.href === "/plans" && plansBadge}
           </Link>
@@ -100,7 +100,7 @@ export function BottomTabs({ plansBadge }: { plansBadge?: ReactNode }) {
     <nav
       aria-label={t.common.nav.tabs}
       data-barre-onglets
-      className="bg-card/95 fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
+      className="bg-card/92 fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-md sm:hidden"
     >
       <ul className="grille-4-quart mx-auto h-(--barre-onglets) max-w-md px-2">
         {PRINCIPAUX.map((l) => {
@@ -113,13 +113,13 @@ export function BottomTabs({ plansBadge }: { plansBadge?: ReactNode }) {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex flex-1 flex-col items-center justify-center gap-0.5 text-xs",
-                  active ? "text-primary font-semibold" : "text-muted-foreground",
+                  active ? "text-primary font-bold" : "text-muted-foreground font-medium",
                 )}
               >
                 <span
                   className={cn(
                     "relative flex h-7 w-14 items-center justify-center rounded-full transition-colors",
-                    active && "bg-primary/12",
+                    active && "bg-primary/14",
                   )}
                 >
                   <Icon className="size-5" aria-hidden />

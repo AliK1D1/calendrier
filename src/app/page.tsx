@@ -2,11 +2,14 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { CalendarSearch, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
+import { Avatar } from "@/components/avatar";
 import { FreeNow } from "@/components/free-now";
+import { HomeDemo } from "@/components/home-demo";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { LogoMark } from "@/components/logo-mark";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMyGroups } from "@/lib/groups/queries";
 import { addLeaveBy } from "@/lib/plans/leaveByQueries";
 import { loadPlans } from "@/lib/plans/queries";
@@ -26,40 +29,57 @@ export default async function Accueil() {
   const supabase = await createSupabaseServerClient();
   const user = supabase ? (await supabase.auth.getUser()).data.user : null;
   if (supabase && user) return <AccueilConnecte supabase={supabase} user={user} />;
-  const { t } = await getI18n();
+  const { locale, t } = await getI18n();
 
   return (
-    <main className="grille-4 mx-auto min-h-dvh max-w-3xl content-start gap-y-8 px-4 py-12 sm:py-20">
-      <header className="flex flex-col gap-3">
-        <LogoMark className="size-10 rounded-xl [&>svg]:size-5" />
-        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">{t.common.appName}</h1>
-        <p className="text-muted-foreground text-lg">{t.home.intro}</p>
-      </header>
-
-      <div>
-        <Button asChild size="lg">
-          <Link href="/connexion">{t.home.signIn}</Link>
-        </Button>
+    <main className="grille-4 mx-auto min-h-dvh max-w-3xl content-start gap-y-10 px-4 pt-6 pb-16 sm:gap-y-14">
+      <div className="flex items-center justify-between gap-2">
+        <LogoMark className="size-9" />
+        <div className="flex items-center gap-1">
+          <LanguageSwitcher />
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/connexion">{t.home.signIn}</Link>
+          </Button>
+        </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-3" aria-label={t.home.howItWorks}>
-        {t.home.pitch.map((etape, i) => (
-          <Card key={etape.title}>
-            <CardHeader>
+      <header className="flex flex-col gap-5">
+        <h1 className="font-display text-[clamp(2.75rem,1.6rem+6vw,4.75rem)] leading-[0.95] font-extrabold tracking-[-0.035em]">
+          {t.common.appName}
+        </h1>
+        <p className="text-muted-foreground max-w-xl text-lg">{t.home.intro}</p>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild size="lg">
+            <Link href="/inscription">{t.home.createAccount}</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline">
+            <Link href="/connexion">{t.home.signIn}</Link>
+          </Button>
+        </div>
+      </header>
+
+      <HomeDemo t={t.home.demo} locale={locale} />
+
+      <section aria-labelledby="comment" className="flex flex-col gap-4">
+        <h2 id="comment" className="titre-section">
+          {t.home.howItWorks}
+        </h2>
+        <ol className="grid gap-x-6 gap-y-5 sm:grid-cols-3">
+          {t.home.pitch.map((etape, i) => (
+            <li key={etape.title} className="flex gap-3 border-t pt-4 sm:flex-col sm:gap-2">
               <span
                 aria-hidden
-                className="bg-primary/10 text-primary mb-2 flex size-8 items-center justify-center rounded-full text-sm font-semibold"
+                className="font-display text-primary text-3xl leading-none font-extrabold tabular-nums"
               >
                 {i + 1}
               </span>
-              <CardTitle>
-                <span className="sr-only">{i + 1}. </span>
-                {etape.title}
-              </CardTitle>
-              <CardDescription>{etape.text}</CardDescription>
-            </CardHeader>
-          </Card>
-        ))}
+              <div className="flex flex-col gap-1">
+                <h3 className="font-semibold">{etape.title}</h3>
+                <p className="text-muted-foreground text-sm">{etape.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
     </main>
   );
@@ -98,8 +118,8 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight break-words">{t.home.hello(prenom)}</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="titre-page break-words">{t.home.hello(prenom)}</h1>
+          <p className="text-muted-foreground">
             {ready ? t.home.ready : t.home.progress(plan.doneCount)}
           </p>
         </header>
@@ -134,8 +154,8 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
                           href={s.href}
                           aria-current={isNext ? "step" : undefined}
                           className={cn(
-                            "bg-card hover:bg-accent flex items-center gap-3 rounded-lg border p-3",
-                            isNext && "border-primary bg-primary/5",
+                            "hover:bg-accent flex items-center gap-3 rounded-xl border p-3 transition-colors",
+                            isNext && "border-primary bg-primary/6 ring-primary/15 ring-3",
                           )}
                         >
                           <span
@@ -174,7 +194,7 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
 
         {groups.length > 0 && (
           <section aria-labelledby="mes-groupes" className="flex flex-col gap-3">
-            <h2 id="mes-groupes" className="text-lg font-semibold">
+            <h2 id="mes-groupes" className="titre-section">
               {t.home.myGroups}
             </h2>
             <ul className="flex flex-col gap-2">
@@ -182,10 +202,11 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
                 <li key={g.id}>
                   <Link
                     href={`/groupes/${g.id}${g.memberCount >= 2 ? "#se-voir" : "#inviter"}`}
-                    className="bg-card hover:bg-accent flex items-center gap-3 rounded-lg border p-3"
+                    className="rangee hover:border-primary/40 flex items-center gap-3 p-3 transition-colors"
                   >
+                    <Avatar name={g.name} className="rounded-xl" />
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="font-medium break-words">{g.name}</span>
+                      <span className="font-semibold break-words">{g.name}</span>
                       <span className="text-muted-foreground text-xs">
                         {g.memberCount >= 2
                           ? t.home.groupMembers(g.memberCount)

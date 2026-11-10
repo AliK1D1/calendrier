@@ -69,12 +69,9 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
   }
 
   return (
-    <section
-      aria-labelledby={`${id}-titre`}
-      className="bg-card flex flex-col gap-4 rounded-lg border p-4"
-    >
+    <section aria-labelledby={`${id}-titre`} className="rangee flex flex-col gap-4 p-4">
       <div className="flex flex-col gap-1">
-        <h2 id={`${id}-titre`} className="flex items-center gap-2 text-lg font-semibold">
+        <h2 id={`${id}-titre`} className="titre-section flex items-center gap-2">
           <CalendarCheck className="size-5" aria-hidden /> Disponibilités ponctuelles
         </h2>
         <p className="text-muted-foreground text-sm">
@@ -86,7 +83,7 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
       </div>
 
       {unavailable ? (
-        <p className="text-muted-foreground rounded-md border border-dashed p-3 text-sm">
+        <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-sm">
           {unavailable}
         </p>
       ) : (
@@ -147,7 +144,7 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
               className={
                 message.ok
                   ? "text-sm"
-                  : "border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+                  : "border-destructive/40 bg-destructive/8 text-destructive rounded-lg border p-3 text-sm"
               }
             >
               {message.text}

@@ -180,12 +180,12 @@ export function MeetupFinder({
 
   return (
     <section aria-labelledby="se-voir" className="flex flex-col gap-4">
-      <h2 id="se-voir" className="scroll-mt-16 text-lg font-semibold">
+      <h2 id="se-voir" className="titre-section scroll-mt-32">
         {tm.title}
       </h2>
       <form
         onSubmit={submit}
-        className="bg-card flex flex-col gap-4 rounded-lg border p-4"
+        className="rangee flex flex-col gap-4 p-4"
         aria-describedby={`${formId}-aide`}
       >
         <p id={`${formId}-aide`} className="text-muted-foreground text-sm">
@@ -278,7 +278,7 @@ export function MeetupFinder({
       {error && (
         <p
           role="alert"
-          className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+          className="border-destructive/40 bg-destructive/8 text-destructive rounded-lg border p-3 text-sm"
         >
           {tr(error)}
         </p>

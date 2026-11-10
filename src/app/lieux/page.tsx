@@ -31,7 +31,7 @@ export default async function MesLieux() {
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">{t.places.title}</h1>
+          <h1 className="titre-page">{t.places.title}</h1>
           <p className="text-muted-foreground text-sm">{t.places.intro}</p>
         </header>
         <PlacesManager places={places} homeId={profile?.home_place_id ?? null} />

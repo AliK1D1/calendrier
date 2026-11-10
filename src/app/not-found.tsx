@@ -11,7 +11,7 @@ export default async function PageIntrouvable() {
     <>
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-xl content-start gap-y-4 px-4 py-12">
-        <h1 className="text-2xl font-bold tracking-tight">{t.common.notFound.title}</h1>
+        <h1 className="titre-page">{t.common.notFound.title}</h1>
         <p className="text-muted-foreground">{t.common.notFound.body}</p>
         <div className="flex flex-wrap gap-3">
           <Button asChild>

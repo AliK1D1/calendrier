@@ -23,18 +23,22 @@ export async function SiteHeader() {
   );
   return (
     <>
-      <header className="bg-card/90 sticky top-0 z-10 border-b pt-[env(safe-area-inset-top)] backdrop-blur">
+      <header className="bg-background/85 sticky top-0 z-10 border-b pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <nav
           aria-label={t.common.nav.main}
-          className="mx-auto flex h-14 max-w-3xl items-center gap-2 px-4 text-sm sm:gap-4"
+          className="mx-auto flex h-14 max-w-3xl items-center gap-2 px-4 text-sm sm:gap-1"
         >
           <Link
             href="/"
-            className="-ml-1 flex h-11 min-w-0 items-center gap-2 px-1 font-semibold tracking-tight"
+            className="font-display -ml-1 flex h-11 min-w-0 items-center gap-2.5 px-1 text-base font-bold tracking-tight"
             aria-label={t.common.nav.home}
           >
             <LogoMark />
-            <span className="truncate max-[359px]:sr-only">{t.common.appName}</span>
+            {/* Téléphone : le nom court, pour laisser la place à Lieux et Profil. */}
+            <span className="truncate max-sm:hidden">{t.common.appName}</span>
+            <span aria-hidden className="truncate max-[359px]:hidden sm:hidden">
+              {t.common.appShortName}
+            </span>
           </Link>
           <span className="flex-1" />
           <NavLinks plansBadge={badge} />

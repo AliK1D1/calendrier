@@ -71,7 +71,7 @@ export function ProposeDialog({ draft, ...rest }: Props) {
       ref={ref}
       aria-labelledby="proposer-titre"
       onClose={rest.onClose}
-      className="bg-card text-card-foreground m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 shadow-xl backdrop:bg-black/40 sm:m-auto sm:max-w-lg sm:rounded-2xl"
+      className="bg-popover text-popover-foreground shadow-flottant m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 sm:m-auto sm:max-w-lg sm:rounded-2xl"
     >
       {draft && (
         <ProposeForm
@@ -166,7 +166,7 @@ function ProposeForm({
     <form onSubmit={submit} className="flex flex-col gap-4 p-4 sm:p-6">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h2 id="proposer-titre" className="text-lg font-semibold">
+          <h2 id="proposer-titre" className="titre-section">
             {recurring ? tp.titleRecurring : tp.title}
           </h2>
           {initial.fromSlot && (

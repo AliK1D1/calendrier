@@ -3,6 +3,7 @@
 import { AlertTriangle, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,7 +68,7 @@ export function BlockDialog({ draft, ...rest }: Props) {
       ref={ref}
       aria-labelledby="bloc-titre-fenetre"
       onClose={rest.onClose}
-      className="bg-card text-card-foreground m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 shadow-xl backdrop:bg-black/40 sm:m-auto sm:max-w-lg sm:rounded-2xl"
+      className="bg-popover text-popover-foreground shadow-flottant m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 sm:m-auto sm:max-w-lg sm:rounded-2xl"
     >
       {/* Clé : un nouveau brouillon remet le formulaire à zéro. */}
       {draft && <BlockForm key={formKey(draft)} initial={draft} {...rest} />}
@@ -89,6 +90,7 @@ function BlockForm({
   onSaved,
 }: Omit<Props, "draft"> & { initial: BlockDraft }) {
   const { locale, t, tr } = useI18n();
+  const { confirm, confirmDialog } = useConfirm();
   const tb = t.schedule.block;
   const [d, setD] = useState<BlockDraft>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -147,9 +149,13 @@ function BlockForm({
     });
   }
 
-  function remove() {
+  async function remove() {
     if (!d.id) return;
-    if (!window.confirm(tb.confirmDelete(d.kind, d.title))) return;
+    const yes = await confirm({
+      message: tb.confirmDelete(d.kind, d.title),
+      action: t.common.delete,
+    });
+    if (!yes) return;
     setError(null);
     startTransition(async () => {
       const r = await actions.supprimerBloc(d.id);
@@ -170,7 +176,7 @@ function BlockForm({
       }}
     >
       <div className="flex items-center justify-between gap-2">
-        <h2 id="bloc-titre-fenetre" className="text-lg font-semibold">
+        <h2 id="bloc-titre-fenetre" className="titre-section">
           {editing ? tb.editTitle : tb.newTitle}
         </h2>
         <Button
@@ -263,7 +269,7 @@ function BlockForm({
             <label
               key={kind}
               className={cn(
-                "bg-card flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm has-[:focus-visible]:ring-2",
+                "rangee flex cursor-pointer items-center gap-2 p-3 text-sm has-[:focus-visible]:ring-2",
                 d.kind === kind && "border-primary bg-accent font-medium",
               )}
             >
@@ -362,6 +368,7 @@ function BlockForm({
           </Button>
         )}
       </div>
+      {confirmDialog}
     </form>
   );
 }

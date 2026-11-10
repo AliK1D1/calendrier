@@ -4,6 +4,7 @@ import { CalendarPlus, RefreshCw, Rss, Trash2, TriangleAlert } from "lucide-reac
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
 
+import { useConfirm } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,6 +106,7 @@ export function SubscriptionsCard({
   const [outlookChoice, setOutlookChoice] = useState("");
   const [outlookBusy, setOutlookBusy] = useState<boolean | null>(null);
   const full = items.length >= max;
+  const { confirm, confirmDialog } = useConfirm();
 
   const run = (fn: () => Promise<Res>, after?: () => void) => {
     setMessage(null);
@@ -117,7 +119,7 @@ export function SubscriptionsCard({
   };
 
   return (
-    <Card id="abonnements" className="scroll-mt-16">
+    <Card id="abonnements" className="scroll-mt-32">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Rss className="size-5" aria-hidden /> Calendriers en ligne
@@ -139,7 +141,7 @@ export function SubscriptionsCard({
             {items.length > 0 && (
               <ul className="flex flex-col gap-3">
                 {items.map((s) => (
-                  <li key={s.id} className="bg-card flex flex-col gap-2 rounded-lg border p-3">
+                  <li key={s.id} className="rangee flex flex-col gap-2 p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium break-words">{s.name}</span>
                       <Badge variant="secondary">{s.source}</Badge>
@@ -187,14 +189,12 @@ export function SubscriptionsCard({
                         size="sm"
                         variant="ghost"
                         disabled={pending}
-                        onClick={() => {
-                          if (
-                            !window.confirm(
-                              `Retirer « ${s.name} » ? Ses événements ne seront plus affichés ni utilisés.`,
-                            )
-                          ) {
-                            return;
-                          }
+                        onClick={async () => {
+                          const yes = await confirm({
+                            message: `Retirer « ${s.name} » ? Ses événements ne seront plus affichés ni utilisés.`,
+                            action: "Retirer",
+                          });
+                          if (!yes) return;
                           run(() => retirerAbonnement(s.id));
                         }}
                       >
@@ -373,6 +373,7 @@ export function SubscriptionsCard({
             {message.text}
           </p>
         )}
+        {confirmDialog}
       </CardContent>
     </Card>
   );

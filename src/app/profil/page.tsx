@@ -81,7 +81,7 @@ export default async function Profil({
     <>
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
-        <h1 className="text-2xl font-bold tracking-tight">Profil</h1>
+        <h1 className="titre-page">Profil</h1>
         <PageSections
           items={[
             { id: "toi", label: "Toi" },
@@ -94,7 +94,7 @@ export default async function Profil({
             { id: "maison", label: "Maison et déconnexion" },
           ]}
         />
-        <Card id="toi" className="scroll-mt-16">
+        <Card id="toi" className="scroll-mt-32">
           <CardHeader>
             <CardTitle>Toi</CardTitle>
             <CardDescription>
@@ -109,7 +109,7 @@ export default async function Profil({
             />
           </CardContent>
         </Card>
-        <Card id="heures" className="scroll-mt-16">
+        <Card id="heures" className="scroll-mt-32">
           <CardHeader>
             <CardTitle>Heures où je ne sors pas</CardTitle>
             <CardDescription>
@@ -128,7 +128,7 @@ export default async function Profil({
             )}
           </CardContent>
         </Card>
-        <Card id="confidentialite" className="scroll-mt-16">
+        <Card id="confidentialite" className="scroll-mt-32">
           <CardHeader>
             <CardTitle>Confidentialité</CardTitle>
             <CardDescription>
@@ -187,7 +187,7 @@ export default async function Profil({
           }
           max={SUBSCRIPTION_MAX_PER_USER}
         />
-        <Card id="etude" className="scroll-mt-16">
+        <Card id="etude" className="scroll-mt-32">
           <CardHeader>
             <CardTitle>Préférences d&apos;étude</CardTitle>
             <CardDescription>
@@ -206,7 +206,7 @@ export default async function Profil({
             )}
           </CardContent>
         </Card>
-        <Card id="apparence" className="scroll-mt-16">
+        <Card id="apparence" className="scroll-mt-32">
           <CardHeader>
             <CardTitle>Apparence</CardTitle>
             <CardDescription>
@@ -217,7 +217,7 @@ export default async function Profil({
             <AppearanceForm />
           </CardContent>
         </Card>
-        <Card id="maison" className="scroll-mt-16">
+        <Card id="maison" className="scroll-mt-32">
           <CardHeader>
             <CardTitle>Maison</CardTitle>
             <CardDescription>

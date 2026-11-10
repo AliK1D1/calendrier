@@ -32,7 +32,7 @@ export default async function MesPlans() {
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-3xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">{t.plans.title}</h1>
+          <h1 className="titre-page">{t.plans.title}</h1>
           <p className="text-muted-foreground text-sm">{t.plans.intro}</p>
         </header>
         {plans.ok ? (
@@ -40,7 +40,7 @@ export default async function MesPlans() {
         ) : (
           <p
             role="alert"
-            className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+            className="border-destructive/40 bg-destructive/8 text-destructive rounded-lg border p-3 text-sm"
           >
             {tr(plans.error)}
           </p>

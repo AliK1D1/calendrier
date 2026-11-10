@@ -86,6 +86,18 @@ export interface PlanView {
   placeId: string | null;
   /** Story 6 : quand partir pour y être (seulement mes prochains plans en personne). */
   leaveBy?: LeaveByView;
+  /** Personnes qui y vont : celles qui ont accepté, et la personne qui propose. */
+  going: { id: string; name: string }[];
+  /** Plan « à revoir » : quelqu'un qui y va a maintenant autre chose à ce moment-là. */
+  review?: PlanReviewView;
+}
+
+/** Plan « à revoir », en mots (sérialisable). */
+export interface PlanReviewView {
+  /** « Tu as maintenant « Labo » de 17 h à 19 h, en même temps. », ou `null`. */
+  mine: string | null;
+  /** « Sam n'est plus libre à ce moment-là. », ou `null`. */
+  others: string | null;
 }
 
 export interface PlanSeries {
@@ -199,8 +211,11 @@ export function buildPlanViews(
       const accepted: string[] = [];
       const declined: string[] = [];
       const waiting: string[] = [];
+      const goingIds = new Set<string>();
+      if (voteOf.get(`${p.id}:${p.created_by}`) !== "no") goingIds.add(p.created_by);
       for (const id of people) {
         const v = voteOf.get(`${p.id}:${id}`);
+        if (v === "yes") goingIds.add(id);
         if (v === "yes") accepted.push(name(id));
         else if (v === "no") declined.push(name(id));
         else waiting.push(name(id));
@@ -241,6 +256,7 @@ export function buildPlanViews(
             }
           : null,
         placeId: p.place_id,
+        going: [...goingIds].map((id) => ({ id, name: name(id) })),
       };
     })
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));

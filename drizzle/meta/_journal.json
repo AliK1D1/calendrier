@@ -148,6 +148,13 @@
       "when": 1794230967376,
       "tag": "0020_usernames",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794323161112,
+      "tag": "0021_skip_days",
+      "breakpoints": true
     }
   ]
 }

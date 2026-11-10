@@ -9,6 +9,7 @@ import { toBlockSpec } from "@/lib/db/convert";
 import { getGroupDetail } from "@/lib/groups/queries";
 import { inviteUrl, validateUuid } from "@/lib/groups/validation";
 import { loadPlans } from "@/lib/plans/queries";
+import { computePlanReviews, reviewTargets, withReview } from "@/lib/plans/review";
 import { TIME_ZONE } from "@/lib/scheduling/time";
 import { shiftDay } from "@/lib/scheduling/weeklyBlocks";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -45,6 +46,18 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
   const now = new Date();
   const { locale, t, tr } = await getI18n();
   const plans = await loadPlans(supabase, userId, now, { groupId: group.id, locale });
+  // Plans « à revoir » : l'horaire du groupe est déjà lu (group.blocks), aucune lecture de plus.
+  const planViews = plans.ok
+    ? withReview(
+        plans.views,
+        computePlanReviews(
+          reviewTargets(plans.views, now),
+          new Map([[group.id, group.blocks]]),
+          userId,
+          locale,
+        ),
+      )
+    : null;
   const today = formatInTimeZone(now, TIME_ZONE, "yyyy-MM-dd");
   const schedules: MemberSchedule[] = group.members.map((m) => ({
     userId: m.userId,
@@ -80,7 +93,7 @@ export default async function PageGroupe({ params }: { params: Promise<{ id: str
           members={group.members}
           favorites={group.favorites}
           schedules={schedules}
-          plans={plans.ok ? plans.views.filter((p) => p.state !== "cancelled") : null}
+          plans={planViews ? planViews.filter((p) => p.state !== "cancelled") : null}
           plansError={plans.ok ? null : tr(plans.error)}
         />
       </main>

@@ -39,6 +39,16 @@ export const plans = {
   seriesStopped: "Série arrêtée pour tout le monde.",
   cancelledMsg: "Plan annulé.",
   // Carte d'un plan
+  reviewBadge: "À revoir",
+  reviewLabel: "Plan à revoir",
+  reviewMine: (title: string, from: string, to: string) =>
+    `Tu as maintenant « ${title} » de ${from} à ${to}, en même temps que ce plan.`,
+  reviewSomething: "autre chose",
+  reviewOthers: (names: string[]) =>
+    names.length === 1
+      ? `${names[0]} n'est plus libre à ce moment-là.`
+      : `${names.slice(0, -1).join(", ")} et ${names[names.length - 1]} ne sont plus libres à ce moment-là.`,
+  reviewHint: "Un horaire a changé depuis que ce plan a été accepté. Parlez-vous pour le déplacer.",
   leaveBy: "Quand partir",
   status: {
     seriesStopped: "Série arrêtée",

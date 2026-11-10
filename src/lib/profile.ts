@@ -75,7 +75,7 @@ export type MyBusyBlock = Pick<
   | "repeat_unit"
   | "repeat_every"
 > &
-  Partial<Pick<BusyBlockRow, "deadline_id" | "movable">>;
+  Partial<Pick<BusyBlockRow, "deadline_id" | "movable" | "skip_days">>;
 
 const BLOCK_COLUMNS =
   "id, owner_id, title, place_id, start_time, end_time, weekday, valid_from, valid_until, source, repeat_unit, repeat_every";
@@ -97,7 +97,11 @@ export async function getMyBusyBlocks(
       .order("weekday", { ascending: true, nullsFirst: false })
       .order("start_time", { ascending: true })
       .returns<MyBusyBlock[]>();
-  let { data, error } = await read(`${BLOCK_COLUMNS}, deadline_id, movable`);
+  // Du plus récent au plus ancien : jours annulés (0021), séances d'étude (0011), base.
+  let { data, error } = await read(`${BLOCK_COLUMNS}, deadline_id, movable, skip_days`);
+  if (error?.code === "42703") {
+    ({ data, error } = await read(`${BLOCK_COLUMNS}, deadline_id, movable`));
+  }
   if (error?.code === "42703") ({ data, error } = await read(BLOCK_COLUMNS));
   if (error) throw new Error(`Lecture de l'horaire : ${error.message}`);
   return data ?? [];

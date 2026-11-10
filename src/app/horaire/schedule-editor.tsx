@@ -1,14 +1,25 @@
 "use client";
 
-import { BookOpen, ChevronLeft, ChevronRight, MapPin, Pencil, Plus, Users } from "lucide-react";
+import {
+  BookOpen,
+  CalendarOff,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Pencil,
+  Plus,
+  Undo2,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 
 import { type Flash, FlashMessage } from "@/components/flash-message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_GRID_RANGE, layoutDay, selectionFromDrag } from "@/lib/scheduling/weekGrid";
+import { upcomingSkips } from "@/lib/scheduling/skipDays";
 import type { SessionView } from "@/lib/study/service";
 import {
   blocksOnDay,
@@ -143,7 +154,7 @@ export function ScheduleEditor({
   study,
 }: ScheduleEditorProps) {
   const router = useRouter();
-  const { locale, t } = useI18n();
+  const { locale, t, tr } = useI18n();
   const ts = t.schedule;
   const clock = (m: number) => formatClockLocale(m, locale);
   const dayLabel = (day: string, pattern: DatePattern) => formatDay(day, pattern, locale);
@@ -154,6 +165,7 @@ export function ScheduleEditor({
   const [draft, setDraft] = useState<BlockDraft | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [restoring, startRestore] = useTransition();
   const [studyFlash, setStudyFlash] = useState<Flash>(null);
   const flash = useMemo<Flash>(
     () => studyFlash ?? (message ? { type: "ok", text: message } : null),
@@ -394,6 +406,19 @@ export function ScheduleEditor({
       (a, b) =>
         (a.validFrom ?? "").localeCompare(b.validFrom ?? "") || a.startMinute - b.startMinute,
     );
+
+  // « Cours annulé cette fois-ci » : occurrences annulées à venir, avec « Rétablir ».
+  const skipped = upcomingSkips(
+    blocks.filter((b) => b.source !== "subscription"),
+    today,
+  );
+  function restore(b: ScheduleBlock, day: string) {
+    setMessage(null);
+    startRestore(async () => {
+      const r = await actions.retablirOccurrence(b.id, day);
+      setMessage(r.ok ? ts.restored(b.title, dayLabel(day, "weekdayDayMonth")) : tr(r.error));
+    });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -772,6 +797,34 @@ export function ScheduleEditor({
             ))}
           </ul>
         )}
+        {skipped.length > 0 && (
+          <>
+            <h2 className="titre-section">{ts.skippedTitle}</h2>
+            <p className="text-muted-foreground text-sm">{ts.skippedHint}</p>
+            <ul className="flex flex-col gap-2">
+              {skipped.map(({ block: b, day }) => {
+                const label = dayLabel(day, "weekdayDayMonth");
+                return (
+                  <li key={`${b.id}@${day}`} className="rangee flex items-center gap-3 p-3">
+                    <CalendarOff className="text-muted-foreground size-4 shrink-0" aria-hidden />
+                    <span className="min-w-0 flex-1 text-sm break-words">
+                      {ts.skippedItem(b.title, label, clock(b.startMinute), clock(b.endMinute))}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={restoring}
+                      aria-label={ts.restoreLabel(b.title, label)}
+                      onClick={() => restore(b, day)}
+                    >
+                      <Undo2 /> {ts.restore}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
         <h2 className="titre-section">{ts.onceTitle}</h2>
         {outlookCount > 0 && (
           <p className="text-muted-foreground text-sm">
@@ -819,6 +872,7 @@ export function ScheduleEditor({
         blocks={blocks}
         places={places}
         homeId={homeId}
+        today={today}
         actions={actions}
         onClose={() => setDraft(null)}
         onSaved={(text) => {

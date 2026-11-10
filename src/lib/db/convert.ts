@@ -79,7 +79,15 @@ export type BusyBlockInput = Pick<
   | "valid_from"
   | "valid_until"
 > &
-  Partial<Pick<BusyBlockRow, "repeat_unit" | "repeat_every">>;
+  Partial<Pick<BusyBlockRow, "repeat_unit" | "repeat_every">> & {
+    /** Occurrences annulées (migration 0021) ; absentes avant. */
+    skip_days?: string[] | null;
+  };
+
+/** Jours annulés d'une ligne (rien pour un bloc ponctuel ou avant la migration 0021). */
+function skipDaysOf(row: Pick<BusyBlockInput, "skip_days">): { skipDays?: string[] } {
+  return row.skip_days?.length ? { skipDays: row.skip_days } : {};
+}
 
 /** Champs de répétition d'une ligne (valeurs inconnues de la BD : erreur). */
 function repeatOf(row: Pick<BusyBlockInput, "repeat_unit" | "repeat_every">): {
@@ -104,6 +112,7 @@ function rowDays(row: BusyBlockInput): BlockDays {
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     ...repeatOf(row),
+    ...skipDaysOf(row),
   };
 }
 
@@ -145,6 +154,7 @@ export function toBlockSpec(row: BusyBlockInput): BlockSpec {
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     ...repeatOf(row),
+    ...skipDaysOf(row),
   };
 }
 

@@ -31,6 +31,9 @@ export interface ScheduleActions {
   ajouterBlocs: (input: unknown) => Promise<ActionResult>;
   modifierBloc: (id: unknown, input: unknown) => Promise<ActionResult>;
   supprimerBloc: (id: unknown) => Promise<ActionResult>;
+  /** « Cours annulé cette fois-ci » : annule une occurrence d'un bloc qui revient. */
+  annulerOccurrence: (id: unknown, day: unknown) => Promise<ActionResult>;
+  retablirOccurrence: (id: unknown, day: unknown) => Promise<ActionResult>;
 }
 
 /** Actions de l'import .ics : aperçu (lecture seule) puis confirmation. */

@@ -250,6 +250,7 @@ function view(id: string, startsAt: string, over: Partial<PlanView> = {}): PlanV
     declined: [],
     waiting: [],
     wholeGroup: true,
+    going: [],
     repeatLabel: null,
     series: null,
     placeId: "cafe",

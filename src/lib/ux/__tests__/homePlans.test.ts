@@ -24,6 +24,7 @@ function plan(id: string, startsAt: string, over: Partial<PlanView> = {}): PlanV
     declined: [],
     waiting: [],
     wholeGroup: true,
+    going: [],
     repeatLabel: null,
     series: null,
     placeId: null,

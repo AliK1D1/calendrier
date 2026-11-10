@@ -42,6 +42,8 @@ export interface GroupBusyBlock {
   /** Répétition personnalisée (migration 0015 ; absente avant). */
   repeat_unit?: "day" | "week" | "month" | "year" | null;
   repeat_every?: number;
+  /** Occurrences annulées (migration 0021 ; absentes avant). */
+  skip_days?: string[] | null;
 }
 
 export interface GroupDetail {

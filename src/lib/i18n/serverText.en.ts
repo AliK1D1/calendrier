@@ -22,6 +22,11 @@ export const EN_TEXTS: Record<string, string> = {
   "Calendrier invalide.": "Invalid calendar.",
   "Calendrier retiré : ses événements ne sont plus utilisés.":
     "Calendar removed: its events are no longer used.",
+  "Ce bloc n'a lieu qu'une fois : supprime-le plutôt.":
+    "This block only happens once: delete it instead.",
+  "Ce bloc n'a pas lieu ce jour-là.": "This block doesn't happen on that day.",
+  "Ce bloc ne s'annule pas ici.": "This block can't be cancelled here.",
+  "Ce jour est déjà passé.": "That day has already passed.",
   "Ce fichier .ics est illisible (contenu inattendu).":
     "This .ics file can't be read (unexpected content).",
   "Ce fichier .ics est illisible (format invalide).":

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { addLeaveBy } from "@/lib/plans/leaveByQueries";
 import { loadPlans } from "@/lib/plans/queries";
+import { addPlanReview } from "@/lib/plans/reviewQueries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { PlansView } from "./plans-view";
@@ -25,7 +26,16 @@ export default async function MesPlans() {
   const { locale, t, tr } = await getI18n();
   const plans = await loadPlans(supabase, data.user.id, now, { locale });
   // Story 6 : « Pars de … à HH:MM » sur mes prochains plans en personne.
-  const views = plans.ok ? await addLeaveBy(supabase, data.user.id, plans.views, now, locale) : [];
+  // Plans « à revoir » : quelqu'un qui y va a maintenant autre chose à ce moment-là.
+  const views = plans.ok
+    ? await addPlanReview(
+        supabase,
+        data.user.id,
+        await addLeaveBy(supabase, data.user.id, plans.views, now, locale),
+        now,
+        locale,
+      )
+    : [];
 
   return (
     <>

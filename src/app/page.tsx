@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getMyGroups } from "@/lib/groups/queries";
 import { addLeaveBy } from "@/lib/plans/leaveByQueries";
+import { addPlanReview } from "@/lib/plans/reviewQueries";
 import { loadPlans } from "@/lib/plans/queries";
 import { getMyBusyBlocks, getMyProfile, getOnboardingStatus } from "@/lib/profile";
 import { getI18n } from "@/lib/i18n/server";
@@ -99,7 +100,19 @@ async function AccueilConnecte({ supabase, user }: { supabase: SupabaseClient; u
     getMyGroups(supabase, user.id),
     loadPlans(supabase, user.id, now, { locale }).then(async (r) =>
       // Story 6 : « Pars de … à HH:MM » sur mes prochains plans en personne.
-      r.ok ? { ...r, views: await addLeaveBy(supabase, user.id, r.views, now, locale) } : r,
+      // Puis plans « à revoir » (quelqu'un qui y va a maintenant autre chose).
+      r.ok
+        ? {
+            ...r,
+            views: await addPlanReview(
+              supabase,
+              user.id,
+              await addLeaveBy(supabase, user.id, r.views, now, locale),
+              now,
+              locale,
+            ),
+          }
+        : r,
     ),
   ]);
   // Plans illisibles (ex. migration absente) : l'accueil s'affiche quand même, sans eux.

@@ -38,6 +38,13 @@ export const schedule = {
   outsideGrid: "Hors de la grille (avant 7 h ou après 23 h) cette semaine : ",
   recurringTitle: "Chaque semaine et autres répétitions",
   noRecurring: "Aucun cours ni engagement qui revient pour l'instant.",
+  skippedTitle: "Annulés cette fois-ci",
+  skippedHint: "Ces jours-là, le bloc ne compte pas comme occupé : tes amis te voient libre.",
+  skippedItem: (title: string, day: string, from: string, to: string) =>
+    `${title} · ${day}, ${from} à ${to}`,
+  restore: "Rétablir",
+  restoreLabel: (title: string, day: string) => `Rétablir « ${title} » le ${day}`,
+  restored: (title: string, day: string) => `« ${title} » est rétabli le ${day}.`,
   whenAt: (when: string, from: string, to: string) => `${when}, ${from} à ${to}`,
   periodFromTo: (from: string, to: string) => `du ${from} au ${to}`,
   periodFrom: (from: string) => `à partir du ${from}, sans fin`,
@@ -76,6 +83,10 @@ export const schedule = {
     confirmDelete: (kind: "weekly" | "custom" | "once", title: string) =>
       `Supprimer ${kind === "weekly" ? "toutes les semaines de ce bloc" : kind === "custom" ? "toutes les répétitions de ce bloc" : "ce bloc"} (« ${title} ») ?`,
     deleted: (title: string) => `« ${title} » est supprimé.`,
+    skipOnce: (day: string) => `Annulé le ${day} seulement`,
+    skipHint: "Cours annulé, congé ? Les autres semaines ne changent pas.",
+    skipped: (title: string, day: string) =>
+      `« ${title} » est annulé le ${day} : tu es libre à ce moment-là.`,
     editTitle: "Modifier le bloc",
     newTitle: "Nouveau bloc",
     title: "Titre",

@@ -101,12 +101,17 @@ export interface BlockSpec {
   repeatUnit?: RepeatUnit | null;
   /** « Tous les X » (1 à 99) ; absent = 1. */
   repeatEvery?: number;
+  /**
+   * Jours (`yyyy-MM-dd`) où un bloc qui revient n'a PAS lieu (« cours annulé cette fois-ci »,
+   * migration 0021). Sans effet sur un bloc ponctuel.
+   */
+  skipDays?: readonly string[];
 }
 
 /** Champs d'un bloc qui décident des jours où il a lieu. */
 export type BlockDays = Pick<
   BlockSpec,
-  "weekday" | "validFrom" | "validUntil" | "repeatUnit" | "repeatEvery"
+  "weekday" | "validFrom" | "validUntil" | "repeatUnit" | "repeatEvery" | "skipDays"
 >;
 
 /** Vrai si le bloc revient (hebdomadaire ou répétition personnalisée), faux s'il est ponctuel. */
@@ -186,11 +191,13 @@ export function weekDays(monday: string): string[] {
 /**
  * Vrai si le bloc a lieu le jour `day`. Un bloc qui revient commence à `validFrom` et s'arrête
  * après `validUntil` ; une répétition « toutes les X … » se compte à partir de `validFrom`.
+ * Un jour de `skipDays` (occurrence annulée) ne compte pas.
  */
 export function occursOn(block: BlockDays, day: string): boolean {
   if (!isRecurring(block)) return block.validFrom === day;
   if (block.validFrom && day < block.validFrom) return false;
   if (block.validUntil && day > block.validUntil) return false;
+  if (block.skipDays?.includes(day)) return false;
   const every = block.repeatEvery ?? 1;
   if (block.weekday != null) {
     if (weekdayOf(day) !== block.weekday) return false;

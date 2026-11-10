@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2, MapPin, Phone, Send, Zap } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
+import { Coffee, Loader2, MapPin, Phone, Send, Zap } from "lucide-react";
 import { useId, useState, useTransition } from "react";
 
 import { chercherLibresMaintenant } from "@/app/groupes/meetup-actions";
@@ -46,10 +47,7 @@ export function FreeNow({ groupId, search = chercherLibresMaintenant, onPropose 
   }
 
   return (
-    <section
-      aria-labelledby={titleId}
-      className="bg-card flex flex-col gap-3 rounded-lg border p-4"
-    >
+    <section aria-labelledby={titleId} className="rangee flex flex-col gap-3 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 id={titleId} className="font-semibold">
@@ -66,7 +64,7 @@ export function FreeNow({ groupId, search = chercherLibresMaintenant, onPropose 
       {error && (
         <p
           role="alert"
-          className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+          className="border-destructive/40 bg-destructive/8 text-destructive rounded-lg border p-3 text-sm"
         >
           {tr(error)}
         </p>
@@ -95,9 +93,9 @@ function Results({
   return (
     <div className="flex flex-col gap-2">
       {view.matches.length === 0 ? (
-        <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-sm">
+        <EmptyState icon={Coffee}>
           {view.checked === 0 ? tf.nobodyToCheck : tf.nobodyFree(view.windowLabel)}
-        </p>
+        </EmptyState>
       ) : (
         <>
           <p className="text-sm">{tf.count(view.matches.length, view.checked, view.windowLabel)}</p>

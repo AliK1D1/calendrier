@@ -51,6 +51,7 @@ export type DatePattern =
   | "shortDayMonth"
   | "shortDayMonthYear"
   | "dayNumber"
+  | "shortMonth"
   | "weekday"
   | "shortWeekday"
   | "monthYear";
@@ -66,6 +67,7 @@ const PATTERNS: Record<Locale, Record<DatePattern, string>> = {
     shortDayMonth: "d MMM",
     shortDayMonthYear: "d MMM yyyy",
     dayNumber: "d",
+    shortMonth: "MMM",
     weekday: "EEEE",
     shortWeekday: "EEE",
     monthYear: "MMMM yyyy",
@@ -80,6 +82,7 @@ const PATTERNS: Record<Locale, Record<DatePattern, string>> = {
     shortDayMonth: "MMM d",
     shortDayMonthYear: "MMM d, yyyy",
     dayNumber: "d",
+    shortMonth: "MMM",
     weekday: "EEEE",
     shortWeekday: "EEE",
     monthYear: "MMMM yyyy",

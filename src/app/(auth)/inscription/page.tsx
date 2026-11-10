@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { LogoMark } from "@/components/logo-mark";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { safeNextPath } from "@/lib/auth/paths";
@@ -33,14 +34,14 @@ export default async function Inscription({ searchParams }: { searchParams: Sear
   return (
     <main className="grille-4 mx-auto min-h-dvh max-w-md content-center gap-y-6 px-4 py-12">
       <div className="flex items-center justify-between gap-2">
-        <Link href="/" className="text-muted-foreground text-sm hover:underline">
-          ← {t.common.appName}
+        <Link href="/" className="font-display flex items-center gap-2.5 font-bold tracking-tight">
+          <LogoMark /> {t.common.appName}
         </Link>
         <LanguageSwitcher />
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">{t.auth.signup.title}</CardTitle>
+          <CardTitle className="text-2xl sm:text-[1.75rem]">{t.auth.signup.title}</CardTitle>
           <CardDescription>{t.auth.signup.description}</CardDescription>
         </CardHeader>
         <CardContent>

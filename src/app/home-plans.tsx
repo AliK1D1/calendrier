@@ -27,7 +27,7 @@ export function HomePlans({
       {awaiting.length > 0 && (
         <section aria-labelledby="accueil-a-repondre" className="flex flex-col gap-3">
           <div className="flex flex-col gap-0.5">
-            <h2 id="accueil-a-repondre" className="text-lg font-semibold">
+            <h2 id="accueil-a-repondre" className="titre-section">
               {t.home.plans.awaiting(awaiting.length)}
             </h2>
             <p className="text-muted-foreground text-sm">{t.home.plans.awaitingHint}</p>
@@ -37,7 +37,7 @@ export function HomePlans({
       )}
       {upcoming.length > 0 && (
         <section aria-labelledby="accueil-prochains" className="flex flex-col gap-3">
-          <h2 id="accueil-prochains" className="text-lg font-semibold">
+          <h2 id="accueil-prochains" className="titre-section">
             {t.home.plans.upcoming}
           </h2>
           <PlanList plans={upcoming} actions={ACTIONS} showGroup />

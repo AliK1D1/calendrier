@@ -1,6 +1,8 @@
 "use client";
 
+import { EmptyState } from "@/components/empty-state";
 import {
+  CalendarCheck,
   Check,
   Copy,
   EyeOff,
@@ -12,11 +14,14 @@ import {
   Share2,
   Trash2,
   UserMinus,
+  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
+import { Avatar } from "@/components/avatar";
+import { useConfirm } from "@/components/confirm-dialog";
 import { type Flash, FlashMessage } from "@/components/flash-message";
 import { PageSections } from "@/components/page-sections";
 import { AddressSearch } from "@/components/places/address-search";
@@ -98,6 +103,7 @@ export function GroupView(props: Props) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<Flash>(null);
   const clearMessage = useCallback(() => setMessage(null), []);
+  const { confirm, confirmDialog } = useConfirm();
   const [link, setLink] = useState(props.inviteLink);
   const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -225,7 +231,7 @@ export function GroupView(props: Props) {
   // Seul dans le groupe : inviter passe avant la recherche (impossible à deux de moins).
   const alone = members.length < 2;
   const invite = (
-    <Card id="inviter" className="scroll-mt-16">
+    <Card id="inviter" className="scroll-mt-32">
       <CardHeader>
         <CardTitle>{alone ? tg.inviteFirst : tg.inviteFriends}</CardTitle>
         <CardDescription>{tg.inviteBody}</CardDescription>
@@ -255,8 +261,10 @@ export function GroupView(props: Props) {
               type="button"
               variant="outline"
               disabled={pending}
-              onClick={() => {
-                if (window.confirm(tg.confirmNewLink)) {
+              onClick={async () => {
+                if (
+                  await confirm({ message: tg.confirmNewLink, action: tg.newLink, danger: false })
+                ) {
                   setMessage(null);
                   startTransition(async () => {
                     const r = await regenererCode(groupId);
@@ -284,11 +292,23 @@ export function GroupView(props: Props) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight break-words">{name}</h1>
-        <p className="text-muted-foreground text-sm">
-          {tg.members(members.length)}
-          {isAdmin ? tg.youAreAdmin : ""}
-        </p>
+        <h1 className="titre-page break-words">{name}</h1>
+        <div className="flex items-center gap-3">
+          {/* Les visages du groupe, empilés (5 au plus). */}
+          <span aria-hidden className="flex -space-x-2">
+            {members.slice(0, 5).map((m) => (
+              <Avatar
+                key={m.userId}
+                name={m.displayName}
+                className="ring-background size-8 ring-2"
+              />
+            ))}
+          </span>
+          <p className="text-muted-foreground text-sm">
+            {tg.members(members.length)}
+            {isAdmin ? tg.youAreAdmin : ""}
+          </p>
+        </div>
       </header>
 
       <PageSections
@@ -309,15 +329,13 @@ export function GroupView(props: Props) {
       {alone ? (
         <>
           {invite}
-          <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
-            {tg.aloneHint}
-          </p>
+          <EmptyState icon={UserPlus}>{tg.aloneHint}</EmptyState>
         </>
       ) : (
         <>
           <section aria-labelledby="propositions" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="propositions" className="scroll-mt-16 text-lg font-semibold">
+              <h2 id="propositions" className="titre-section scroll-mt-32">
                 {tg.groupPlans}
               </h2>
               <div className="flex flex-wrap gap-2">
@@ -332,14 +350,12 @@ export function GroupView(props: Props) {
             {props.plansError ? (
               <p
                 role="alert"
-                className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+                className="border-destructive/40 bg-destructive/8 text-destructive rounded-lg border p-3 text-sm"
               >
                 {tr(props.plansError)}
               </p>
             ) : !props.plans || props.plans.length === 0 ? (
-              <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
-                {tg.noPlans}
-              </p>
+              <EmptyState icon={CalendarCheck}>{tg.noPlans}</EmptyState>
             ) : (
               <PlanList plans={props.plans} actions={planActions} />
             )}
@@ -395,17 +411,16 @@ export function GroupView(props: Props) {
       )}
 
       <FlashMessage message={message} onClose={clearMessage} />
+      {confirmDialog}
       <section aria-labelledby="membres" className="flex flex-col gap-3">
-        <h2 id="membres" className="scroll-mt-16 text-lg font-semibold">
+        <h2 id="membres" className="titre-section scroll-mt-32">
           {tg.membersTitle}
         </h2>
         <ul className="flex flex-col gap-2">
           {members.map((m) => (
-            <li
-              key={m.userId}
-              className="bg-card flex flex-wrap items-center gap-2 rounded-lg border p-3"
-            >
-              <span className="min-w-0 flex-1 font-medium break-words">
+            <li key={m.userId} className="rangee flex flex-wrap items-center gap-2 p-3">
+              <Avatar name={m.displayName} />
+              <span className="min-w-0 flex-1 font-semibold break-words">
                 {m.displayName}
                 {m.userId === myId && (
                   <span className="text-muted-foreground font-normal">{tg.you}</span>
@@ -417,8 +432,10 @@ export function GroupView(props: Props) {
                   size="sm"
                   variant="outline"
                   disabled={pending}
-                  onClick={() => {
-                    if (window.confirm(tg.confirmRemove(m.displayName))) {
+                  onClick={async () => {
+                    if (
+                      await confirm({ message: tg.confirmRemove(m.displayName), action: tg.remove })
+                    ) {
                       run(() => retirerMembre(groupId, m.userId), tg.removed(m.displayName));
                     }
                   }}
@@ -433,8 +450,8 @@ export function GroupView(props: Props) {
           variant="outline"
           className="sm:self-start"
           disabled={pending}
-          onClick={() => {
-            if (window.confirm(tg.confirmLeave(name, leaveWarning))) {
+          onClick={async () => {
+            if (await confirm({ message: tg.confirmLeave(name, leaveWarning), action: tg.leave })) {
               run(
                 () => quitterGroupe(groupId),
                 tg.left,
@@ -448,7 +465,7 @@ export function GroupView(props: Props) {
       </section>
 
       <section aria-labelledby="lieux-groupe" className="flex flex-col gap-3">
-        <h2 id="lieux-groupe" className="scroll-mt-16 text-lg font-semibold">
+        <h2 id="lieux-groupe" className="titre-section scroll-mt-32">
           {tg.favoritesTitle}
         </h2>
         <p className="text-muted-foreground text-sm">{tg.favoritesHint}</p>
@@ -465,10 +482,7 @@ export function GroupView(props: Props) {
         ) : (
           <ul className="flex flex-col gap-2">
             {favorites.map((f) => (
-              <li
-                key={f.id}
-                className="bg-card flex flex-wrap items-center gap-2 rounded-lg border p-3"
-              >
+              <li key={f.id} className="rangee flex flex-wrap items-center gap-2 p-3">
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -483,8 +497,13 @@ export function GroupView(props: Props) {
                     size="sm"
                     variant="outline"
                     disabled={pending}
-                    onClick={() => {
-                      if (window.confirm(tg.confirmDeleteFavorite(f.name))) {
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          message: tg.confirmDeleteFavorite(f.name),
+                          action: t.common.delete,
+                        })
+                      ) {
                         run(() => supprimerFavori(groupId, f.id), t.places.deleted);
                       }
                     }}
@@ -556,7 +575,7 @@ export function GroupView(props: Props) {
       </section>
 
       <section aria-labelledby="horaires" className="flex flex-col gap-3">
-        <h2 id="horaires" className="scroll-mt-16 text-lg font-semibold">
+        <h2 id="horaires" className="titre-section scroll-mt-32">
           {tg.schedulesTitle}
         </h2>
         <p className="text-muted-foreground text-sm">
@@ -567,12 +586,8 @@ export function GroupView(props: Props) {
           .
         </p>
         {schedules.map((s) => (
-          <details
-            key={s.userId}
-            className="bg-card rounded-lg border p-3"
-            open={schedules.length <= 3}
-          >
-            <summary className="cursor-pointer font-medium">
+          <details key={s.userId} className="rangee p-3" open={schedules.length <= 3}>
+            <summary className="cursor-pointer font-semibold">
               {s.displayName}
               {s.userId === myId ? tg.you : ""}{" "}
               <span className="text-muted-foreground text-sm font-normal">

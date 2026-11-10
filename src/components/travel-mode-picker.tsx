@@ -34,7 +34,7 @@ export function TravelModePicker({
             <label
               key={mode}
               className={cn(
-                "bg-card hover:bg-accent flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm has-[:focus-visible]:ring-2",
+                "hover:bg-accent rangee flex cursor-pointer items-center gap-2 p-3 text-sm has-[:focus-visible]:ring-2",
                 value === mode && "border-primary bg-accent font-medium",
               )}
             >

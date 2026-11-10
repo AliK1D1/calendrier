@@ -38,7 +38,7 @@ export function SignupForm({ next, configured }: { next: string; configured: boo
       {erreur && (
         <p
           role="alert"
-          className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+          className="border-destructive/40 bg-destructive/8 text-destructive rounded-lg border p-3 text-sm"
         >
           {erreur}
         </p>

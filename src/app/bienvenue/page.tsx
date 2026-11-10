@@ -35,7 +35,7 @@ export default async function Bienvenue({ searchParams }: { searchParams: Search
   return (
     <main className="grille-4 mx-auto min-h-dvh max-w-xl content-start gap-y-6 px-4 py-8">
       <header className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">{t.onboarding.title}</h1>
+        <h1 className="titre-page">{t.onboarding.title}</h1>
         <p className="text-muted-foreground">{t.onboarding.intro}</p>
       </header>
       <OnboardingForm next={next} initialMode={profile?.travel_mode ?? "transit"} />

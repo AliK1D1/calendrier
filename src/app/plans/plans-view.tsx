@@ -1,5 +1,7 @@
 "use client";
 
+import { CalendarCheck } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import Link from "next/link";
 
 import { type PlanActions, PlanList } from "@/components/plans/plan-list";
@@ -23,13 +25,13 @@ export function PlansView({
   const { awaiting, upcoming, others, past } = groupPlans(plans);
   if (plans.length === 0) {
     return (
-      <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
+      <EmptyState icon={CalendarCheck}>
         {tp.emptyBefore}
         <Link href="/groupes" className="underline underline-offset-2">
           {tp.emptyLink}
         </Link>
         {tp.emptyAfter}
-      </p>
+      </EmptyState>
     );
   }
   const sections: { id: string; title: string; hint?: string; list: PlanView[] }[] = [
@@ -60,7 +62,7 @@ export function PlansView({
         .map((s) => (
           <section key={s.id} aria-labelledby={s.id} className="flex flex-col gap-3">
             <div className="flex flex-col gap-0.5">
-              <h2 id={s.id} className="text-lg font-semibold">
+              <h2 id={s.id} className="titre-section">
                 {s.title}
                 {s.list.length > 0 && (
                   <span className="text-muted-foreground text-sm font-normal">

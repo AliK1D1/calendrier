@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useTransition } from "react";
 
+import { useConfirm } from "@/components/confirm-dialog";
 import { type Flash, FlashMessage } from "@/components/flash-message";
 import type { PlanView } from "@/lib/plans/view";
 
@@ -32,6 +33,7 @@ export function PlanList({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<Flash>(null);
   const clear = useCallback(() => setMessage(null), []);
+  const { confirm, confirmDialog } = useConfirm();
 
   function run(id: string, action: () => Promise<Result>, ok: string) {
     setMessage(null);
@@ -65,11 +67,13 @@ export function PlanList({
                     : tp.declinedMsg(p.title),
               )
             }
-            onCancel={() => {
+            onCancel={async () => {
               const series = p.repeatLabel !== null;
-              if (
-                window.confirm(series ? tp.confirmStopSeries(p.title) : tp.confirmCancel(p.title))
-              ) {
+              const yes = await confirm({
+                message: series ? tp.confirmStopSeries(p.title) : tp.confirmCancel(p.title),
+                action: series ? tp.stopSeries : tp.cancelPlan,
+              });
+              if (yes) {
                 run(
                   p.id,
                   () => actions.annuler(p.id, p.groupId),
@@ -81,6 +85,7 @@ export function PlanList({
         ))}
       </ul>
       <FlashMessage message={message} onClose={clear} />
+      {confirmDialog}
     </>
   );
 }

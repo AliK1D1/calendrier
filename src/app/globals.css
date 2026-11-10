@@ -11,8 +11,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-texte), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-titres), var(--font-texte), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -37,12 +38,17 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 10px);
+  --shadow-carte: var(--ombre-carte);
+  --shadow-flottant: var(--ombre-flottante);
 }
 
 /*
- * Palette sobre : gris légèrement bleutés et un seul bleu calme pour les actions.
- * Le fond de page est un peu plus foncé que les cartes, pour qu'elles se détachent sans
- * ombre forte. `success` (vert) et `warning` (ambre) servent aux messages et à la grille.
+ * Palette : les gris prennent une pointe de la couleur d'accent choisie dans Profil >
+ * Apparence (`--teinte`, `--chroma`), pour que toute l'app s'accorde à cette couleur ; avec
+ * l'accent graphite, ils restent neutres. Le fond de page est un peu plus foncé que les
+ * cartes, qui se détachent avec un filet et une ombre très légère (`--ombre-carte`).
+ * `success` (vert) et `warning` (ambre) servent aux messages et à la grille.
  * `study` (fuchsia) : séances d'étude dans l'horaire (pointillé quand elles sont proposées).
  */
 :root {
@@ -51,28 +57,34 @@
      tourné. Les autres accents sont plus bas (`[data-accent=…]`). */
   --teinte: 258;
   --chroma: 0.13;
-  --radius: 0.75rem;
-  --background: oklch(0.982 0.003 250);
-  --foreground: oklch(0.22 0.02 260);
+  --radius: 0.875rem;
+  --background: oklch(0.972 calc(var(--chroma) * 0.06) var(--teinte));
+  --foreground: oklch(0.21 calc(var(--chroma) * 0.22) var(--teinte));
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.02 260);
+  --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.02 260);
+  --popover-foreground: var(--foreground);
   --primary: oklch(0.49 var(--chroma) var(--teinte));
   --primary-foreground: oklch(0.985 0.002 250);
-  --secondary: oklch(0.95 0.008 255);
-  --secondary-foreground: oklch(0.28 0.03 260);
-  --muted: oklch(0.955 0.006 255);
-  --muted-foreground: oklch(0.46 0.02 260);
-  --accent: oklch(0.955 calc(var(--chroma) * 0.12) var(--teinte));
-  --accent-foreground: oklch(0.28 calc(var(--chroma) * 0.4) var(--teinte));
+  --secondary: oklch(0.94 calc(var(--chroma) * 0.1) var(--teinte));
+  --secondary-foreground: oklch(0.28 calc(var(--chroma) * 0.3) var(--teinte));
+  --muted: oklch(0.95 calc(var(--chroma) * 0.07) var(--teinte));
+  --muted-foreground: oklch(0.46 calc(var(--chroma) * 0.16) var(--teinte));
+  --accent: oklch(0.94 calc(var(--chroma) * 0.24) var(--teinte));
+  --accent-foreground: oklch(0.3 calc(var(--chroma) * 0.6) var(--teinte));
   --destructive: oklch(0.56 0.2 27);
   --success: oklch(0.55 0.13 155);
   --success-foreground: oklch(0.985 0.002 250);
   --warning: oklch(0.76 0.15 75);
   --study: oklch(0.55 0.2 330);
-  --border: oklch(0.915 0.008 255);
-  --input: oklch(0.87 0.01 255);
+  --border: oklch(0.9 calc(var(--chroma) * 0.1) var(--teinte));
+  --input: oklch(0.84 calc(var(--chroma) * 0.12) var(--teinte));
+  --ombre-carte:
+    0 1px 2px oklch(0.3 calc(var(--chroma) * 0.4) var(--teinte) / 5%),
+    0 6px 20px -10px oklch(0.3 calc(var(--chroma) * 0.6) var(--teinte) / 14%);
+  --ombre-flottante:
+    0 2px 6px oklch(0.25 calc(var(--chroma) * 0.4) var(--teinte) / 8%),
+    0 18px 44px -12px oklch(0.25 calc(var(--chroma) * 0.6) var(--teinte) / 28%);
   --ring: var(--primary);
   /*
    * Une teinte par jour de la semaine (lun. = 1) pour la grille de l'horaire : fond très pâle
@@ -144,20 +156,20 @@
 
 :root[data-theme="sombre"] {
   color-scheme: dark;
-  --background: oklch(0.165 0.012 260);
-  --foreground: oklch(0.95 0.005 255);
-  --card: oklch(0.205 0.014 260);
-  --card-foreground: oklch(0.95 0.005 255);
-  --popover: oklch(0.205 0.014 260);
-  --popover-foreground: oklch(0.95 0.005 255);
+  --background: oklch(0.17 calc(var(--chroma) * 0.12) var(--teinte));
+  --foreground: oklch(0.95 calc(var(--chroma) * 0.05) var(--teinte));
+  --card: oklch(0.215 calc(var(--chroma) * 0.13) var(--teinte));
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.235 calc(var(--chroma) * 0.13) var(--teinte));
+  --popover-foreground: var(--foreground);
   --primary: oklch(0.74 calc(var(--chroma) * 0.85) var(--teinte));
   --primary-foreground: oklch(0.18 0.03 260);
-  --secondary: oklch(0.26 0.014 260);
-  --secondary-foreground: oklch(0.95 0.005 255);
-  --muted: oklch(0.25 0.012 260);
-  --muted-foreground: oklch(0.72 0.015 258);
-  --accent: oklch(0.27 calc(var(--chroma) * 0.16) var(--teinte));
-  --accent-foreground: oklch(0.95 0.005 255);
+  --secondary: oklch(0.27 calc(var(--chroma) * 0.14) var(--teinte));
+  --secondary-foreground: oklch(0.95 calc(var(--chroma) * 0.05) var(--teinte));
+  --muted: oklch(0.255 calc(var(--chroma) * 0.12) var(--teinte));
+  --muted-foreground: oklch(0.73 calc(var(--chroma) * 0.14) var(--teinte));
+  --accent: oklch(0.29 calc(var(--chroma) * 0.3) var(--teinte));
+  --accent-foreground: oklch(0.95 calc(var(--chroma) * 0.05) var(--teinte));
   --destructive: oklch(0.69 0.18 24);
   --success: oklch(0.72 0.14 155);
   --success-foreground: oklch(0.18 0.03 160);
@@ -165,6 +177,8 @@
   --study: oklch(0.76 0.15 330);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 16%);
+  --ombre-carte: 0 1px 2px oklch(0 0 0 / 30%);
+  --ombre-flottante: 0 2px 6px oklch(0 0 0 / 35%), 0 18px 44px -12px oklch(0 0 0 / 60%);
   --ring: var(--primary);
   --jour-1: oklch(0.72 0.12 255);
   --jour-2: oklch(0.72 0.11 165);
@@ -204,6 +218,32 @@
   & > :where(*) {
     grid-column: span 1 / span 1;
   }
+}
+
+/*
+ * Titres : police d'affichage (Bricolage Grotesque), serrée. `titre-page` pour le <h1> d'une
+ * page, `titre-section` pour les <h2>.
+ */
+@utility titre-page {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 1.5rem + 1.2vw, 2.125rem);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+@utility titre-section {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+}
+/* Rangée cliquable ou non d'une liste (groupe, membre, lieu, bloc…). */
+@utility rangee {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--ombre-carte);
 }
 
 @layer base {
@@ -251,6 +291,53 @@
     }
   }
   dialog::backdrop {
-    backdrop-filter: blur(2px);
+    background: oklch(0.2 calc(var(--chroma) * 0.3) var(--teinte) / 45%);
+    backdrop-filter: blur(3px);
+  }
+  /* Une fenêtre qui s'ouvre monte légèrement : on voit d'où elle vient. */
+  dialog[open] {
+    animation: fenetre-ouvre 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    dialog[open] {
+      animation: none;
+    }
+  }
+}
+
+@keyframes fenetre-ouvre {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.985);
+  }
+}
+
+/* Pastille d'une personne (composant Avatar) : `--teinte-avatar` est posée en ligne. */
+.pastille-personne {
+  background: oklch(0.92 0.06 var(--teinte-avatar));
+  color: oklch(0.36 0.11 var(--teinte-avatar));
+}
+[data-theme="sombre"] .pastille-personne {
+  background: oklch(0.36 0.07 var(--teinte-avatar));
+  color: oklch(0.93 0.05 var(--teinte-avatar));
+}
+
+/*
+ * Accueil : la bande « libres en même temps » se déploie une fois, à l'arrivée sur la page.
+ * C'est le seul mouvement décoratif de l'app.
+ */
+.bande-commune {
+  transform-origin: top;
+  animation: bande-commune 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 350ms backwards;
+}
+@keyframes bande-commune {
+  from {
+    opacity: 0;
+    transform: scaleY(0.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bande-commune {
+    animation: none;
   }
 }

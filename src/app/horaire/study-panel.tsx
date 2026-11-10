@@ -84,12 +84,9 @@ export function StudyPanel({
   const replan = plan.mode === "replan";
   const keys = plan.sessions.map((s) => s.key);
   return (
-    <section
-      aria-labelledby="seances-proposees"
-      className="bg-card flex flex-col gap-3 rounded-lg border p-3 sm:p-4"
-    >
+    <section aria-labelledby="seances-proposees" className="rangee flex flex-col gap-3 p-3 sm:p-4">
       <div className="flex flex-col gap-1">
-        <h2 id="seances-proposees" className="flex items-center gap-2 text-lg font-semibold">
+        <h2 id="seances-proposees" className="titre-section flex items-center gap-2">
           <BookOpen className="text-study size-5 shrink-0" aria-hidden />
           {replan ? p.titleReplan : p.titlePlan}
         </h2>

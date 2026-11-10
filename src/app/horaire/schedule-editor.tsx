@@ -434,7 +434,10 @@ export function ScheduleEditor({
         >
           <ChevronLeft />
         </Button>
-        <p className="flex-1 text-center text-sm font-medium" aria-live="polite">
+        <p
+          className="font-display flex-1 text-center font-semibold tracking-tight"
+          aria-live="polite"
+        >
           {weekLabel}
         </p>
         <Button
@@ -733,7 +736,7 @@ export function ScheduleEditor({
 
       {/* Liste : utile au clavier et pour voir les sessions d'un coup d'œil */}
       <section aria-labelledby="liste-blocs" className="flex flex-col gap-3">
-        <h2 id="liste-blocs" className="text-lg font-semibold">
+        <h2 id="liste-blocs" className="titre-section">
           {ts.recurringTitle}
         </h2>
         {weekly.length === 0 ? (
@@ -769,7 +772,7 @@ export function ScheduleEditor({
             ))}
           </ul>
         )}
-        <h2 className="text-lg font-semibold">{ts.onceTitle}</h2>
+        <h2 className="titre-section">{ts.onceTitle}</h2>
         {outlookCount > 0 && (
           <p className="text-muted-foreground text-sm">
             {ts.outlookMore(outlookCount)}
@@ -942,7 +945,7 @@ function BlockRow({
   const { t } = useI18n();
   const ts = t.schedule;
   return (
-    <li className="bg-card flex items-start gap-3 rounded-lg border p-3">
+    <li className="rangee flex items-start gap-3 p-3">
       <span
         className={cn("mt-1 size-3 shrink-0 rounded-full border-2", sourceColor(block, color))}
         aria-hidden

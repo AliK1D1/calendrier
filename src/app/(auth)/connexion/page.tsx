@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { LogoMark } from "@/components/logo-mark";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { safeNextPath } from "@/lib/auth/paths";
@@ -40,21 +42,21 @@ export default async function Connexion({ searchParams }: { searchParams: Search
   return (
     <main className="grille-4 mx-auto min-h-dvh max-w-md content-center gap-y-6 px-4 py-12">
       <div className="flex items-center justify-between gap-2">
-        <Link href="/" className="text-muted-foreground text-sm hover:underline">
-          ← {t.common.appName}
+        <Link href="/" className="font-display flex items-center gap-2.5 font-bold tracking-tight">
+          <LogoMark /> {t.common.appName}
         </Link>
         <LanguageSwitcher />
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">{t.auth.title}</CardTitle>
+          <CardTitle className="text-2xl sm:text-[1.75rem]">{t.auth.title}</CardTitle>
           <CardDescription>{t.auth.description}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           {erreur && (
             <p
               role="alert"
-              className="border-destructive/40 text-destructive rounded-md border p-3 text-sm"
+              className="border-destructive/40 bg-destructive/8 text-destructive rounded-lg border p-3 text-sm"
             >
               {erreur}
             </p>
@@ -73,7 +75,7 @@ export default async function Connexion({ searchParams }: { searchParams: Search
             <label htmlFor="pw-email" className="font-medium">
               {t.auth.email}
             </label>
-            <input
+            <Input
               id="pw-email"
               name="email"
               type="email"
@@ -81,12 +83,11 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               autoComplete="email"
               inputMode="email"
               disabled={!configured}
-              className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
             />
             <label htmlFor="pw-password" className="font-medium">
               {t.auth.password}
             </label>
-            <input
+            <Input
               id="pw-password"
               name="password"
               type="password"
@@ -94,7 +95,6 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               autoComplete="current-password"
               maxLength={200}
               disabled={!configured}
-              className="border-input bg-background focus-visible:ring-ring h-10 rounded-md border px-3 text-base outline-none focus-visible:ring-2"
             />
             <Button type="submit" disabled={!configured}>
               {t.auth.signIn}

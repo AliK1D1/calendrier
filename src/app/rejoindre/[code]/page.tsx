@@ -66,7 +66,7 @@ export default async function Rejoindre({ params }: { params: Promise<{ code: st
     <>
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-xl content-start gap-y-6 px-4 py-6">
-        <h1 className="text-2xl font-bold tracking-tight">{ti.title}</h1>
+        <h1 className="titre-page">{ti.title}</h1>
         {preview === null ? (
           <Card>
             <CardHeader>

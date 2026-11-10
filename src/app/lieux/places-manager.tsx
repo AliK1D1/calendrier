@@ -3,6 +3,7 @@
 import { Home, MapPin, Pencil, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState, useTransition } from "react";
 
+import { useConfirm } from "@/components/confirm-dialog";
 import { type Flash, FlashMessage } from "@/components/flash-message";
 import { AddressSearch } from "@/components/places/address-search";
 import { type MapPoint, PlaceMapLazy } from "@/components/places/place-map-lazy";
@@ -34,6 +35,7 @@ interface Draft {
 
 export function PlacesManager({ places, homeId }: Props) {
   const { t } = useI18n();
+  const { confirm, confirmDialog } = useConfirm();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<Flash>(null);
   const clearMessage = useCallback(() => setMessage(null), []);
@@ -83,6 +85,7 @@ export function PlacesManager({ places, homeId }: Props) {
   return (
     <div className="flex flex-col gap-6">
       <FlashMessage message={message} onClose={clearMessage} />
+      {confirmDialog}
 
       <PlaceMapLazy
         points={points}
@@ -94,12 +97,12 @@ export function PlacesManager({ places, homeId }: Props) {
       />
 
       <section aria-labelledby="liste-lieux" className="flex flex-col gap-3">
-        <h2 id="liste-lieux" className="text-lg font-semibold">
+        <h2 id="liste-lieux" className="titre-section">
           {places.length === 0 ? t.places.none : t.places.count(places.length)}
         </h2>
         <ul className="flex flex-col gap-2">
           {places.map((p) => (
-            <li key={p.id} className="bg-card rounded-lg border p-3">
+            <li key={p.id} className="rangee p-3">
               {editingId === p.id ? (
                 <form
                   className="flex flex-col gap-2 sm:flex-row"
@@ -170,8 +173,12 @@ export function PlacesManager({ places, homeId }: Props) {
                       size="sm"
                       variant="outline"
                       disabled={pending}
-                      onClick={() => {
-                        if (window.confirm(t.places.confirmDelete(p.name, p.id === homeId))) {
+                      onClick={async () => {
+                        const yes = await confirm({
+                          message: t.places.confirmDelete(p.name, p.id === homeId),
+                          action: t.common.delete,
+                        });
+                        if (yes) {
                           run(() => supprimerLieu(p.id), t.places.deleted);
                         }
                       }}

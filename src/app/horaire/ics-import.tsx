@@ -75,7 +75,7 @@ export function IcsImport(props: Props) {
         ref={ref}
         aria-labelledby="ics-titre"
         onClose={() => setOpen(false)}
-        className="bg-card text-card-foreground m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 shadow-xl backdrop:bg-black/40 sm:m-auto sm:max-w-2xl sm:rounded-2xl"
+        className="bg-popover text-popover-foreground shadow-flottant m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-2xl border p-0 sm:m-auto sm:max-w-2xl sm:rounded-2xl"
       >
         {open && (
           <ImportFlow
@@ -210,7 +210,7 @@ function ImportFlow({
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6">
       <div className="flex items-center justify-between gap-2">
-        <h2 id="ics-titre" className="text-lg font-semibold">
+        <h2 id="ics-titre" className="titre-section">
           {ti.title}
         </h2>
         <Button

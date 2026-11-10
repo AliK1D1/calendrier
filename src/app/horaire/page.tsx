@@ -153,7 +153,7 @@ export default async function MonHoraire({
       <SiteHeader />
       <main className="grille-4 mx-auto max-w-5xl content-start gap-y-6 px-4 py-6">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">{ts.title}</h1>
+          <h1 className="titre-page">{ts.title}</h1>
           <p className="text-muted-foreground text-sm">
             {ts.introA}
             <Link href="/etude" className="underline underline-offset-2">

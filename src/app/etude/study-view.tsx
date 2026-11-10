@@ -1,9 +1,11 @@
 "use client";
 
+import { EmptyState } from "@/components/empty-state";
 import { BookOpen, CalendarClock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState, useTransition } from "react";
 
+import { useConfirm } from "@/components/confirm-dialog";
 import { type Flash, FlashMessage } from "@/components/flash-message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -141,13 +143,11 @@ export function StudyView({
       </Card>
 
       <section aria-labelledby="a-venir" className="flex flex-col gap-3">
-        <h2 id="a-venir" className="text-lg font-semibold">
+        <h2 id="a-venir" className="titre-section">
           {sv.upcoming}
         </h2>
         {upcoming.length === 0 ? (
-          <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-sm">
-            {sv.noUpcoming}
-          </p>
+          <EmptyState icon={BookOpen}>{sv.noUpcoming}</EmptyState>
         ) : (
           <ul className="flex flex-col gap-3">
             {upcoming.map((d) => (
@@ -159,7 +159,7 @@ export function StudyView({
 
       {past.length > 0 && (
         <details className="flex flex-col gap-3">
-          <summary className="text-lg font-semibold">{sv.past(past.length)}</summary>
+          <summary className="titre-section">{sv.past(past.length)}</summary>
           <ul className="mt-3 flex flex-col gap-3">
             {past.map((d) => (
               <DeadlineItem key={d.id} d={d} pending={pending} run={run} actions={actions} />
@@ -183,13 +183,14 @@ function DeadlineItem({
   actions: StudyViewActions;
 }) {
   const { locale, t } = useI18n();
+  const { confirm, confirmDialog } = useConfirm();
   const sv = t.study.view;
   const upcomingSessions = d.sessions.filter((s) => !s.past);
   return (
-    <li className={cn("bg-card flex flex-col gap-2 rounded-lg border p-3", d.past && "opacity-80")}>
+    <li className={cn("rangee flex flex-col gap-2 p-3", d.past && "opacity-80")}>
       <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
-          <span className="font-medium break-words">
+          <span className="font-semibold break-words">
             <Badge variant="secondary" className="mr-1.5">
               {t.study.kinds[d.kind]}
             </Badge>
@@ -203,14 +204,35 @@ function DeadlineItem({
               : ` (${t.study.difficulty[d.difficulty].toLowerCase()})`}{" "}
             · {sv.inSchedule(formatDuration(d.acceptedMinutes, locale))}
           </span>
+          {/* Part des heures à prévoir déjà placées dans l'horaire (le texte au-dessus la dit). */}
+          {!d.past && d.requiredMinutes > 0 && (
+            <span
+              aria-hidden
+              className="bg-muted mt-1.5 block h-1.5 max-w-64 overflow-hidden rounded-full"
+            >
+              <span
+                className={cn(
+                  "block h-full rounded-full",
+                  d.acceptedMinutes >= d.requiredMinutes ? "bg-success" : "bg-study",
+                )}
+                style={{
+                  width: `${Math.min(100, Math.round((d.acceptedMinutes / d.requiredMinutes) * 100))}%`,
+                }}
+              />
+            </span>
+          )}
         </div>
         <Button
           size="sm"
           variant="ghost"
           disabled={pending}
           aria-label={sv.deleteLabel(d.course)}
-          onClick={() => {
-            if (window.confirm(sv.deleteConfirm(d.course, d.sessions.length))) {
+          onClick={async () => {
+            const yes = await confirm({
+              message: sv.deleteConfirm(d.course, d.sessions.length),
+              action: t.common.delete,
+            });
+            if (yes) {
               run(() => actions.supprimerEcheance(d.id), sv.deleted);
             }
           }}
@@ -259,6 +281,7 @@ function DeadlineItem({
           </ul>
         </details>
       )}
+      {confirmDialog}
     </li>
   );
 }

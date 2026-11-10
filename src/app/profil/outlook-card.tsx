@@ -4,6 +4,7 @@ import { CalendarSync, RefreshCw, Unplug } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -38,6 +39,7 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
   const [pending, startTransition] = useTransition();
   const [calendars, setCalendars] = useState<Extract<CalendarsResult, { ok: true }> | null>(null);
   const [choice, setChoice] = useState("");
+  const { confirm, confirmDialog } = useConfirm();
 
   const run = (
     fn: () => Promise<{ ok: true; text?: string } | { ok: false; error: string }>,
@@ -52,7 +54,7 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
   };
 
   return (
-    <Card id="outlook" className="scroll-mt-16">
+    <Card id="outlook" className="scroll-mt-32">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <CalendarSync className="size-5" aria-hidden /> Calendrier Outlook
@@ -182,14 +184,13 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
                 type="button"
                 variant="ghost"
                 disabled={pending}
-                onClick={() => {
-                  if (
-                    !window.confirm(
+                onClick={async () => {
+                  const yes = await confirm({
+                    message:
                       "Déconnecter Outlook ? Tes blocs Outlook seront supprimés de l'app tout de suite.",
-                    )
-                  ) {
-                    return;
-                  }
+                    action: "Déconnecter",
+                  });
+                  if (!yes) return;
                   run(deconnecterOutlook, "Outlook déconnecté : ses blocs sont supprimés.");
                 }}
               >
@@ -206,6 +207,7 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
             {message.text}
           </p>
         )}
+        {confirmDialog}
       </CardContent>
     </Card>
   );

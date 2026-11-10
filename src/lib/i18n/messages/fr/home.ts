@@ -15,6 +15,21 @@ export const home = {
       text: "L'app propose des moments et des endroits faisables, en tenant compte du temps de trajet de chacun.",
     },
   ],
+  createAccount: "Créer un compte",
+  // Exemple illustré de l'accueil : trois horaires d'un jeudi et le moment libre en commun.
+  demo: {
+    label:
+      "Exemple : les horaires de trois amis un jeudi, et le moment où ils sont libres en même temps.",
+    day: "Jeudi",
+    people: [
+      { name: "Toi", blocks: ["Maths", "Chimie", "Philo", "Job"] },
+      { name: "Maya", blocks: ["Labo", "Français", "Gym"] },
+      { name: "Sam", blocks: ["Anglais", "Maths", "Job"] },
+    ],
+    free: "Libres tous les trois",
+    place: "Café près du cégep",
+    travel: "Trajets compris : 12 min pour toi, 20 min pour Maya, 8 min pour Sam.",
+  },
   hello: (name?: string) => (name ? `Salut ${name} !` : "Salut !"),
   ready: "Tout est prêt. Choisis un groupe pour trouver un moment réaliste.",
   progress: (done: number) =>

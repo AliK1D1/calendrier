@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { CircleAlert, CircleCheck, X } from "lucide-react";
 import { useEffect } from "react";
 
 import { useI18n } from "@/lib/i18n/client";
@@ -33,12 +33,15 @@ export function FlashMessage({ message, onClose }: { message: Flash; onClose: ()
         <p
           role={message.type === "erreur" ? "alert" : "status"}
           className={cn(
-            "bg-card pointer-events-auto flex w-full max-w-md items-start gap-2 rounded-lg border p-3 text-sm shadow-lg",
-            message.type === "erreur"
-              ? "border-destructive/50 text-destructive"
-              : "border-success/60",
+            "bg-popover text-popover-foreground shadow-flottant pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-xl border p-3 text-sm font-medium",
+            message.type === "erreur" ? "border-destructive/50" : "border-success/50",
           )}
         >
+          {message.type === "erreur" ? (
+            <CircleAlert className="text-destructive mt-px size-5 shrink-0" aria-hidden />
+          ) : (
+            <CircleCheck className="text-success mt-px size-5 shrink-0" aria-hidden />
+          )}
           <span className="flex-1">{tr(message.text)}</span>
           <button
             type="button"

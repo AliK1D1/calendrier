@@ -36,7 +36,7 @@ describe("createNominatimGeocoder", () => {
     expect(new URL(url).searchParams.get("q")).toBe("Cégep Édouard-Montpetit");
     const headers = new Headers(init?.headers);
     expect(headers.get("User-Agent")).toBe(NOMINATIM_USER_AGENT);
-    expect(NOMINATIM_USER_AGENT).toMatch(/^TempsLibreCommun\/\d/);
+    expect(NOMINATIM_USER_AGENT).toMatch(/^Freecrew\/\d/);
   });
 
   it("met en cache : la même recherche (casse, espaces) ne refait pas de requête", async () => {

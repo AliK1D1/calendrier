@@ -102,7 +102,7 @@ export function buildPlanIcs(plan: IcsPlan, now: Date, url?: string): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Temps libre commun//Plans//FR",
+    "PRODID:-//Freecrew//Plans//FR",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

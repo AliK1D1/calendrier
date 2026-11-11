@@ -1,6 +1,6 @@
 /** Pages de connexion et de création de compte. */
 export const auth = {
-  metaTitle: "Connexion · Temps libre commun",
+  metaTitle: "Connexion · Freecrew",
   title: "Connexion",
   description: "Connecte-toi avec ton courriel et ton mot de passe.",
   email: "Adresse courriel",
@@ -28,7 +28,7 @@ export const auth = {
     google: "La connexion avec Google n'a pas fonctionné. Réessaie ou utilise ton courriel.",
   } as Record<string, string>,
   signup: {
-    metaTitle: "Créer un compte · Temps libre commun",
+    metaTitle: "Créer un compte · Freecrew",
     title: "Créer un compte",
     description: "Choisis un nom d'utilisateur et un mot de passe. Aucun courriel à ouvrir.",
     username: "Nom d'utilisateur",

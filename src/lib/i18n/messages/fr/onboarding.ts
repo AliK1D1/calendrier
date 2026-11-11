@@ -1,6 +1,6 @@
 /** Accueil de première connexion (/bienvenue) et page d'invitation (/rejoindre). */
 export const onboarding = {
-  metaTitle: "Bienvenue · Temps libre commun",
+  metaTitle: "Bienvenue · Freecrew",
   title: "Bienvenue !",
   intro:
     "Trois questions pour que l'app calcule des trajets réalistes. Tu pourras tout changer plus tard dans « Mes lieux » et « Profil ».",
@@ -25,7 +25,7 @@ export const onboarding = {
   finish: "Terminer",
   later: "Plus tard (je le ferai dans « Mes lieux »)",
   invite: {
-    metaTitle: "Invitation · Temps libre commun",
+    metaTitle: "Invitation · Freecrew",
     title: "Invitation",
     invalid: "Lien d'invitation invalide",
     checkFailed: "Impossible de vérifier ce lien pour l'instant. Réessaie dans une minute.",

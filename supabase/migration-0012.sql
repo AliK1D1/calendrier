@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0012_segment18_availability_slots SEULE.
+-- Freecrew : migration 0012_segment18_availability_slots SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0012_segment18_availability_slots.sql : ne pas le
 -- modifier à la main.

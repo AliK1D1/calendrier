@@ -1,7 +1,7 @@
 import type { plans as fr } from "../fr/plans";
 
 export const plans: typeof fr = {
-  metaTitle: "My plans · Common Free Time",
+  metaTitle: "My plans · Freecrew",
   title: "My plans",
   intro:
     "Times suggested in your groups. Accept or decline the ones you're invited to: you can change your mind until the time has passed.",

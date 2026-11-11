@@ -1,4 +1,4 @@
-# Règles du projet « Temps libre commun »
+# Règles du projet « Freecrew »
 
 Le plan complet est dans `docs/plan-projet.md`. Lis-le (au minimum les sections 2, 3, 3 bis et 4
 et le segment en cours) avant de commencer une tâche.

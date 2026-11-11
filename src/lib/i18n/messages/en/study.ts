@@ -3,7 +3,7 @@ import type { study as fr } from "../fr/study";
 const n1 = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export const study: typeof fr = {
-  metaTitle: "Study · Common Free Time",
+  metaTitle: "Study · Freecrew",
   title: "Study",
   intro:
     "Between your exams and assignments: the app suggests study sessions in your real free time, where you already are (at college between two classes, or at home).",

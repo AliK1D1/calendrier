@@ -1,4 +1,4 @@
-# Temps libre commun
+# Freecrew
 
 Application web où des amis entrent leurs horaires (cours, travail…) et leurs lieux habituels,
 et qui leur propose **des moments ET des endroits** où se voir qui sont vraiment faisables :
@@ -164,7 +164,7 @@ prend la première.
   crée pas de lieux en double). « Plus tard » marque l'accueil comme fait sans lieu. Si la
   migration 0003 n'est pas appliquée, la connexion continue de marcher sans accueil.
 - **Géocodage** (`src/lib/geocoding/`, fonctions pures testées) : Nominatim d'OpenStreetMap,
-  appelé **seulement par le serveur**, avec le User-Agent `TempsLibreCommun/0.1 (projet
+  appelé **seulement par le serveur**, avec le User-Agent `Freecrew/0.1 (projet
 étudiant)`, au plus **1 requête/s** pour toute l'app (file d'attente de 10, au-delà : « service
   occupé »), cache de 24 h (500 recherches), recherche seulement quand on appuie sur
   « Chercher » (pas à chaque touche). Les arrêts d'autobus et stations de vélos qui portent le
@@ -635,7 +635,7 @@ Choix faits :
 
 1. <https://portal.azure.com> (compte Microsoft ; un compte Azure gratuit suffit, une
    inscription d'app ne coûte rien) → chercher **App registrations** → **New registration**.
-   - Name : `Temps libre commun`.
+   - Name : `Freecrew`.
    - Supported account types : **Accounts in any organizational directory (Any Microsoft
      Entra ID tenant - Multitenant) and personal Microsoft accounts**.
    - Redirect URI : plateforme **Web**, `https://calendrier-opal.vercel.app/api/outlook/callback`.

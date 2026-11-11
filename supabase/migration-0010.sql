@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0010_review_plan_privacy SEULE.
+-- Freecrew : migration 0010_review_plan_privacy SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0010_review_plan_privacy.sql : ne pas le
 -- modifier à la main.

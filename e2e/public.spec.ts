@@ -10,7 +10,7 @@ const PUBLIC_PAGES = ["/", "/connexion", "/inscription"];
 test.describe("accueil", () => {
   test("présente l'app et mène à la connexion et à l'inscription", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1, name: "Temps libre commun" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Freecrew" })).toBeVisible();
     // L'illustration : trois horaires et le moment libre en commun.
     await expect(page.getByRole("figure")).toContainText("Maya");
 

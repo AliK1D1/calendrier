@@ -1,6 +1,6 @@
 BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Temps libre commun//Fichier de test//FR
+PRODID:-//Freecrew//Fichier de test//FR
 CALSCALE:GREGORIAN
 X-WR-CALNAME:Horaire hiver 2027
 X-WR-TIMEZONE:America/Toronto

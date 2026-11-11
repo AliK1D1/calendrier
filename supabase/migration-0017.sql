@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0017_subscribed_calendars SEULE.
+-- Freecrew : migration 0017_subscribed_calendars SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0017_subscribed_calendars.sql : ne pas le
 -- modifier à la main.

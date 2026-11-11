@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0013_review_availability_limit SEULE.
+-- Freecrew : migration 0013_review_availability_limit SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0013_review_availability_limit.sql : ne pas le
 -- modifier à la main.

@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0014_outlook_connector SEULE.
+-- Freecrew : migration 0014_outlook_connector SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0014_outlook_connector.sql : ne pas le
 -- modifier à la main.

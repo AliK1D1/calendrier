@@ -1,7 +1,7 @@
 /** Textes partagés par toute l'app : en-tête, menus, erreurs génériques. */
 export const common = {
-  appName: "Temps libre commun",
-  appShortName: "Temps libre",
+  appName: "Freecrew",
+  appShortName: "Freecrew",
   appDescription: "Trouvez des moments et des endroits réalistes pour vous voir entre amis.",
   nav: {
     main: "Navigation principale",

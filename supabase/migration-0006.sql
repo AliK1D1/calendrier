@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0006_groups SEULE.
+-- Freecrew : migration 0006_groups SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0006_groups.sql : ne pas le
 -- modifier à la main.

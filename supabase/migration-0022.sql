@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0022_outing_limits SEULE.
+-- Freecrew : migration 0022_outing_limits SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0022_outing_limits.sql : ne pas le
 -- modifier à la main.

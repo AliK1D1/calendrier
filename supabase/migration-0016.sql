@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0016_review_repeat_weight SEULE.
+-- Freecrew : migration 0016_review_repeat_weight SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0016_review_repeat_weight.sql : ne pas le
 -- modifier à la main.

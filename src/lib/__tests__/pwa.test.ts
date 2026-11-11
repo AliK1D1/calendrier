@@ -19,7 +19,7 @@ describe("manifeste (PWA)", () => {
   const m = manifest();
 
   it("décrit une app installable en français, ouverte sur l'accueil", () => {
-    expect(m.name).toBe("Temps libre commun");
+    expect(m.name).toBe("Freecrew");
     expect(m.short_name && m.short_name.length).toBeLessThanOrEqual(12);
     expect(m.lang).toBe("fr-CA");
     expect(m.start_url).toBe("/");

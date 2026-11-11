@@ -1,7 +1,7 @@
 import type { places as fr } from "../fr/places";
 
 export const places: typeof fr = {
-  metaTitle: "My places · Common Free Time",
+  metaTitle: "My places · Freecrew",
   title: "My places",
   intro:
     "Your home, your college, your job… The app uses them to work out your travel times. Members of your groups can see these places.",

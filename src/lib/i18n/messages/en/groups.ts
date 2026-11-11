@@ -1,8 +1,8 @@
 import type { groups as fr } from "../fr/groups";
 
 export const groups: typeof fr = {
-  metaTitle: "My groups · Common Free Time",
-  groupMetaTitle: "Group · Common Free Time",
+  metaTitle: "My groups · Freecrew",
+  groupMetaTitle: "Group · Freecrew",
   title: "My groups",
   introBefore:
     "Create a group and send the invite link to your friends. Group members can see when you're busy and where, but not your class titles (you can change this in your ",
@@ -27,7 +27,7 @@ export const groups: typeof fr = {
   callLocation: "Call or video",
   callSuffix: " (call)",
   copyFailed: "Can't copy: select the link and copy it.",
-  shareText: (name: string) => `Join “${name}” on Common Free Time`,
+  shareText: (name: string) => `Join “${name}” on Freecrew`,
   leaveAlone: " You're alone: the group and its places will be deleted.",
   leaveNewAdmin: (name: string) => ` ${name} will become admin.`,
   inviteFirst: "Invite your friends to get started",

@@ -1,8 +1,8 @@
 import type { common as fr } from "../fr/common";
 
 export const common: typeof fr = {
-  appName: "Common Free Time",
-  appShortName: "Free Time",
+  appName: "Freecrew",
+  appShortName: "Freecrew",
   appDescription: "Find realistic times and places to meet up with friends.",
   nav: {
     main: "Main navigation",

@@ -116,7 +116,7 @@ function requestOnce(
         headers: {
           Accept: "text/calendar, text/plain;q=0.9, */*;q=0.1",
           "Accept-Encoding": "identity",
-          "User-Agent": "TempsLibreCommun/1.0 (calendrier abonné)",
+          "User-Agent": "Freecrew/1.0 (calendrier abonné)",
         },
       },
       (res) => {

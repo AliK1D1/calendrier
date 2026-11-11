@@ -1,6 +1,6 @@
 /** Plans (moments proposés dans les groupes). */
 export const plans = {
-  metaTitle: "Mes plans · Temps libre commun",
+  metaTitle: "Mes plans · Freecrew",
   title: "Mes plans",
   intro:
     "Les moments proposés dans tes groupes. Accepte ou refuse ceux où tu es invité·e : tu peux changer d'avis tant que le moment n'est pas passé.",

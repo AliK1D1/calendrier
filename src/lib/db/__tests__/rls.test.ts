@@ -116,7 +116,7 @@ describe("migrations (supabase/setup.sql)", () => {
     expect(SETUP_SQL).toBe(buildSetupSql(ROOT));
   });
 
-  it("supabase/migration-0002.sql à migration-0022.sql sont à jour (npm run db:setup-sql)", () => {
+  it("supabase/migration-0002.sql à migration-0023.sql sont à jour (npm run db:setup-sql)", () => {
     const separees = buildSeparateMigrations(ROOT);
     expect(Object.keys(separees)).toEqual([
       "supabase/migration-0002.sql",
@@ -140,6 +140,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "supabase/migration-0020.sql",
       "supabase/migration-0021.sql",
       "supabase/migration-0022.sql",
+      "supabase/migration-0023.sql",
     ]);
     for (const [rel, content] of Object.entries(separees)) {
       expect(readFileSync(join(ROOT, rel), "utf8")).toBe(content);
@@ -295,13 +296,13 @@ describe("migrations (supabase/setup.sql)", () => {
       const { rows: policies } = await vide.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM pg_policies WHERE schemaname = 'public'",
       );
-      expect(policies[0].n).toBe(40);
+      expect(policies[0].n).toBe(42);
     } finally {
       await vide.close();
     }
   }, 60_000);
 
-  it("s'applique sur une base vide et crée les 14 tables avec RLS activé", async () => {
+  it("s'applique sur une base vide et crée les 15 tables avec RLS activé", async () => {
     const tables = await rows<{ relname: string; relrowsecurity: boolean }>(
       `SELECT c.relname, c.relrowsecurity FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -320,6 +321,7 @@ describe("migrations (supabase/setup.sql)", () => {
       "plan_invitees",
       "plan_votes",
       "profiles",
+      "push_tokens",
       "study_preferences",
       "subscription_events",
     ]);
@@ -2947,5 +2949,80 @@ describe("limite de sorties (migration 0022)", () => {
       { title: "Occupé", is_outing: false },
       { title: "Occupé", is_outing: true },
     ]);
+  });
+});
+
+describe("Téléphones inscrits aux notifications (migration 0023)", () => {
+  const TA = "ExponentPushToken[aaaaaaaaaaaaaaaaaaaaaa]";
+  const register = (uid: string, token: string, platform = "android") =>
+    as(uid, () => rows("SELECT public.register_push_token($1, $2)", [token, platform]));
+
+  it("chacun ne voit et ne retire que ses propres téléphones", async () => {
+    await register(A, TA);
+    expect(await as(A, () => rows("SELECT token, platform FROM push_tokens"))).toEqual([
+      { token: TA, platform: "android" },
+    ]);
+    expect(await as(B, () => rows("SELECT token FROM push_tokens"))).toEqual([]);
+    expect(await as(null, () => rows("SELECT token FROM push_tokens")).catch(() => "refusé")).toBe(
+      "refusé",
+    );
+    await as(B, () => rows("DELETE FROM push_tokens"));
+    expect(await rows("SELECT token FROM push_tokens")).toHaveLength(1);
+    await as(A, () => rows("DELETE FROM push_tokens"));
+    expect(await rows("SELECT token FROM push_tokens")).toHaveLength(0);
+  });
+
+  it("aucune écriture directe : seulement register_push_token", async () => {
+    await expect(
+      as(A, () =>
+        rows("INSERT INTO push_tokens (token, user_id, platform) VALUES ($1, $2, 'ios')", [TA, A]),
+      ),
+    ).rejects.toThrow(/permission/);
+    await register(A, TA);
+    await expect(as(A, () => rows("UPDATE push_tokens SET user_id = $1", [B]))).rejects.toThrow(
+      /permission/,
+    );
+    await expect(
+      as(null, () => rows("SELECT public.register_push_token($1, 'ios')", [TA])),
+    ).rejects.toThrow();
+  });
+
+  it("refuse un jeton ou un appareil invalide", async () => {
+    for (const bad of [
+      "",
+      "abc",
+      "ExponentPushToken[]",
+      "ExponentPushToken[a b]",
+      `ExponentPushToken[${"a".repeat(200)}]`,
+    ]) {
+      await expect(register(A, bad)).rejects.toThrow(/Jeton de notification invalide/);
+    }
+    await expect(register(A, TA, "web")).rejects.toThrow(/Appareil invalide/);
+  });
+
+  it("un téléphone passe au nouveau compte ; au plus 10 téléphones par personne", async () => {
+    await register(A, TA);
+    await register(B, TA, "ios");
+    expect(await rows("SELECT user_id, platform FROM push_tokens")).toEqual([
+      { user_id: B, platform: "ios" },
+    ]);
+    for (let i = 0; i < 12; i++) {
+      await register(A, `ExpoPushToken[tel${String(i).padStart(2, "0")}]`);
+      await rows(
+        "UPDATE push_tokens SET updated_at = now() - make_interval(mins => 100 - $1::int) WHERE token = $2",
+        [i, `ExpoPushToken[tel${String(i).padStart(2, "0")}]`],
+      );
+    }
+    const left = await as(A, () =>
+      rows<{ token: string }>("SELECT token FROM push_tokens ORDER BY token"),
+    );
+    expect(left).toHaveLength(10);
+    expect(left[0].token).toBe("ExpoPushToken[tel02]");
+  });
+
+  it("supprimer le compte retire ses téléphones", async () => {
+    await register(A, TA);
+    await rows("DELETE FROM auth.users WHERE id = $1", [A]);
+    expect(await rows("SELECT token FROM push_tokens")).toEqual([]);
   });
 });

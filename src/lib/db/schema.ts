@@ -706,6 +706,38 @@ export const subscriptionEvents = pgTable(
   ],
 );
 
+/**
+ * Appareil inscrit aux notifications poussées de l'app mobile : un jeton Expo
+ * (`ExponentPushToken[…]`) par téléphone. Écrit seulement par `register_push_token` (un
+ * téléphone passe d'un compte à l'autre quand on change de compte) et retiré par
+ * `unregister_push_token` ou par la personne (DELETE). Visible **seulement** par son
+ * propriétaire (RLS, migration 0023). Au plus 10 appareils par personne (les plus anciens
+ * partent). Les envois se font dans la BD (`send_push`, par pg_net), jamais depuis l'app.
+ */
+export const pushTokens = pgTable(
+  "push_tokens",
+  {
+    token: text("token").primaryKey(),
+    user_id: uuid("user_id")
+      .notNull()
+      .default(sql`auth.uid()`)
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    platform: text("platform", { enum: ["ios", "android"] }).notNull(),
+    created_at: createdAt(),
+    updated_at: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("push_tokens_user_idx").on(t.user_id),
+    check("push_tokens_platform", sql`${t.platform} in ('ios', 'android')`),
+    check(
+      "push_tokens_format",
+      sql`length(${t.token}) <= 200 and ${t.token} ~ '^Expo(nent)?PushToken\\[[A-Za-z0-9_-]+\\]$'`,
+    ),
+  ],
+);
+
 export type ProfileRow = typeof profiles.$inferSelect;
 export type PlaceRow = typeof places.$inferSelect;
 export type BusyBlockRow = typeof busyBlocks.$inferSelect;
@@ -720,3 +752,4 @@ export type AvailabilitySlotRow = typeof availabilitySlots.$inferSelect;
 export type OutlookConnectionRow = typeof outlookConnections.$inferSelect;
 export type CalendarSubscriptionRow = typeof calendarSubscriptions.$inferSelect;
 export type SubscriptionEventRow = typeof subscriptionEvents.$inferSelect;
+export type PushTokenRow = typeof pushTokens.$inferSelect;

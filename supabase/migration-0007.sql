@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0007_review_kick_new_code SEULE.
+-- Freecrew : migration 0007_review_kick_new_code SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0007_review_kick_new_code.sql : ne pas le
 -- modifier à la main.

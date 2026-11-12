@@ -1,6 +1,6 @@
 /** Mon horaire : page, grille de la semaine, liste des blocs. */
 export const schedule = {
-  metaTitle: "Mon horaire · Temps libre commun",
+  metaTitle: "Mon horaire · Freecrew",
   title: "Mon horaire",
   introA:
     "Tes cours, ton travail et tes autres engagements. Les membres de tes groupes voient quand tu es occupé et où. Tes séances d'étude se planifient dans ",

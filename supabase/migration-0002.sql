@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0002_review_hardening SEULE.
+-- Freecrew : migration 0002_review_hardening SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0002_review_hardening.sql : ne pas le
 -- modifier à la main.

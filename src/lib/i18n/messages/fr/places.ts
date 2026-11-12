@@ -1,6 +1,6 @@
 /** Mes lieux, recherche d'adresse et carte. */
 export const places = {
-  metaTitle: "Mes lieux · Temps libre commun",
+  metaTitle: "Mes lieux · Freecrew",
   title: "Mes lieux",
   intro:
     "Ta maison, ton cégep, ton travail… L'app s'en sert pour calculer tes temps de trajet. Les membres de tes groupes voient ces lieux.",

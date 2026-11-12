@@ -9,7 +9,7 @@ import { roundCoord } from "@/lib/places/validation";
 export const NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
 
 /** User-Agent envoyé à Nominatim : identifie l'app (exigé par la politique d'utilisation). */
-export const NOMINATIM_USER_AGENT = "TempsLibreCommun/0.1 (projet étudiant)";
+export const NOMINATIM_USER_AGENT = "Freecrew/0.1 (projet étudiant)";
 
 export const QUERY_MIN = 3;
 export const QUERY_MAX = 200;

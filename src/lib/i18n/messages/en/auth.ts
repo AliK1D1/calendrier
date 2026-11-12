@@ -1,7 +1,7 @@
 import type { auth as fr } from "../fr/auth";
 
 export const auth: typeof fr = {
-  metaTitle: "Sign in · Common Free Time",
+  metaTitle: "Sign in · Freecrew",
   title: "Sign in",
   description: "Sign in with your email and password.",
   email: "Email address",
@@ -27,7 +27,7 @@ export const auth: typeof fr = {
     google: "Signing in with Google didn't work. Try again or use your email.",
   },
   signup: {
-    metaTitle: "Create an account · Common Free Time",
+    metaTitle: "Create an account · Freecrew",
     title: "Create an account",
     description: "Pick a username and a password. No email to open.",
     username: "Username",

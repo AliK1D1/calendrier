@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0005_review_limits SEULE.
+-- Freecrew : migration 0005_review_limits SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0005_review_limits.sql : ne pas le
 -- modifier à la main.

@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0021_skip_days SEULE.
+-- Freecrew : migration 0021_skip_days SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0021_skip_days.sql : ne pas le
 -- modifier à la main.

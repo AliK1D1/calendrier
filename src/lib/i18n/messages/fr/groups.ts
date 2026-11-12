@@ -1,7 +1,7 @@
 /** Mes groupes et la page d'un groupe. */
 export const groups = {
-  metaTitle: "Mes groupes · Temps libre commun",
-  groupMetaTitle: "Groupe · Temps libre commun",
+  metaTitle: "Mes groupes · Freecrew",
+  groupMetaTitle: "Groupe · Freecrew",
   title: "Mes groupes",
   introBefore:
     "Crée un groupe et envoie le lien d'invitation à tes amis. Les membres d'un groupe voient quand tu es occupé et où, mais pas le titre de tes cours (réglable dans ton ",
@@ -27,7 +27,7 @@ export const groups = {
   callLocation: "Appel ou visio",
   callSuffix: " (appel)",
   copyFailed: "Copie impossible : sélectionne le lien et copie-le.",
-  shareText: (name: string) => `Rejoins « ${name} » sur Temps libre commun`,
+  shareText: (name: string) => `Rejoins « ${name} » sur Freecrew`,
   leaveAlone: " Tu es seul·e : le groupe et ses lieux seront supprimés.",
   leaveNewAdmin: (name: string) => ` ${name} deviendra admin.`,
   inviteFirst: "Invite tes amis pour commencer",

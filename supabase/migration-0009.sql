@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0009_segment12_meetup_invites SEULE.
+-- Freecrew : migration 0009_segment12_meetup_invites SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0009_segment12_meetup_invites.sql : ne pas le
 -- modifier à la main.

@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0015_custom_recurrence SEULE.
+-- Freecrew : migration 0015_custom_recurrence SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0015_custom_recurrence.sql : ne pas le
 -- modifier à la main.

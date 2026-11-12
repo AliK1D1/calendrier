@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0020_usernames SEULE.
+-- Freecrew : migration 0020_usernames SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0020_usernames.sql : ne pas le
 -- modifier à la main.

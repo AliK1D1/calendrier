@@ -34,7 +34,7 @@ import { QuietHoursForm } from "./quiet-hours-form";
 import { StudyPrefsForm } from "./study-prefs-form";
 import { SubscriptionsCard } from "./subscriptions-card";
 
-export const metadata: Metadata = { title: "Profil · Temps libre commun" };
+export const metadata: Metadata = { title: "Profil · Freecrew" };
 export const dynamic = "force-dynamic";
 // Actions Outlook (synchro, choix du calendrier) : Microsoft peut être lent.
 export const maxDuration = 60;

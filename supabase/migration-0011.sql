@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0011_segment13_study_planner SEULE.
+-- Freecrew : migration 0011_segment13_study_planner SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0011_segment13_study_planner.sql : ne pas le
 -- modifier à la main.

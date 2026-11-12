@@ -1,7 +1,7 @@
 import type { schedule as fr } from "../fr/schedule";
 
 export const schedule: typeof fr = {
-  metaTitle: "My schedule · Common Free Time",
+  metaTitle: "My schedule · Freecrew",
   title: "My schedule",
   introA:
     "Your classes, your job and your other commitments. Members of your groups can see when you're busy and where. Your study sessions are planned in ",

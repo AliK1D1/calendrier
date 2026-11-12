@@ -11,8 +11,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Temps libre commun",
-    short_name: "Temps libre",
+    name: "Freecrew",
+    short_name: "Freecrew",
     description: "Trouvez des moments et des endroits réalistes pour vous voir entre amis.",
     lang: "fr-CA",
     dir: "ltr",

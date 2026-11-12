@@ -2,7 +2,7 @@
  * VRAIE réponse de Nominatim, capturée le 2026-11-02 avec :
  *   GET https://nominatim.openstreetmap.org/search?q=Cégep Édouard-Montpetit&format=jsonv2
  *       &limit=5&countrycodes=ca&accept-language=fr
- *   User-Agent: TempsLibreCommun/0.1 (projet étudiant)
+ *   User-Agent: Freecrew/0.1 (projet étudiant)
  * À noter : Nominatim renvoie d'abord des arrêts d'autobus ; le cégep lui-même
  * (amenity/university, ~45.5359, -73.4939) n'arrive qu'en 4e position.
  * Données © les contributeurs d'OpenStreetMap, ODbL 1.0.

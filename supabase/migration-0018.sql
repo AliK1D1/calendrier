@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0018_story5_recurring_plans SEULE.
+-- Freecrew : migration 0018_story5_recurring_plans SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0018_story5_recurring_plans.sql : ne pas le
 -- modifier à la main.

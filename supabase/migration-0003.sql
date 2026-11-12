@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0003_onboarding SEULE.
+-- Freecrew : migration 0003_onboarding SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0003_onboarding.sql : ne pas le
 -- modifier à la main.

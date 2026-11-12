@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════════════════
--- Temps libre commun : migration 0004_quiet_hours SEULE.
+-- Freecrew : migration 0004_quiet_hours SEULE.
 --
 -- FICHIER GÉNÉRÉ par « npm run db:setup-sql » à partir de drizzle/0004_quiet_hours.sql : ne pas le
 -- modifier à la main.

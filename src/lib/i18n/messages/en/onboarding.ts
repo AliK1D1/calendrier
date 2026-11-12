@@ -1,7 +1,7 @@
 import type { onboarding as fr } from "../fr/onboarding";
 
 export const onboarding: typeof fr = {
-  metaTitle: "Welcome · Common Free Time",
+  metaTitle: "Welcome · Freecrew",
   title: "Welcome!",
   intro:
     "Three questions so the app can work out realistic trips. You can change everything later in “My places” and “Profile”.",
@@ -26,7 +26,7 @@ export const onboarding: typeof fr = {
   finish: "Finish",
   later: "Later (I'll do it in “My places”)",
   invite: {
-    metaTitle: "Invitation · Common Free Time",
+    metaTitle: "Invitation · Freecrew",
     title: "Invitation",
     invalid: "Invalid invite link",
     checkFailed: "Can't check this link right now. Try again in a minute.",

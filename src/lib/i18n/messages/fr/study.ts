@@ -2,7 +2,7 @@ import { plural } from "@/lib/ux/plural";
 
 /** Étude : page /etude et panneau des séances proposées (/horaire). */
 export const study = {
-  metaTitle: "Étude · Temps libre commun",
+  metaTitle: "Étude · Freecrew",
   title: "Étude",
   intro:
     "Entre tes examens et tes travaux : l'app propose des séances d'étude dans tes vrais moments libres, là où tu es déjà (au cégep entre deux cours, ou à la maison).",

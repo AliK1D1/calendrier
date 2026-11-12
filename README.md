@@ -413,6 +413,32 @@ Les autres voient seulement que je ne suis pas libre.
 - Limite : en cherchant un autre moment pour un plan, l'ancien plan compte encore comme une
   sortie tant qu'il n'est pas annulé.
 
+### Notifications poussées (app mobile)
+
+**Migration à appliquer : `supabase/migration-0023.sql`** (SQL Editor, une seule fois). Elle
+active l'extension **pg_net** de Supabase (si elle ne l'est pas déjà).
+
+L'app mobile (dépôt `AliK1D1/Calendrier-Mobile`) inscrit chaque téléphone dans `push_tokens`
+(`register_push_token`). La BD envoie elle-même les notifications au service Expo, que l'action
+vienne du site ou de l'app :
+
+- un plan est proposé → les invités (pas la personne qui propose) ;
+- un invité accepte ou refuse → la personne qui a proposé (pas de nouvelle notification si la
+  réponse change moins de 10 minutes après la précédente) ;
+- un plan est annulé ou une série arrêtée → les invités qui n'avaient pas refusé.
+
+- BD : `send_push` (une requête `net.http_post` par tranche de 100 téléphones, partie après la
+  fin de la transaction), déclencheurs `meetup_plans_notify_proposed` (différé : les invités et
+  la répétition sont déjà écrits), `plan_votes_notify`, `meetup_plans_notify_cancelled`. Un
+  envoi raté (ou pg_net absent) n'empêche jamais de proposer, répondre ou annuler.
+- Chaque personne voit et retire seulement ses téléphones (RLS) ; au plus 10 par personne.
+- Aucune clé à ajouter au site ni à Vercel. Les jetons invalides (app désinstallée) restent
+  jusqu'à 10 par personne ; Expo les ignore.
+- Pas de notification pour un plan « à revoir » : cet état est calculé par l'app à partir des
+  horaires, pas écrit dans la BD. Les rappels avant un plan sont des notifications locales de
+  l'app mobile.
+- Tests : `src/lib/db/__tests__/push-notifications.test.ts` (faux pg_net) et `rls.test.ts`.
+
 ## Tests de bout en bout (navigateur)
 
 `npm run test:e2e` construit l'app puis lance Playwright (`e2e/`, config dans

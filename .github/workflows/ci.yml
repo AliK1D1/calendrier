@@ -1,6 +1,6 @@
 # Vérification automatique (segment 17) : lint, tests (dont PGlite) et build sur chaque PR et
 # chaque push sur main. Aucun secret : le build doit passer sans variable d'environnement.
-name: CI
+name: CI (Web)
 
 on:
   pull_request:
@@ -13,6 +13,10 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: FreecrewWeb
 
 jobs:
   verifier:

@@ -16,6 +16,7 @@
     "db:generate": "drizzle-kit generate && node scripts/build-setup-sql.mjs",
     "db:setup-sql": "node scripts/build-setup-sql.mjs",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed-sql": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/build-seed-sql.mjs",
     "seed:test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/seed-test-data.mjs"
   },
   "dependencies": {

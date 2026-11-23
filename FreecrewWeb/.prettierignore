@@ -4,3 +4,5 @@ package-lock.json
 docs/plan-projet.md
 drizzle/meta
 supabase/setup.sql
+supabase/seed-test-data.sql
+supabase/seed-test-data-remove.sql

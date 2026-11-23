@@ -1,7 +1,7 @@
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 
-import { getFreeWindows } from "./freeWindows";
+import { getFreeWindows, windowsFrom } from "./freeWindows";
 import { DEFAULT_WEIGHTS, type ScoreWeights, overlapRatio, scoreProposal } from "./score";
 import { type TravelTimeProvider, isSamePlace } from "./travel";
 import {
@@ -191,8 +191,9 @@ export async function findMeetupCandidates(
     const { start: dayStart, end: dayEnd } = zonedDayBounds(day);
     // Journée déjà passée (ex. lundi quand on cherche le mercredi) : rien à proposer.
     if (request.notBefore && dayEnd.getTime() <= request.notBefore.getTime()) continue;
+    // Départ au plus tôt « pas avant » : on ne part jamais dans le passé (S37).
     const windowsByPerson = participants.map((person) =>
-      getFreeWindows(person, dayStart, dayEnd, { dayHours }),
+      windowsFrom(getFreeWindows(person, dayStart, dayEnd, { dayHours }), request.notBefore),
     );
     // Si quelqu'un n'a aucune fenêtre ce jour-là, inutile d'essayer les lieux.
     if (windowsByPerson.some((w) => w.length === 0)) continue;

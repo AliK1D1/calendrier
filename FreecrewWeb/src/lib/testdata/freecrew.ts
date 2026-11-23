@@ -373,6 +373,14 @@ export const GROUPS: readonly DataGroup[] = [
   { key: "calmes", name: "Jade et Nora", creator: "nora", members: ["jade"] },
   { key: "lina-nora", name: "Lina et Nora", creator: "nora", members: ["lina"] },
   { key: "nuit", name: "Hugo et Nora", creator: "nora", members: ["hugo"] },
+  // Disponibilité dans un groupe (S29 à S40) : tout le monde, avec tous les cas à la fois
+  // (sans maison, trop loin, heures calmes, quart de nuit, disponibilité ponctuelle).
+  {
+    key: "bande",
+    name: "Toute la bande",
+    creator: "ali",
+    members: ["sam", "maya", "leo", "nora", "zoe", "felix", "jade", "hugo", "lina"],
+  },
 ];
 
 export const PLANS: readonly DataPlan[] = [

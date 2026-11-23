@@ -12,7 +12,7 @@ une erreur.
   le numéro du scénario (S01, S02…). Les données passent par le même chemin que dans l'app :
   lignes de la BD → `toPeople` → logique d'horaire.
 - **Le seed** : `scripts/seed-test-data.mjs` remplit une base Supabase **de test** avec les mêmes
-  personnes, pour essayer les scénarios à la main (voir « Essayer à la main » en bas). Il est
+  personnes, pour essayer les scénarios à la main (voir « Le plus simple : coller un fichier SQL » en bas). Il est
   vérifié dans `src/lib/db/__tests__/seed.test.ts` sur une base Postgres en mémoire.
 
 Semaine des tests : du lundi 23 au dimanche 29 novembre 2026. Les heures sont celles de
@@ -207,7 +207,33 @@ Ali, Sam, Maya et Léo du lundi au dimanche, 1 h minimum. Attendu : au plus 3 pr
 jour, de la meilleure à la moins bonne, chacune avec les trajets des quatre, et toutes
 réalistes.
 
-## Essayer à la main (base Supabase de test)
+## Le plus simple : coller un fichier SQL dans Supabase
+
+`supabase/seed-test-data.sql` crée les mêmes 10 comptes et toutes leurs données, sans terminal.
+
+1. Ouvre `supabase/seed-test-data.sql` et remplace `CHANGE-MOI` (en haut) par le mot de passe
+   des comptes de test : 8 caractères, une majuscule, une minuscule, un chiffre.
+2. Supabase → **SQL Editor** → New query → colle tout le fichier → **Run**.
+3. Dans l'app (en ligne ou en local), connecte-toi avec `freecrew.ali@example.com` et ce mot
+   de passe. Les autres comptes : `freecrew.sam@example.com`, `freecrew.nora@example.com`… (ali,
+   sam, maya, leo, nora, zoe, felix, jade, hugo, lina).
+
+Les données sont datées pour la semaine du prochain lundi (aujourd'hui si on est lundi),
+calculée au moment du Run. Le fichier refuse de tourner si le mot de passe n'a pas été changé
+ou si les comptes existent déjà. Tout se fait dans une transaction : une erreur n'en laisse rien.
+
+**Pour tout effacer** (ou recommencer une autre semaine) : colle
+`supabase/seed-test-data-remove.sql` et Run. Il supprime seulement les comptes
+`freecrew.*@example.com` et ce qui leur appartient (lieux, horaires, groupes, plans).
+
+Sur la vraie base, ces comptes ne sont dans aucun groupe de tes amis : personne d'autre ne voit
+leurs horaires. Leurs noms d'utilisateur (`ali_test`, `sam_test`…) existent quand même tant que
+tu ne les effaces pas.
+
+Les deux fichiers sont générés à partir des données par `npm run db:seed-sql`, et vérifiés dans
+`src/lib/db/__tests__/seed-sql.test.ts`.
+
+## Essayer à la main avec le script (base Supabase de test)
 
 Le script crée les 10 comptes, leurs lieux et horaires, les groupes et les plans, datés pour
 **la semaine du prochain lundi**. Il ne touche **jamais** la base de l'app :

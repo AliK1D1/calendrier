@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LogoMark } from "@/components/logo-mark";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -98,9 +98,7 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               maxLength={200}
               disabled={!configured}
             />
-            <Button type="submit" disabled={!configured}>
-              {t.auth.signIn}
-            </Button>
+            <SubmitButton disabled={!configured}>{t.auth.signIn}</SubmitButton>
           </form>
 
           <p className="text-muted-foreground text-center text-sm">
@@ -121,9 +119,9 @@ export default async function Connexion({ searchParams }: { searchParams: Search
 
           <form action={connexionGoogle}>
             <input type="hidden" name="next" value={next} />
-            <Button type="submit" variant="outline" className="w-full" disabled={!configured}>
+            <SubmitButton variant="outline" className="w-full" disabled={!configured}>
               {t.auth.google}
-            </Button>
+            </SubmitButton>
           </form>
         </CardContent>
       </Card>

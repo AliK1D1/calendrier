@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PASSWORD_MAX, passwordProblems, USERNAME_MAX } from "@/lib/auth/signup";
@@ -119,9 +119,9 @@ export function SignupForm({ next, configured }: { next: string; configured: boo
         ))}
       </ul>
 
-      <Button type="submit" disabled={!configured || pending}>
+      <SubmitButton pending={pending} disabled={!configured}>
         {s.submit}
-      </Button>
+      </SubmitButton>
 
       <p className="text-muted-foreground text-center text-sm">
         {s.haveAccount}{" "}

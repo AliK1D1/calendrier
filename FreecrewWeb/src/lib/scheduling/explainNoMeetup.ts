@@ -24,7 +24,7 @@ import {
   memoizeTravel,
   type PlaceAvailability,
 } from "./findMeetups";
-import { getFreeWindows } from "./freeWindows";
+import { getFreeWindows, windowsFrom } from "./freeWindows";
 import { TIME_ZONE, addMinutesTo, eachDay, minutesBetween, zonedDayBounds } from "./time";
 import type { TravelTimeProvider } from "./travel";
 import type { MeetupRequest, Person, PersonId, Place, PlaceId, TravelLeg } from "./types";
@@ -147,7 +147,7 @@ export async function explainNoMeetup(
     const { start: dayStart, end: dayEnd } = zonedDayBounds(day);
     if (notBefore !== undefined && dayEnd.getTime() <= notBefore) continue;
     const windowsByPerson = participants.map((person) =>
-      getFreeWindows(person, dayStart, dayEnd, { dayHours }),
+      windowsFrom(getFreeWindows(person, dayStart, dayEnd, { dayHours }), request.notBefore),
     );
     if (windowsByPerson.some((w) => w.length === 0)) continue;
 

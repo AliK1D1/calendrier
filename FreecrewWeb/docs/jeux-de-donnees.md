@@ -8,8 +8,9 @@ une erreur.
 - **Les données** : `src/lib/testdata/freecrew.ts` (10 personnes, leurs lieux, leurs horaires,
   10 groupes, 3 plans). Elles sont écrites comme des lignes de la base de données, avec des jours
   relatifs à une semaine (lundi = jour 0), puis datées par `materialize(lundi)`.
-- **Les tests** : `src/lib/scheduling/__tests__/scenarios.test.ts`. Chaque bloc de tests porte
-  le numéro du scénario (S01, S02…). Les données passent par le même chemin que dans l'app :
+- **Les tests** : `src/lib/scheduling/__tests__/scenarios.test.ts` (S01 à S28) et
+  `scenarios-groupe.test.ts` (S29 à S41, « qui est disponible dans un groupe »). Chaque bloc de
+  tests porte le numéro du scénario (S01, S02…). Les données passent par le même chemin que dans l'app :
   lignes de la BD → `toPeople` → logique d'horaire.
 - **Le seed** : `scripts/seed-test-data.mjs` remplit une base Supabase **de test** avec les mêmes
   personnes, pour essayer les scénarios à la main (voir « Essayer à la main » en bas). Il est
@@ -64,6 +65,7 @@ proposition ne demande jamais à quelqu'un d'être à deux endroits** (cours, tr
 | Jade et Nora           | Nora, Jade          |
 | Lina et Nora           | Nora, Lina          |
 | Hugo et Nora           | Nora, Hugo          |
+| Toute la bande         | les 10              |
 
 - **Souper au café** (Pauses du cégep) : jeudi 18 h-20 h au café rue Saint-Charles, proposé
   par ali, accepté par Sam.
@@ -207,6 +209,75 @@ Ali, Sam, Maya et Léo du lundi au dimanche, 1 h minimum. Attendu : au plus 3 pr
 jour, de la meilleure à la moins bonne, chacune avec les trajets des quatre, et toutes
 réalistes.
 
+### Qui est disponible dans un groupe
+
+Le plan de test complet de cette fonctionnalité est dans `docs/plan-test-disponibilite-groupe.md`.
+Trois vues : la **grille** (qui est libre, par demi-heure, **sans** les trajets), la
+**recherche du groupe** (moments réalistes, trajets compris) et **« Je suis libre
+maintenant »** (qui peut me voir d'ici 2 h, dans tous mes groupes).
+
+**S29 · grille de « Les quatre » le lundi** ✅
+28 tranches de 8 h à 22 h. À 8 h 30 seul Léo est libre ; à 11 h, ali, Sam et Léo (Maya finit à
+11 h 30) ; de **11 h 30 à 12 h, les quatre** ; à 13 h, seulement Maya ; dès 20 h, les quatre.
+Une tranche coupée par un cours ne compte pas.
+
+**S30 · la grille dit « tous libres », mais les trajets disent non** ⚠️
+Lundi 11 h 30-12 h, les quatre sont libres sur la grille, mais Maya est à l'UdeM, ali et Sam au
+cégep, Léo commence à Laval à midi. Attendu : **aucune rencontre en personne**, seulement des
+appels (11 h 30-12 h et 20 h-22 h).
+
+**S31 · tout le monde est libre** ✅
+Hugo et Nora le mercredi : les 28 tranches. « Les quatre » le dimanche : tous libres de 8 h à
+11 h et de 17 h à 22 h ; les rencontres en personne sont le soir (Léo arrive de Laval après
+17 h), toutes réalistes.
+
+**S32 · personne n'est libre** ❌ (aucun résultat)
+Ali, Sam et Maya lundi 9 h-10 h : tranches vides. « Les quatre » vendredi : jamais les quatre en
+même temps ; aucune proposition, même pas un appel.
+
+**S33 · une partie du groupe seulement, et membres étrangers** ✅ / ❌
+Dans « Les quatre », ali choisit ali, Sam et Maya : Léo n'apparaît nulle part (ni grille, ni
+trajets). Un participant hors du groupe (Nora) : « Un des participants ne fait pas partie du
+groupe. » Nora qui regarde « Les quatre » : « Groupe introuvable. »
+
+**S34 · heures calmes et limite de sorties dans la grille** ⚠️
+Samedi, Jade n'est pas libre avant 10 h ni après 20 h. Dimanche, elle a déjà sa sortie (la
+marche) : libre dans **aucune** tranche ; de 14 h à 16 h, personne (Nora est à la marche aussi).
+
+**S35 · récurrence et disponibilité ponctuelle dans la grille** ✅
+Samedi, Lina est libre seulement de 13 h à 16 h. Jeudi 18 h : occupée cette semaine (club
+d'échecs), libre la semaine suivante.
+
+**S36 · un membre sans maison dans le groupe** ⚠️
+« Avec Zoé » : Zoé est écartée (« n'a pas encore choisi son lieu « maison » »), ali reste seul :
+pas de grille, pas de proposition.
+
+**S37 · « libre maintenant » ne fait jamais partir quelqu'un dans le passé** ⚠️ (bogue corrigé)
+Lundi 11 h 05, Nora (à 9 min à pied) arrive au cégep à **11 h 29** (départ 11 h 15 + 9 min +
+5 min de marge), pas à 11 h 15. Avant la correction, l'app proposait 11 h 15 à Hugo, Lina et
+Maya aussi, comme s'ils étaient partis de chez eux avant même qu'on les appelle. Pour chaque
+rencontre en personne : début ≥ maintenant (arrondi au quart d'heure) + trajet + marge.
+
+**S38 · « libre maintenant » dans tous mes groupes (Toute la bande)** ✅
+Lundi 11 h 05 : 8 personnes essayées, Zoé nommée à part (sans maison), Félix en appel seulement,
+Sam en tête (déjà au cégep) avec ses 3 groupes en commun, liste du plus tôt au plus tard. Nora
+dimanche midi : Jade n'est pas proposée (sortie du jour déjà prise). Vendredi 21 h 30 :
+seulement des appels de 21 h 30 à 22 h, sans Léo (au travail).
+
+**S39 · « libre maintenant » : un seul groupe, et les refus** ✅ / ❌
+Seulement « Pauses du cégep » : Sam. Un groupe dont ali n'est pas membre : « Groupe
+introuvable. » Zoé (sans maison) : on lui demande de choisir sa maison. Lundi 22 h 30 : liste
+vide.
+
+**S40 · « Toute la bande » sur la semaine** ⚠️
+Zoé écartée, 9 participants. Félix (Sherbrooke, à pied) empêche toute rencontre en personne :
+seulement des appels. Grille de 7 jours × 28 tranches, calcul en moins de 2 s. Sans Félix ni
+Zoé : des rencontres en personne, réalistes pour les 8.
+
+**S41 · grille du groupe au changement d'heure** ⚠️
+Dimanche 1er novembre 2026 (25 h) : toujours 28 tranches de 8 h à 22 h, et Léo est occupé de
+11 h à 17 h, heure locale.
+
 ## Essayer à la main (base Supabase de test)
 
 Le script crée les 10 comptes, leurs lieux et horaires, les groupes et les plans, datés pour
@@ -260,3 +331,7 @@ Quoi regarder dans l'app :
 | hugo   | Horaire du vendredi et du samedi              | S09                                     |
 | lina   | Horaire (deux semaines, mercredi, le 24)      | S13, S14, S16                           |
 | ali    | Étude : ajoute un examen                      | S22                                     |
+| ali    | Groupe « Les quatre », grille, lundi          | S29, S30, S32                           |
+| ali    | Groupe « Toute la bande »                     | S36, S40                                |
+| ali    | Accueil, « Je suis libre maintenant »         | S37, S38, S39 (à l'heure du scénario)   |
+| nora   | Groupe « Jade et Nora », grille               | S34                                     |

@@ -111,8 +111,9 @@ describe("findMeetupSoon (« Je suis libre maintenant »)", () => {
   });
 
   it("préfère la rencontre la plus tôt, puis le moins de trajet", async () => {
-    // Samedi 14 h, personne n'a de bloc : tous les lieux sont possibles dès 14 h ; une des
-    // deux maisons (0 + 10 min de trajet) gagne sur le cégep (25 + 25 min).
+    // Samedi 14 h, personne n'a de bloc : une des deux maisons (0 + 10 min de trajet) gagne
+    // sur le cégep (25 + 25 min). On part à 14 h au plus tôt (jamais dans le passé) : celui
+    // qui se déplace arrive à 14 h 15 (10 min + 5 min de marge).
     const r = await findMeetupSoon(
       [ali, sam],
       { now: zonedTime("2025-09-20", "14:00") },
@@ -120,7 +121,7 @@ describe("findMeetupSoon (« Je suis libre maintenant »)", () => {
     );
     expect(r?.kind).toBe("in-person");
     expect([PLACES.aliHome.id, PLACES.samHome.id]).toContain(r?.placeId);
-    expect(r?.start).toEqual(zonedTime("2025-09-20", "14:00"));
+    expect(r?.start).toEqual(zonedTime("2025-09-20", "14:15"));
   });
 
   it("refuse un horizon invalide ; un seul participant ne donne rien", async () => {

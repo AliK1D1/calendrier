@@ -134,3 +134,21 @@ export function getFreeWindows(
   }
   return windows;
 }
+
+/**
+ * Fenêtres libres vues depuis `notBefore` (en général « maintenant ») : une fenêtre déjà
+ * commencée commence à `notBefore`, une fenêtre finie disparaît. Le lieu d'avant ne change pas.
+ *
+ * À appliquer AVANT de calculer les trajets : sinon, une fenêtre commencée à 10 h laisserait
+ * croire qu'on peut partir à 10 h alors qu'il est déjà 11 h (le départ serait dans le passé).
+ */
+export function windowsFrom(
+  windows: readonly FreeWindow[],
+  notBefore: Date | undefined,
+): FreeWindow[] {
+  if (!notBefore) return [...windows];
+  const t = notBefore.getTime();
+  return windows
+    .filter((w) => w.end.getTime() > t)
+    .map((w) => (w.start.getTime() >= t ? w : { ...w, start: new Date(t) }));
+}

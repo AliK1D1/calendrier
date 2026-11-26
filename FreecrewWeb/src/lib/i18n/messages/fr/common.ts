@@ -3,6 +3,10 @@ export const common = {
   appName: "Freecrew",
   appShortName: "Freecrew",
   appDescription: "Trouvez des moments et des endroits réalistes pour vous voir entre amis.",
+  /** Titre montré par Google et dans les aperçus de lien (LinkedIn, Messenger…). */
+  seoTitle: "Freecrew · Trouver du temps libre en commun entre amis",
+  seoDescription:
+    "Freecrew compare les horaires de cours et de travail de ton groupe d'amis, tient compte des trajets et propose des moments et des endroits réalistes pour se voir.",
   nav: {
     main: "Navigation principale",
     tabs: "Onglets",

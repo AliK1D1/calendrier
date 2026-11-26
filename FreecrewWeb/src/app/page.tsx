@@ -1,4 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { Metadata } from "next";
 import { CalendarSearch, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
@@ -16,6 +17,7 @@ import { addPlanReview } from "@/lib/plans/reviewQueries";
 import { loadPlans } from "@/lib/plans/queries";
 import { getMyBusyBlocks, getMyProfile, getOnboardingStatus } from "@/lib/profile";
 import { getI18n } from "@/lib/i18n/server";
+import { siteUrl } from "@/lib/seo/site";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { homePlans } from "@/lib/ux/homePlans";
@@ -25,6 +27,9 @@ import { HomePlans } from "./home-plans";
 
 // Toujours rendu à la demande : l'affichage dépend de la session.
 export const dynamic = "force-dynamic";
+
+/** Adresse canonique de l'accueil, pour que Google n'indexe qu'une seule version. */
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function Accueil() {
   const supabase = await createSupabaseServerClient();
@@ -58,6 +63,24 @@ export default async function Accueil() {
           </Button>
         </div>
       </header>
+
+      <script
+        type="application/ld+json"
+        // Données fixes écrites par nous (aucune donnée de l'utilisateur) : sans risque.
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            name: t.common.appName,
+            url: siteUrl(process.env),
+            description: t.common.seoDescription,
+            applicationCategory: "LifestyleApplication",
+            operatingSystem: "Web, iOS, Android",
+            inLanguage: ["fr-CA", "en-CA"],
+            offers: { "@type": "Offer", price: "0", priceCurrency: "CAD" },
+          }).replace(/</g, "\\u003c"),
+        }}
+      />
 
       <HomeDemo t={t.home.demo} locale={locale} />
 

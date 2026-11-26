@@ -4,6 +4,9 @@ export const common: typeof fr = {
   appName: "Freecrew",
   appShortName: "Freecrew",
   appDescription: "Find realistic times and places to meet up with friends.",
+  seoTitle: "Freecrew · Find free time in common with friends",
+  seoDescription:
+    "Freecrew compares your friends' class and work schedules, accounts for travel time and suggests realistic times and places to meet up.",
   nav: {
     main: "Main navigation",
     tabs: "Tabs",

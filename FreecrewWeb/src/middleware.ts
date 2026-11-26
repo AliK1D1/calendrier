@@ -12,7 +12,8 @@ export const config = {
   // /groupes/[id], échappait au middleware et donc à la protection des pages.
   // /manifest.webmanifest (PWA) aussi : le navigateur le charge sans cookie de session, il
   // serait sinon redirigé vers /connexion et l'app ne serait pas installable.
+  // /google<code>.html : fichier de validation Google Search Console (public/), lu sans session.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|[^/]+\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|google[0-9a-f]+\\.html$|[^/]+\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest)$).*)",
   ],
 };

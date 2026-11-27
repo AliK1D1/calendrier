@@ -6,8 +6,6 @@ export const auth: typeof fr = {
   description: "Sign in with your email and password.",
   email: "Email address",
   emailPlaceholder: "you@example.ca",
-  or: "or",
-  google: "Continue with Google",
   password: "Password",
   signIn: "Sign in",
   noAccount: "No account yet?",
@@ -24,7 +22,6 @@ export const auth: typeof fr = {
     essais: "Too many password attempts. Wait 15 minutes before trying again.",
     confirmer: "This account isn't confirmed yet. Ask the app's administrator to confirm it.",
     echec: "Sign-in didn't go through. Please try again.",
-    google: "Signing in with Google didn't work. Try again or use your email.",
   },
   signup: {
     metaTitle: "Create an account · Freecrew",

@@ -102,13 +102,11 @@ Dans le tableau de bord Supabase :
    régler aussi **Minimum password length = 8** et **Password requirements = « Lowercase,
    uppercase letters and digits »** : la même règle que le formulaire, appliquée aussi par
    Supabase.
-3. **Google (facultatif)** : Authentication → Sign In / Providers → **Google** → activer, puis
-   coller le **Client ID** et le **Client Secret** créés dans Google Cloud Console
-   (APIs & Services → Credentials → OAuth client ID → « Web application »). Dans Google,
-   l'**Authorized redirect URI** est l'adresse de rappel affichée par Supabase sur cette même
-   page (`https://xxxx.supabase.co/auth/v1/callback`), pas celle de l'app.
+3. **Google** : la connexion avec Google a été retirée de l'app. Le fournisseur **Google** peut
+   rester désactivé (Authentication → Sign In / Providers → Google).
 
-La route `/auth/callback` ne sert plus qu'au retour de Google.
+La route `/auth/callback` reste pour les liens de confirmation de Supabase (si « Confirm email »
+est activé).
 
 ### 4. Vérifier
 
@@ -927,7 +925,7 @@ const propositions = await findMeetups(
   (`auth.users`, `auth.uid()` lisant `request.jwt.claim.sub`, comme Supabase) et les rôles
   `anon` / `authenticated`, puis vérifie les politiques avec `SET ROLE authenticated`. C'est
   fidèle pour SQL et RLS, mais ce n'est pas Supabase : le service Auth lui-même (courriels,
-  Google, cookies) n'est testé qu'à la main (étape 4 ci-dessus).
+  cookies) n'est testé qu'à la main (étape 4 ci-dessus).
 
 - **shadcn/ui** : le registre `ui.shadcn.com` n'était pas joignable depuis l'environnement de
   développement initial (refus du proxy réseau). L'initialisation a donc été faite à la main :

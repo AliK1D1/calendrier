@@ -11,7 +11,7 @@ export const home = {
     },
     { title: "Invite tes amis", text: "Crée un groupe et partage le lien d'invitation." },
     {
-      title: "Vois-vous pour vrai",
+      title: "Voyez-vous pour vrai",
       text: "L'app propose des moments et des endroits faisables, en tenant compte du temps de trajet de chacun.",
     },
   ],

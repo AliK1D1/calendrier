@@ -61,7 +61,7 @@ describe("validatePropose", () => {
   it("refuse un moment passé, trop lointain, ou qui dépasse minuit ; accepte de finir à minuit", () => {
     expect(validatePropose(form({ date: "2027-03-10", start: "09:00" }), NOW)).toEqual({
       ok: false,
-      error: "Ce moment est déjà commencé ou passé.",
+      error: "Ce moment a déjà commencé ou est passé.",
     });
     expect(validatePropose(form({ date: "2028-04-01" }), NOW)).toMatchObject({ ok: false });
     expect(validatePropose(form({ start: "23:00", durationMinutes: 120 }), NOW)).toEqual({

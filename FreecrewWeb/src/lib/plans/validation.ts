@@ -164,7 +164,7 @@ export function validatePropose(raw: unknown, now: Date): Result<ProposeInput> {
   }
   const end = addMinutesTo(start, duration);
   if (start.getTime() <= now.getTime()) {
-    return { ok: false, error: "Ce moment est déjà commencé ou passé." };
+    return { ok: false, error: "Ce moment a déjà commencé ou est passé." };
   }
   if (start.getTime() > now.getTime() + 365 * 24 * 3600 * 1000) {
     return { ok: false, error: "Propose un moment dans la prochaine année." };

@@ -88,7 +88,7 @@ export const plans = {
   you: "toi",
   inGroup: "dans",
   wholeGroup: "tout le groupe",
-  invitedCount: (n: number) => `${n} invités`,
+  invitedCount: (n: number) => `${n} invité${n >= 2 ? "s" : ""}`,
   responses: "Réponses",
   yes: "Oui :",
   no: "Non :",

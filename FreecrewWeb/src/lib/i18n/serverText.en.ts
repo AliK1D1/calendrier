@@ -36,9 +36,11 @@ export const EN_TEXTS: Record<string, string> = {
   "Ce lien ne fonctionne plus (calendrier introuvable).":
     "This link no longer works (calendar not found).",
   "Ce lien pointe vers une adresse interne.": "This link points to an internal address.",
+  "Ce moment a déjà commencé ou est passé.": "This time has already started or passed.",
+  // Ancienne formulation, encore levée par les fonctions SQL (migrations 0009 et 0019).
   "Ce moment est déjà commencé ou passé.": "This time has already started or passed.",
   "Cette date est déjà passée.": "This date has already passed.",
-  "Cette séance est déjà commencée ou passée.": "This session has already started or passed.",
+  "Cette séance a déjà commencé ou est passée.": "This session has already started or passed.",
   "Choisis au moins deux participants.": "Choose at least two participants.",
   "Choisis au moins un bloc à importer.": "Choose at least one block to import.",
   "Choisis au moins une personne à inviter.": "Choose at least one person to invite.",

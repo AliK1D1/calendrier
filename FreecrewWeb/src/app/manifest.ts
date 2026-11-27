@@ -13,7 +13,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "Freecrew",
     short_name: "Freecrew",
-    description: "Trouvez des moments et des endroits réalistes pour vous voir entre amis.",
+    description: "Trouve des moments et des endroits réalistes pour vous voir entre amis.",
     lang: "fr-CA",
     dir: "ltr",
     start_url: "/",

@@ -94,7 +94,7 @@ export const profile = {
     description:
       "Connecte ton calendrier Outlook (compte personnel ou de travail/école) : tes événements comptent comme du temps occupé, sans les entrer à la main. Lecture seule : l'app n'écrit jamais dans ton Outlook. Tes amis voient seulement « Occupé », jamais les titres ni les lieux.",
     intro:
-      "On lit ton calendrier principal (tu pourras en choisir un autre), de cette semaine jusqu'à 8 semaines plus tard. La synchro se fait aux 15 minutes quand tu as l'app ouverte, et quand tu cliques « Actualiser ».",
+      "On lit ton calendrier principal (tu pourras en choisir un autre), de cette semaine jusqu'à 8 semaines plus tard. La synchro se fait aux 15 minutes quand tu as l'app ouverte, et quand tu cliques sur « Actualiser ».",
     connect: "Connecter Outlook",
     notConfigured: "Outlook n'est pas encore configuré sur ce site (clés Microsoft manquantes).",
     account: "Compte",

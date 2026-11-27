@@ -103,7 +103,7 @@ export const schedule = {
     days: "Jours",
     sessionStart: "Début de session",
     sessionEnd: "Fin de session",
-    sessionHint: "Le bloc revient chaque semaine entre ces deux dates (incluses), et plus après.",
+    sessionHint: "Le bloc revient chaque semaine entre ces deux dates (incluses), et plus du tout après.",
     overlaps: (list: string) =>
       `Chevauche ${list}. Tu peux enregistrer quand même (les deux comptent comme occupés).`,
     quoted: (title: string) => `« ${title} »`,

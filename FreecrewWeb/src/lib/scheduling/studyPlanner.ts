@@ -736,7 +736,7 @@ export async function checkStudySession(
   if (minutes < prefs.minSessionMinutes || minutes > prefs.maxSessionMinutes) {
     return `Une séance dure de ${formatStudyDuration(prefs.minSessionMinutes)} à ${formatStudyDuration(prefs.maxSessionMinutes)}.`;
   }
-  if (start.getTime() < now.getTime()) return "Cette séance est déjà commencée ou passée.";
+  if (start.getTime() < now.getTime()) return "Cette séance a déjà commencé ou est passée.";
   if (end.getTime() > deadline.dueAt.getTime()) {
     return `Cette séance finit après ${deadlineLabel(deadline)}.`;
   }

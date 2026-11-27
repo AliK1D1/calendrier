@@ -570,7 +570,7 @@ describe("S20 · proposer un plan : formulaire valide et erreurs", () => {
   });
 
   it.each([
-    ["moment passé", { date: day("lun"), start: "08:00" }, "Ce moment est déjà commencé ou passé."],
+    ["moment passé", { date: day("lun"), start: "08:00" }, "Ce moment a déjà commencé ou est passé."],
     ["trop court", { durationMinutes: 10 }, "Un plan dure de 15 minutes à 12 heures."],
     ["trop long", { durationMinutes: 13 * 60 }, "Un plan dure de 15 minutes à 12 heures."],
     ["passe minuit", { start: "23:00" }, "Un plan finit le même jour (au plus tard à minuit)."],

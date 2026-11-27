@@ -13,7 +13,7 @@ import { getI18n } from "@/lib/i18n/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentUser } from "@/lib/supabase/server";
 
-import { connexionGoogle, connexionMotDePasse } from "./actions";
+import { connexionMotDePasse } from "./actions";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getI18n();
@@ -110,19 +110,6 @@ export default async function Connexion({ searchParams }: { searchParams: Search
               {t.auth.createAccount}
             </Link>
           </p>
-
-          <div className="text-muted-foreground flex items-center gap-3 text-xs uppercase">
-            <span className="bg-border h-px flex-1" />
-            {t.auth.or}
-            <span className="bg-border h-px flex-1" />
-          </div>
-
-          <form action={connexionGoogle}>
-            <input type="hidden" name="next" value={next} />
-            <SubmitButton variant="outline" className="w-full" disabled={!configured}>
-              {t.auth.google}
-            </SubmitButton>
-          </form>
         </CardContent>
       </Card>
     </main>

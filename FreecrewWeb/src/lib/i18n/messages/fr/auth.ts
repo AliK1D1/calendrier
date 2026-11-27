@@ -5,8 +5,6 @@ export const auth = {
   description: "Connecte-toi avec ton courriel et ton mot de passe.",
   email: "Adresse courriel",
   emailPlaceholder: "toi@exemple.ca",
-  or: "ou",
-  google: "Continuer avec Google",
   password: "Mot de passe",
   signIn: "Se connecter",
   noAccount: "Pas encore de compte ?",
@@ -25,7 +23,6 @@ export const auth = {
     confirmer:
       "Ce compte n'est pas encore confirmé. Demande à l'administrateur de l'app de le confirmer.",
     echec: "La connexion n'a pas abouti. Réessaie.",
-    google: "La connexion avec Google n'a pas fonctionné. Réessaie ou utilise ton courriel.",
   } as Record<string, string>,
   signup: {
     metaTitle: "Créer un compte · Freecrew",

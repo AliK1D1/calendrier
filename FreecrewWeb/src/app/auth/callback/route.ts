@@ -15,7 +15,7 @@ const OTP_TYPES: readonly EmailOtpType[] = [
 ];
 
 /**
- * Retour de connexion (lien magique ou Google).
+ * Retour de connexion (lien de confirmation envoyé par Supabase).
  * - `?code=…` : flux PKCE par défaut de @supabase/ssr (même navigateur que la demande).
  * - `?token_hash=…&type=…` : si le modèle de courriel Supabase est personnalisé (fonctionne
  *   aussi quand le lien est ouvert dans un autre navigateur ; voir README).

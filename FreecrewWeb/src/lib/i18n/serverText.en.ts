@@ -220,6 +220,76 @@ export const EN_TEXTS: Record<string, string> = {
   "Écris le nom du cours.": "Write the course name.",
   "Propositions retirées. Rien n'a été ajouté à ton horaire.":
     "Suggestions removed. Nothing was added to your schedule.",
+  "La création du groupe n'a pas fonctionné.": "Creating the group didn't work.",
+  "Outlook synchronisé.": "Outlook synced.",
+  "Le changement n'a pas fonctionné. Réessaie.": "The change didn't work. Try again.",
+  "Ses événements comptent maintenant comme du temps occupé.": "Its events now count as busy time.",
+  "Ses événements sont affichés sans bloquer ton temps libre.":
+    "Its events are shown without blocking your free time.",
+  "Ce moment n'est pas libre (ou le trajet ne laisse pas le temps).":
+    "This time isn't free (or the travel doesn't leave enough time).",
+  "Les durées de séance doivent être des multiples de 15 minutes.":
+    "Session lengths must be multiples of 15 minutes.",
+  "La recherche n'a pas fonctionné. Réessaie.": "The search didn't work. Try again.",
+  "Microsoft ne répond pas. Réessaie dans quelques minutes.":
+    "Microsoft isn't responding. Try again in a few minutes.",
+  "Ton accès à Outlook a expiré ou a été retiré. Reconnecte Outlook.":
+    "Your Outlook access expired or was removed. Reconnect Outlook.",
+  "La connexion à Outlook n'a pas fonctionné.": "The Outlook connection didn't work.",
+  "Réponse inattendue d'Outlook.": "Unexpected response from Outlook.",
+  "Outlook ne répond pas. Réessaie dans quelques minutes.":
+    "Outlook isn't responding. Try again in a few minutes.",
+  "Outlook refuse l'accès à ce calendrier. Reconnecte Outlook.":
+    "Outlook refuses access to this calendar. Reconnect Outlook.",
+  "La synchronisation avec Outlook n'a pas fonctionné. Réessaie plus tard.":
+    "Syncing with Outlook didn't work. Try again later.",
+  "Outlook n'est plus connecté. Reconnecte Outlook.":
+    "Outlook is no longer connected. Reconnect Outlook.",
+  "Reconnecte Outlook pour reprendre la synchronisation.": "Reconnect Outlook to resume syncing.",
+  "L'horaire des participants a trop de blocs pour ce calcul. Choisis moins de participants.":
+    "The participants' schedules have too many blocks for this calculation. Choose fewer participants.",
+  "Les occurrences passées ou dans plus d'un an ne sont pas importées.":
+    "Past occurrences and those more than a year away aren't imported.",
+  "Le nouvel horaire est importé, mais l'ancien n'a pas pu être retiré. Réimporte le fichier pour corriger.":
+    "The new schedule was imported, but the old one couldn't be removed. Import the file again to fix it.",
+  "Une séance ne traverse pas minuit.": "A session can't go past midnight.",
+  "Ce lien n'est pas un lien de calendrier valide (il commence par https:// ou webcal://).":
+    "This link isn't a valid calendar link (it starts with https:// or webcal://).",
+  "Ce lien pointe vers une adresse interne : seuls les calendriers publics sur Internet sont acceptés.":
+    "This link points to an internal address: only public calendars on the Internet are accepted.",
+  "Réponse inattendue du calendrier.": "Unexpected response from the calendar.",
+  "Ce site n'existe pas (adresse introuvable).": "This site doesn't exist (address not found).",
+  "Ce calendrier est privé : le site refuse l'accès.":
+    "This calendar is private: the site refuses access.",
+  "Le calendrier redirige vers une adresse non sécurisée.":
+    "The calendar redirects to an insecure address.",
+  "La synchronisation de ce calendrier n'a pas fonctionné. Réessaie plus tard.":
+    "Syncing this calendar didn't work. Try again later.",
+  "Trop de calendriers actualisés d'un coup. Attends une minute.":
+    "Too many calendars refreshed at once. Wait a minute.",
+  "Outlook n'est plus connecté. Reconnecte Outlook dans Profil.":
+    "Outlook is no longer connected. Reconnect Outlook in Profile.",
+  "Ce calendrier n'existe plus dans ton compte Outlook. Retire-le.":
+    "This calendar no longer exists in your Outlook account. Remove it.",
+  "Tu es déjà abonné à ce calendrier.": "You're already subscribed to this calendar.",
+  "Ils comptent comme du temps occupé.": "They count as busy time.",
+  "Ils sont affichés sans bloquer ton temps libre.":
+    "They're shown without blocking your free time.",
+  Autobus: "Bus",
+  Autocar: "Coach",
+  Trolleybus: "Trolleybus",
+  "Taxi collectif": "Shared taxi",
+  Métro: "Subway",
+  Tramway: "Tram",
+  "Train léger": "Light rail",
+  Monorail: "Monorail",
+  Train: "Train",
+  Traversier: "Ferry",
+  Téléphérique: "Cable car",
+  Funiculaire: "Funicular",
+  "Train de banlieue": "Commuter train",
+  Télécabine: "Gondola",
+  "Transport en commun": "Transit",
 };
 
 /** « 2 séances » → « 2 sessions » (le nombre vient du texte français). */
@@ -236,6 +306,49 @@ function deadlineEn(fr: string): string {
 const durationEn = (d: string) => d.replace(/^(\d+) h (\d+)$/, "$1 h $2 min");
 
 export const EN_PATTERNS: [RegExp, (...groups: string[]) => string][] = [
+  [
+    /^La base de données n'est pas à jour : applique supabase\/migration-(\d+)\.sql \(voir README\)\.$/,
+    (n) => `The database is out of date: apply supabase/migration-${n}.sql (see README).`,
+  ],
+  [
+    /^Trop d'occurrences annulées pour ce bloc \((\d+) au maximum\)\.$/,
+    (n) => `Too many cancelled occurrences for this block (${n} maximum).`,
+  ],
+  [
+    /^Calendrier ajouté \(rien de prévu dans les 8 prochaines semaines pour l'instant\)\.(?: ([\s\S]+))?$/,
+    (rest) =>
+      `Calendar added (nothing planned in the next 8 weeks for now).${rest ? ` ${translateInner(rest)}` : ""}`,
+  ],
+  // Notes de l'import .ics (« 2 événements … ignorés »).
+  [
+    /^(\d+) événements? d'une journée entière ignorés? \(congés, rappels…\)\.$/,
+    (n) => `${count(n, "all-day event", "all-day events")} ignored (holidays, reminders…).`,
+  ],
+  [
+    /^(\d+) événements? annulés? ignorés?\.$/,
+    (n) => `${count(n, "cancelled event", "cancelled events")} ignored.`,
+  ],
+  [
+    /^(\d+) événements? marqués? « disponible » ignorés?\.$/,
+    (n) => `${count(n, "event", "events")} marked “free” ignored.`,
+  ],
+  [
+    /^(\d+) événements? sans heure de fin ignorés?\.$/,
+    (n) => `${count(n, "event", "events")} without an end time ignored.`,
+  ],
+  [
+    /^(\d+) événements? de plus de 7 jours ignorés?\.$/,
+    (n) => `${count(n, "event", "events")} longer than 7 days ignored.`,
+  ],
+  [
+    /^(\d+) événements? avec une règle de répétition non prise en charge ignorés? : ajoute-les? à la main\.$/,
+    (n) =>
+      `${count(n, "event", "events")} with an unsupported repeat rule ignored: add ${Number(n) === 1 ? "it" : "them"} by hand.`,
+  ],
+  [
+    /^(\d+) titres? raccourcis? à (\d+) caractères\.$/,
+    (n, max) => `${count(n, "title", "titles")} shortened to ${max} characters.`,
+  ],
   [/^Au plus (\d+) participants\.$/, (n) => `At most ${n} participants.`],
   [/^Au plus (\d+) séances à la fois\.$/, (n) => `At most ${n} sessions at a time.`],
   [
@@ -292,8 +405,9 @@ export const EN_PATTERNS: [RegExp, (...groups: string[]) => string][] = [
   [/^Trop de blocs \(au plus (\d+)\)\.$/, (n) => `Too many blocks (at most ${n}).`],
   [/^Trop de nouveaux lieux \(au plus (\d+)\)\.$/, (n) => `Too many new places (at most ${n}).`],
   [
-    /^Calendrier ajouté : (\d+) événements? dans les 8 prochaines semaines\.$/,
-    (n) => `Calendar added: ${count(n, "event", "events")} in the next 8 weeks.`,
+    /^Calendrier ajouté : (\d+) événements? dans les 8 prochaines semaines\.(?: ([\s\S]+))?$/,
+    (n, rest) =>
+      `Calendar added: ${count(n, "event", "events")} in the next 8 weeks.${rest ? ` ${translateInner(rest)}` : ""}`,
   ],
   [
     /^Outlook synchronisé \((\d+) blocs, les plus proches seulement : il y en avait trop\)\.$/,

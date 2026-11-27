@@ -9,6 +9,7 @@ import { groups } from "./groups";
 import { places } from "./places";
 import { onboarding } from "./onboarding";
 import { home } from "./home";
+import { profile } from "./profile";
 
 /** English texts. Each area mirrors the French file of the same name. */
 export const en: Messages = {
@@ -22,4 +23,5 @@ export const en: Messages = {
   places,
   onboarding,
   home,
+  profile,
 };

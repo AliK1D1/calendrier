@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/lib/i18n/client";
 
 import {
   actualiserAbonnement,
@@ -52,11 +53,11 @@ function BusyChoice({
   onChange: (v: boolean) => void;
 }) {
   const name = useId();
+  const { t } = useI18n();
+  const ts = t.profile.subscriptions;
   return (
     <fieldset className="flex flex-col gap-1.5">
-      <legend className="mb-1 font-medium">
-        Ces événements comptent-ils comme du temps occupé ?
-      </legend>
+      <legend className="mb-1 font-medium">{ts.busyQuestion}</legend>
       <label className="flex items-start gap-2">
         <input
           type="radio"
@@ -66,8 +67,8 @@ function BusyChoice({
           className="mt-0.5 size-4 shrink-0"
         />
         <span>
-          <strong>Oui, je suis occupé</strong> : l&apos;app ne propose rien à ces heures (tes amis
-          voient « Occupé »).
+          <strong>{ts.busyYes}</strong>
+          {ts.busyYesHint}
         </span>
       </label>
       <label className="flex items-start gap-2">
@@ -79,8 +80,8 @@ function BusyChoice({
           className="mt-0.5 size-4 shrink-0"
         />
         <span>
-          <strong>Non, juste pour voir</strong> : affichés dans mon horaire, sans bloquer mon temps
-          libre (ex. les courses de F1). Personne d&apos;autre ne les voit.
+          <strong>{ts.busyNo}</strong>
+          {ts.busyNoHint}
         </span>
       </label>
     </fieldset>
@@ -95,6 +96,8 @@ export function SubscriptionsCard({
   max,
 }: SubscriptionsCardProps) {
   const router = useRouter();
+  const { t, tr } = useI18n();
+  const ts = t.profile.subscriptions;
   const [message, setMessage] = useState<Msg>(null);
   const [pending, startTransition] = useTransition();
   const [url, setUrl] = useState("");
@@ -112,7 +115,9 @@ export function SubscriptionsCard({
     setMessage(null);
     startTransition(async () => {
       const r = await fn();
-      setMessage(r.ok ? { ok: true, text: r.text ?? "C'est fait." } : { ok: false, text: r.error });
+      setMessage(
+        r.ok ? { ok: true, text: r.text ? tr(r.text) : ts.done } : { ok: false, text: tr(r.error) },
+      );
       if (r.ok) after?.();
       router.refresh();
     });
@@ -122,19 +127,14 @@ export function SubscriptionsCard({
     <Card id="abonnements" className="scroll-mt-32">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Rss className="size-5" aria-hidden /> Calendriers en ligne
+          <Rss className="size-5" aria-hidden /> {ts.title}
         </CardTitle>
-        <CardDescription>
-          Abonne-toi à un calendrier qui se met à jour tout seul (horaire de la Formule 1, de ton
-          équipe, fêtes…), avec ou sans Outlook. Tu choisis s&apos;il compte comme du temps occupé.
-          Personne d&apos;autre ne voit tes calendriers abonnés.
-        </CardDescription>
+        <CardDescription>{ts.description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5 text-sm">
         {!dbReady ? (
           <p role="alert" className="text-destructive">
-            La base de données n&apos;est pas à jour : applique supabase/migration-0017.sql (voir
-            README).
+            {t.profile.dbOutdated("0017")}
           </p>
         ) : (
           <>
@@ -145,18 +145,17 @@ export function SubscriptionsCard({
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium break-words">{s.name}</span>
                       <Badge variant="secondary">{s.source}</Badge>
-                      {!s.countsAsBusy && <Badge variant="outline">juste pour voir</Badge>}
+                      {!s.countsAsBusy && <Badge variant="outline">{ts.justToSee}</Badge>}
                     </div>
                     <p className="text-muted-foreground">
-                      Dernière mise à jour : {s.lastSynced ?? "pas encore"}
+                      {ts.lastUpdate(s.lastSynced ?? ts.notYet)}
                     </p>
                     {s.lastSyncError && (
                       <p role="alert" className="text-destructive flex items-start gap-1.5">
                         <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
                         <span>
-                          {s.lastSyncError} On garde la dernière version connue
-                          {s.lastSynced ? ` (${s.lastSynced})` : ""}. Si le lien ne marche plus,
-                          retire ce calendrier.
+                          {tr(s.lastSyncError)}
+                          {ts.keepLast(s.lastSynced)}
                         </span>
                       </p>
                     )}
@@ -171,7 +170,7 @@ export function SubscriptionsCard({
                         }}
                         className="mt-0.5 size-4 shrink-0"
                       />
-                      <span>Compte comme du temps occupé</span>
+                      <span>{ts.countsAsBusy}</span>
                     </label>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -182,7 +181,7 @@ export function SubscriptionsCard({
                         onClick={() => run(() => actualiserAbonnement(s.id))}
                       >
                         <RefreshCw className={pending ? "animate-spin" : undefined} aria-hidden />
-                        Actualiser
+                        {ts.refresh}
                       </Button>
                       <Button
                         type="button"
@@ -191,14 +190,14 @@ export function SubscriptionsCard({
                         disabled={pending}
                         onClick={async () => {
                           const yes = await confirm({
-                            message: `Retirer « ${s.name} » ? Ses événements ne seront plus affichés ni utilisés.`,
-                            action: "Retirer",
+                            message: ts.confirmRemove(s.name),
+                            action: ts.remove,
                           });
                           if (!yes) return;
                           run(() => retirerAbonnement(s.id));
                         }}
                       >
-                        <Trash2 aria-hidden /> Retirer
+                        <Trash2 aria-hidden /> {ts.remove}
                       </Button>
                     </div>
                   </li>
@@ -207,9 +206,7 @@ export function SubscriptionsCard({
             )}
 
             {full ? (
-              <p className="text-muted-foreground">
-                Tu as atteint {max} calendriers abonnés : retires-en un pour en ajouter un autre.
-              </p>
+              <p className="text-muted-foreground">{ts.full(max)}</p>
             ) : (
               <form
                 className="flex flex-col gap-3"
@@ -218,7 +215,7 @@ export function SubscriptionsCard({
                   if (busy === null) {
                     setMessage({
                       ok: false,
-                      text: "Choisis si ce calendrier compte comme du temps occupé.",
+                      text: ts.chooseBusy,
                     });
                     return;
                   }
@@ -232,9 +229,9 @@ export function SubscriptionsCard({
                   );
                 }}
               >
-                <h3 className="font-semibold">Ajouter par un lien</h3>
+                <h3 className="font-semibold">{ts.addByLink}</h3>
                 <label className="flex flex-col gap-1">
-                  <span className="font-medium">Lien du calendrier (.ics ou webcal://)</span>
+                  <span className="font-medium">{ts.link}</span>
                   <Input
                     type="text"
                     inputMode="url"
@@ -242,42 +239,33 @@ export function SubscriptionsCard({
                     spellCheck={false}
                     required
                     maxLength={2000}
-                    placeholder="webcal://exemple.com/calendrier.ics"
+                    placeholder={ts.linkPlaceholder}
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                   />
-                  <span className="text-muted-foreground text-xs">
-                    Sur le site du calendrier, cherche « S&apos;abonner », « iCal » ou « Ajouter à
-                    Outlook / Google », puis copie le lien. Attention : un lien secret (ex. «
-                    adresse secrète iCal » de Google) donne accès à tout ce calendrier ; ne le
-                    partage avec personne d&apos;autre.
-                  </span>
+                  <span className="text-muted-foreground text-xs">{ts.linkHint}</span>
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="font-medium">Nom (facultatif)</span>
+                  <span className="font-medium">{ts.name}</span>
                   <Input
                     type="text"
                     maxLength={100}
-                    placeholder="Ex. Formule 1"
+                    placeholder={ts.namePlaceholder}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
                 </label>
                 <BusyChoice value={busy} onChange={setBusy} />
                 <Button type="submit" disabled={pending} className="sm:self-start">
-                  <CalendarPlus aria-hidden /> {pending ? "Un instant…" : "Ajouter le calendrier"}
+                  <CalendarPlus aria-hidden /> {pending ? ts.oneMoment : ts.add}
                 </Button>
               </form>
             )}
 
             {outlookConnected && !full && (
               <div className="flex flex-col gap-3 border-t pt-4">
-                <h3 className="font-semibold">Depuis ton compte Outlook</h3>
-                <p className="text-muted-foreground">
-                  Les calendriers auxquels tu es abonné dans Outlook (et tes autres calendriers)
-                  apparaissent ici. Les titres des événements ne sont pas lus : ils portent le nom
-                  du calendrier.
-                </p>
+                <h3 className="font-semibold">{ts.fromOutlook}</h3>
+                <p className="text-muted-foreground">{ts.fromOutlookHint}</p>
                 {!outlook ? (
                   <Button
                     type="button"
@@ -289,13 +277,13 @@ export function SubscriptionsCard({
                       startTransition(async () => {
                         const r = await listerCalendriersOutlookAbonnables();
                         if (!r.ok) {
-                          setMessage({ ok: false, text: r.error });
+                          setMessage({ ok: false, text: tr(r.error) });
                           return;
                         }
                         if (r.calendars.length === 0) {
                           setMessage({
                             ok: true,
-                            text: "Aucun autre calendrier dans ton compte Outlook.",
+                            text: ts.noOtherOutlook,
                           });
                           return;
                         }
@@ -305,7 +293,7 @@ export function SubscriptionsCard({
                       });
                     }}
                   >
-                    Voir mes calendriers Outlook
+                    {ts.seeOutlook}
                   </Button>
                 ) : (
                   <form
@@ -315,7 +303,7 @@ export function SubscriptionsCard({
                       if (outlookBusy === null) {
                         setMessage({
                           ok: false,
-                          text: "Choisis si ce calendrier compte comme du temps occupé.",
+                          text: ts.chooseBusy,
                         });
                         return;
                       }
@@ -330,7 +318,7 @@ export function SubscriptionsCard({
                     }}
                   >
                     <label className="flex flex-col gap-1">
-                      <span className="font-medium">Calendrier Outlook</span>
+                      <span className="font-medium">{ts.outlookCalendar}</span>
                       <select
                         value={outlookChoice}
                         onChange={(e) => setOutlookChoice(e.target.value)}
@@ -339,7 +327,7 @@ export function SubscriptionsCard({
                         {outlook.calendars.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
-                            {c.readOnly ? " (abonné)" : ""}
+                            {c.readOnly ? ts.subscribedSuffix : ""}
                           </option>
                         ))}
                       </select>
@@ -347,10 +335,10 @@ export function SubscriptionsCard({
                     <BusyChoice value={outlookBusy} onChange={setOutlookBusy} />
                     <div className="flex flex-wrap gap-2">
                       <Button type="submit" disabled={pending}>
-                        <CalendarPlus aria-hidden /> Ajouter
+                        <CalendarPlus aria-hidden /> {ts.addShort}
                       </Button>
                       <Button type="button" variant="ghost" onClick={() => setOutlook(null)}>
-                        Annuler
+                        {t.common.cancel}
                       </Button>
                     </div>
                   </form>
@@ -358,11 +346,7 @@ export function SubscriptionsCard({
               </div>
             )}
 
-            <p className="text-muted-foreground text-xs">
-              On lit 8 semaines à partir de cette semaine. Mise à jour automatique aux 6 heures
-              quand tu as l&apos;app ouverte, ou avec « Actualiser ». Si un lien ne répond plus, on
-              garde la dernière version et on t&apos;avertit ici.
-            </p>
+            <p className="text-muted-foreground text-xs">{ts.footer}</p>
           </>
         )}
         {message && (

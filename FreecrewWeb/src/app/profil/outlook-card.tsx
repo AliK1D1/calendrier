@@ -7,6 +7,7 @@ import { useState, useTransition } from "react";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n/client";
 
 import {
   actualiserOutlook,
@@ -35,6 +36,8 @@ export interface OutlookCardProps {
 /** Carte « Calendrier Outlook » de la page Profil. */
 export function OutlookCard({ configured, dbReady, status, returnMessage }: OutlookCardProps) {
   const router = useRouter();
+  const { t, tr } = useI18n();
+  const to = t.profile.outlook;
   const [message, setMessage] = useState(returnMessage);
   const [pending, startTransition] = useTransition();
   const [calendars, setCalendars] = useState<Extract<CalendarsResult, { ok: true }> | null>(null);
@@ -48,7 +51,9 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
     setMessage(null);
     startTransition(async () => {
       const r = await fn();
-      setMessage(r.ok ? { ok: true, text: r.text ?? okText } : { ok: false, text: r.error });
+      setMessage(
+        r.ok ? { ok: true, text: r.text ? tr(r.text) : okText } : { ok: false, text: tr(r.error) },
+      );
       router.refresh();
     });
   };
@@ -57,52 +62,40 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
     <Card id="outlook" className="scroll-mt-32">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <CalendarSync className="size-5" aria-hidden /> Calendrier Outlook
+          <CalendarSync className="size-5" aria-hidden /> {to.title}
         </CardTitle>
-        <CardDescription>
-          Connecte ton calendrier Outlook (compte personnel ou de travail/école) : tes événements
-          comptent comme du temps occupé, sans les entrer à la main. Lecture seule : l&apos;app
-          n&apos;écrit jamais dans ton Outlook. Tes amis voient seulement « Occupé », jamais les
-          titres ni les lieux.
-        </CardDescription>
+        <CardDescription>{to.description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
         {!dbReady ? (
           <p role="alert" className="text-destructive">
-            La base de données n&apos;est pas à jour : applique supabase/migration-0014.sql (voir
-            README).
+            {t.profile.dbOutdated("0014")}
           </p>
         ) : !status ? (
           <>
-            <p className="text-muted-foreground">
-              On lit ton calendrier principal (tu pourras en choisir un autre), de cette semaine
-              jusqu&apos;à 8 semaines plus tard. La synchro se fait aux 15 minutes quand tu as
-              l&apos;app ouverte, et quand tu cliques « Actualiser ».
-            </p>
+            <p className="text-muted-foreground">{to.intro}</p>
             {configured ? (
               <Button asChild className="sm:self-start">
                 {/* Lien simple : la route redirige vers la page de connexion Microsoft. */}
-                <a href="/api/outlook/connect">Connecter Outlook</a>
+                <a href="/api/outlook/connect">{to.connect}</a>
               </Button>
             ) : (
-              <p className="text-muted-foreground">
-                Outlook n&apos;est pas encore configuré sur ce site (clés Microsoft manquantes).
-              </p>
+              <p className="text-muted-foreground">{to.notConfigured}</p>
             )}
           </>
         ) : (
           <>
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-              <dt className="text-muted-foreground">Compte</dt>
-              <dd className="break-all">{status.accountEmail || "Compte Microsoft"}</dd>
-              <dt className="text-muted-foreground">Calendrier</dt>
-              <dd className="break-words">{status.calendarName || "Calendrier principal"}</dd>
-              <dt className="text-muted-foreground">Dernière synchro</dt>
-              <dd>{status.lastSynced ?? "pas encore"}</dd>
+              <dt className="text-muted-foreground">{to.account}</dt>
+              <dd className="break-all">{status.accountEmail || to.microsoftAccount}</dd>
+              <dt className="text-muted-foreground">{to.calendar}</dt>
+              <dd className="break-words">{status.calendarName || to.mainCalendar}</dd>
+              <dt className="text-muted-foreground">{to.lastSync}</dt>
+              <dd>{status.lastSynced ?? to.notYet}</dd>
             </dl>
             {status.lastSyncError && (
               <p role="alert" className="text-destructive">
-                {status.lastSyncError}
+                {tr(status.lastSyncError)}
               </p>
             )}
             {calendars && (
@@ -113,13 +106,13 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
                   const picked = calendars.calendars.find((c) => c.id === choice);
                   run(
                     () => choisirCalendrierOutlook(picked && !picked.isDefault ? picked.id : null),
-                    "Calendrier choisi.",
+                    to.chosen,
                   );
                   setCalendars(null);
                 }}
               >
                 <label className="flex flex-1 flex-col gap-1">
-                  <span className="font-medium">Calendrier à lire</span>
+                  <span className="font-medium">{to.calendarToRead}</span>
                   <select
                     value={choice}
                     onChange={(e) => setChoice(e.target.value)}
@@ -128,16 +121,16 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
                     {calendars.calendars.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
-                        {c.isDefault ? " (principal)" : ""}
+                        {c.isDefault ? to.mainSuffix : ""}
                       </option>
                     ))}
                   </select>
                 </label>
                 <Button type="submit" disabled={pending}>
-                  Choisir
+                  {to.choose}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setCalendars(null)}>
-                  Annuler
+                  {t.common.cancel}
                 </Button>
               </form>
             )}
@@ -145,10 +138,10 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
               <Button
                 type="button"
                 disabled={pending || !configured}
-                onClick={() => run(actualiserOutlook, "Outlook synchronisé.")}
+                onClick={() => run(actualiserOutlook, to.synced)}
               >
                 <RefreshCw className={pending ? "animate-spin" : undefined} aria-hidden />
-                {pending ? "Un instant…" : "Actualiser maintenant"}
+                {pending ? to.oneMoment : to.refreshNow}
               </Button>
               {!calendars && (
                 <Button
@@ -160,7 +153,7 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
                     startTransition(async () => {
                       const r = await listerCalendriersOutlook();
                       if (!r.ok) {
-                        setMessage({ ok: false, text: r.error });
+                        setMessage({ ok: false, text: tr(r.error) });
                         return;
                       }
                       setCalendars(r);
@@ -172,12 +165,12 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
                     });
                   }}
                 >
-                  Choisir le calendrier
+                  {to.chooseCalendar}
                 </Button>
               )}
               {configured && status.lastSyncError && (
                 <Button asChild variant="outline">
-                  <a href="/api/outlook/connect">Reconnecter Outlook</a>
+                  <a href="/api/outlook/connect">{to.reconnect}</a>
                 </Button>
               )}
               <Button
@@ -186,15 +179,14 @@ export function OutlookCard({ configured, dbReady, status, returnMessage }: Outl
                 disabled={pending}
                 onClick={async () => {
                   const yes = await confirm({
-                    message:
-                      "Déconnecter Outlook ? Tes blocs Outlook seront supprimés de l'app tout de suite.",
-                    action: "Déconnecter",
+                    message: to.confirmDisconnect,
+                    action: to.disconnect,
                   });
                   if (!yes) return;
-                  run(deconnecterOutlook, "Outlook déconnecté : ses blocs sont supprimés.");
+                  run(deconnecterOutlook, to.disconnected);
                 }}
               >
-                <Unplug aria-hidden /> Déconnecter
+                <Unplug aria-hidden /> {to.disconnect}
               </Button>
             </div>
           </>

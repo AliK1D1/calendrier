@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionResult } from "@/lib/actions";
+import { useI18n } from "@/lib/i18n/client";
 import { MAX_AVAILABILITY_NOTE } from "@/lib/scheduling/oneOffAvailability";
 
 /** Une de mes disponibilités, prête à afficher. */
@@ -37,6 +38,8 @@ interface Props {
  */
 export function AvailabilityPanel({ items, today, lastDay, unavailable, actions }: Props) {
   const id = useId();
+  const { t, tr } = useI18n();
+  const ta = t.schedule.availability;
   const [day, setDay] = useState("");
   const [start, setStart] = useState("13:00");
   const [end, setEnd] = useState("18:00");
@@ -51,9 +54,9 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
       const r = await actions.ajouter({ day, start, end, note });
       if (r.ok) {
         setNote("");
-        setMessage({ ok: true, text: "Disponibilité ajoutée." });
+        setMessage({ ok: true, text: ta.added });
       } else {
-        setMessage({ ok: false, text: r.error });
+        setMessage({ ok: false, text: tr(r.error) });
       }
     });
   }
@@ -62,9 +65,7 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
     setMessage(null);
     startTransition(async () => {
       const r = await actions.supprimer(itemId);
-      setMessage(
-        r.ok ? { ok: true, text: "Disponibilité supprimée." } : { ok: false, text: r.error },
-      );
+      setMessage(r.ok ? { ok: true, text: ta.deleted } : { ok: false, text: tr(r.error) });
     });
   }
 
@@ -72,14 +73,9 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
     <section aria-labelledby={`${id}-titre`} className="rangee flex flex-col gap-4 p-4">
       <div className="flex flex-col gap-1">
         <h2 id={`${id}-titre`} className="titre-section flex items-center gap-2">
-          <CalendarCheck className="size-5" aria-hidden /> Disponibilités ponctuelles
+          <CalendarCheck className="size-5" aria-hidden /> {ta.title}
         </h2>
-        <p className="text-muted-foreground text-sm">
-          « Ce samedi, je suis libre de 13 h à 18 h. » Ce jour-là, l&apos;app ne propose des moments
-          que pendant ces heures, même si ton horaire habituel (cours, travail) dit autre chose. Les
-          plans acceptés et les séances d&apos;étude de ce jour-là comptent toujours. Tes groupes
-          voient le jour et les heures, jamais la note.
-        </p>
+        <p className="text-muted-foreground text-sm">{ta.intro}</p>
       </div>
 
       {unavailable ? (
@@ -90,7 +86,7 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
         <>
           <form onSubmit={submit} className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${id}-jour`}>Jour</Label>
+              <Label htmlFor={`${id}-jour`}>{ta.day}</Label>
               <Input
                 id={`${id}-jour`}
                 type="date"
@@ -102,7 +98,7 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${id}-de`}>De</Label>
+              <Label htmlFor={`${id}-de`}>{ta.from}</Label>
               <Input
                 id={`${id}-de`}
                 type="time"
@@ -113,7 +109,7 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor={`${id}-a`}>À</Label>
+              <Label htmlFor={`${id}-a`}>{ta.to}</Label>
               <Input
                 id={`${id}-a`}
                 type="time"
@@ -124,17 +120,17 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
               />
             </div>
             <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <Label htmlFor={`${id}-note`}>Note pour toi (facultatif)</Label>
+              <Label htmlFor={`${id}-note`}>{ta.note}</Label>
               <Input
                 id={`${id}-note`}
                 maxLength={MAX_AVAILABILITY_NOTE}
-                placeholder="ex. pas de shift cette semaine"
+                placeholder={ta.notePlaceholder}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
             </div>
             <Button type="submit" disabled={pending} className="min-h-10 self-end">
-              <Plus /> Ajouter
+              <Plus /> {ta.add}
             </Button>
           </form>
 
@@ -152,7 +148,7 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
           )}
 
           {items.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Aucune disponibilité à venir.</p>
+            <p className="text-muted-foreground text-sm">{ta.none}</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {items.map((item) => (
@@ -174,9 +170,9 @@ export function AvailabilityPanel({ items, today, lastDay, unavailable, actions 
                     size="sm"
                     disabled={pending}
                     onClick={() => remove(item.id)}
-                    aria-label={`Supprimer la disponibilité du ${item.dayLabel}, ${item.timeLabel}`}
+                    aria-label={ta.removeLabel(item.dayLabel, item.timeLabel)}
                   >
-                    <Trash2 /> Supprimer
+                    <Trash2 /> {ta.remove}
                   </Button>
                 </li>
               ))}

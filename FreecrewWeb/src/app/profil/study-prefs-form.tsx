@@ -4,9 +4,10 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { formatStudyDuration } from "@/lib/scheduling/studyPlanner";
+import { useI18n } from "@/lib/i18n/client";
+import { formatClockLocale, formatDuration } from "@/lib/i18n/format";
 import type { StudyPreferences } from "@/lib/scheduling/types";
-import { formatClock, formatClockFr, parseClock } from "@/lib/scheduling/weeklyBlocks";
+import { formatClock, parseClock } from "@/lib/scheduling/weeklyBlocks";
 import {
   BREAK_CHOICES,
   DAY_MAX_CHOICES,
@@ -27,6 +28,8 @@ const HOURS = Array.from({ length: 49 }, (_, i) => i * 30);
 
 /** Préférences d'étude : durée des séances, maximum par jour, pause, heures, veille, soirées. */
 export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
+  const { locale, t, tr } = useI18n();
+  const ts = t.profile.study;
   const [minSession, setMinSession] = useState(prefs.minSessionMinutes);
   const [maxSession, setMaxSession] = useState(prefs.maxSessionMinutes);
   const [maxPerDay, setMaxPerDay] = useState(prefs.maxStudyMinutesPerDay);
@@ -41,7 +44,7 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
   const hourOptions = (current: string) =>
     withCurrent(HOURS, parseClock(current) ?? 0).map((m) => (
       <option key={m} value={formatClock(m)}>
-        {formatClockFr(m)}
+        {formatClockLocale(m, locale)}
       </option>
     ));
 
@@ -62,15 +65,13 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
             eveCutoff,
             keepFreePercent: keepFree,
           });
-          setMessage(
-            r.ok ? { ok: true, text: "Préférences enregistrées." } : { ok: false, text: r.error },
-          );
+          setMessage(r.ok ? { ok: true, text: ts.saved } : { ok: false, text: tr(r.error) });
         });
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="seance-min">Séance d&apos;au moins</Label>
+          <Label htmlFor="seance-min">{ts.minSession}</Label>
           <select
             id="seance-min"
             className={SELECT}
@@ -82,13 +83,13 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
               minSession,
             ).map((m) => (
               <option key={m} value={m}>
-                {formatStudyDuration(m)}
+                {formatDuration(m, locale)}
               </option>
             ))}
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="seance-max">Séance d&apos;au plus</Label>
+          <Label htmlFor="seance-max">{ts.maxSession}</Label>
           <select
             id="seance-max"
             className={SELECT}
@@ -97,13 +98,13 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
           >
             {withCurrent(SESSION_LENGTH_CHOICES, maxSession).map((m) => (
               <option key={m} value={m}>
-                {formatStudyDuration(m)}
+                {formatDuration(m, locale)}
               </option>
             ))}
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="max-jour">Au plus par jour</Label>
+          <Label htmlFor="max-jour">{ts.maxPerDay}</Label>
           <select
             id="max-jour"
             className={SELECT}
@@ -112,13 +113,13 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
           >
             {withCurrent(DAY_MAX_CHOICES, maxPerDay).map((m) => (
               <option key={m} value={m}>
-                {formatStudyDuration(m)}
+                {formatDuration(m, locale)}
               </option>
             ))}
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="pause">Pause entre deux séances</Label>
+          <Label htmlFor="pause">{ts.breakBetween}</Label>
           <select
             id="pause"
             className={SELECT}
@@ -127,13 +128,13 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
           >
             {withCurrent(BREAK_CHOICES, breakMinutes).map((m) => (
               <option key={m} value={m}>
-                {m === 0 ? "Aucune" : formatStudyDuration(m)}
+                {m === 0 ? ts.noBreak : formatDuration(m, locale)}
               </option>
             ))}
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="etude-debut">J&apos;étudie à partir de</Label>
+          <Label htmlFor="etude-debut">{ts.from}</Label>
           <select
             id="etude-debut"
             className={SELECT}
@@ -144,7 +145,7 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="etude-fin">Et jusqu&apos;à</Label>
+          <Label htmlFor="etude-fin">{ts.until}</Label>
           <select
             id="etude-fin"
             className={SELECT}
@@ -155,26 +156,26 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="veille">La veille d&apos;un examen, pas après</Label>
+          <Label htmlFor="veille">{ts.eve}</Label>
           <select
             id="veille"
             className={SELECT}
             value={eveCutoff}
             onChange={(e) => setEve(e.target.value)}
           >
-            <option value="">Pas de limite</option>
+            <option value="">{ts.noLimit}</option>
             {withCurrent(
               HOURS.filter((m) => m >= 17 * 60 && m < 24 * 60),
               parseClock(eveCutoff || "21:00") ?? 21 * 60,
             ).map((m) => (
               <option key={m} value={formatClock(m)}>
-                {formatClockFr(m)}
+                {formatClockLocale(m, locale)}
               </option>
             ))}
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="garder-libre">Soirées et fins de semaine : garder libre</Label>
+          <Label htmlFor="garder-libre">{ts.keepFree}</Label>
           <select
             id="garder-libre"
             className={SELECT}
@@ -183,7 +184,7 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
           >
             {withCurrent(KEEP_FREE_CHOICES, keepFree).map((p) => (
               <option key={p} value={p}>
-                {p === 0 ? "Rien de spécial" : `Au moins ${p} %`}
+                {p === 0 ? ts.keepFreeNone : ts.keepFreeAtLeast(p)}
               </option>
             ))}
           </select>
@@ -198,7 +199,7 @@ export function StudyPrefsForm({ prefs }: { prefs: StudyPreferences }) {
         </p>
       )}
       <Button type="submit" disabled={pending} className="sm:self-start">
-        {pending ? "Enregistrement…" : "Enregistrer ces préférences"}
+        {pending ? t.common.saving : ts.save}
       </Button>
     </form>
   );

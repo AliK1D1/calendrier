@@ -172,4 +172,33 @@ export const schedule = {
     period: (from: string, to: string, n: number) => `du ${from} au ${to} (${n} fois)`,
     truncated: "titre raccourci",
   },
+  availability: {
+    title: "Disponibilités ponctuelles",
+    intro:
+      "« Ce samedi, je suis libre de 13 h à 18 h. » Ce jour-là, l'app ne propose des moments que pendant ces heures, même si ton horaire habituel (cours, travail) dit autre chose. Les plans acceptés et les séances d'étude de ce jour-là comptent toujours. Tes groupes voient le jour et les heures, jamais la note.",
+    day: "Jour",
+    from: "De",
+    to: "À",
+    note: "Note pour toi (facultatif)",
+    notePlaceholder: "ex. pas de shift cette semaine",
+    add: "Ajouter",
+    added: "Disponibilité ajoutée.",
+    deleted: "Disponibilité supprimée.",
+    none: "Aucune disponibilité à venir.",
+    remove: "Supprimer",
+    removeLabel: (day: string, time: string) => `Supprimer la disponibilité du ${day}, ${time}`,
+  },
+  studyFlash: {
+    nothingMore: "Tout est déjà planifié : rien de plus à proposer.",
+    computeFailed: "Le calcul n'a pas fonctionné. Réessaie.",
+    notMoved: (error: string) => `Séance non déplacée : ${error}`,
+    moved: (label: string) => `Séance déplacée : ${label}.`,
+    checkFailed: "La vérification n'a pas fonctionné. Réessaie.",
+    allRefused: "Propositions retirées. Rien n'a été ajouté à ton horaire.",
+    refused: (n: number) => `${n} ${n >= 2 ? "séances refusées" : "séance refusée"}.`,
+    movedIn: (n: number) =>
+      `${n} ${n >= 2 ? "séances déplacées" : "séance déplacée"} dans ton horaire.`,
+    addedTo: (n: number) => `${n} ${n >= 2 ? "séances ajoutées" : "séance ajoutée"} à ton horaire.`,
+    saveFailed: "L'enregistrement n'a pas fonctionné. Réessaie.",
+  },
 };

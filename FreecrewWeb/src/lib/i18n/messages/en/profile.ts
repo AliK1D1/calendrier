@@ -1,0 +1,170 @@
+import type { profile as fr } from "../fr/profile";
+
+export const profile: typeof fr = {
+  metaTitle: "Profile",
+  title: "Profile",
+  dbOutdated: (migration: string) =>
+    `The database is out of date: apply supabase/migration-${migration}.sql (see README).`,
+  sections: {
+    you: "You",
+    quiet: "Hours I don't go out",
+    privacy: "Privacy",
+    outlook: "Outlook",
+    subscriptions: "Online calendars",
+    study: "Study",
+    appearance: "Appearance",
+    home: "Home and sign out",
+  },
+  you: {
+    title: "You",
+    description: (email: string) =>
+      `Your travel mode is used to estimate your travel times. Signed in as ${email}.`,
+    fallbackUser: "user",
+    name: "Your name (seen by your friends)",
+    saved: "Profile saved.",
+  },
+  quiet: {
+    title: "Hours I don't go out",
+    description:
+      "The app won't suggest anything outside these hours: they count as busy time at home, every day.",
+    before: "I don't go out before",
+    after: "I don't go out after",
+    noLimit: "No limit",
+    saved: "Hours saved.",
+    save: "Save these hours",
+  },
+  privacy: {
+    title: "Privacy",
+    description:
+      "What members of your groups see of your schedule. Your name and places stay visible so travel times can be worked out.",
+    hideTitles:
+      "Hide the title of my blocks: members of my groups only see “Busy”, the time and the place.",
+    saved: "Setting saved.",
+  },
+  study: {
+    title: "Study preferences",
+    description:
+      "For the sessions the app suggests before an exam or assignment (Study page). Sessions happen within these hours, and never during the hours you don't go out.",
+    minSession: "Sessions of at least",
+    maxSession: "Sessions of at most",
+    maxPerDay: "At most per day",
+    breakBetween: "Break between two sessions",
+    noBreak: "None",
+    from: "I study from",
+    until: "Until",
+    eve: "The night before an exam, not after",
+    noLimit: "No limit",
+    keepFree: "Evenings and weekends: keep free",
+    keepFreeNone: "Nothing special",
+    keepFreeAtLeast: (p: number) => `At least ${p}%`,
+    saved: "Preferences saved.",
+    save: "Save these preferences",
+  },
+  appearance: {
+    title: "Appearance",
+    description: "Light or dark mode, and the colour of the buttons. The change shows right away.",
+    theme: "Theme",
+    themes: { systeme: "Match device", clair: "Light", sombre: "Dark" },
+    themeHint: "“Match device” turns dark at the same time as your phone or computer.",
+    accent: "Accent colour",
+    accents: {
+      bleu: "Blue",
+      indigo: "Indigo",
+      rose: "Pink",
+      orange: "Orange",
+      vert: "Green",
+      sarcelle: "Teal",
+      graphite: "Graphite",
+    },
+    accentHint:
+      "For buttons, active links and the focus outline. The colours of the days and of the schedule blocks don't change.",
+    deviceOnly:
+      "Saved on this device only: your phone and your computer can have different settings.",
+  },
+  home: {
+    title: "Home",
+    yourHome: (name: string) => `Your home: ${name}.`,
+    noHome: "You haven't chosen your home yet.",
+    managePlaces: "Manage my places",
+    signOut: "Sign out",
+  },
+  outlook: {
+    title: "Outlook calendar",
+    description:
+      "Connect your Outlook calendar (personal or work/school account): your events count as busy time, without typing them in. Read only: the app never writes to your Outlook. Your friends only see “Busy”, never the titles or places.",
+    intro:
+      "We read your main calendar (you can pick another one), from this week to 8 weeks later. Sync runs every 15 minutes while the app is open, and when you click “Refresh”.",
+    connect: "Connect Outlook",
+    notConfigured: "Outlook isn't set up on this site yet (Microsoft keys missing).",
+    account: "Account",
+    microsoftAccount: "Microsoft account",
+    calendar: "Calendar",
+    mainCalendar: "Main calendar",
+    lastSync: "Last sync",
+    notYet: "not yet",
+    calendarToRead: "Calendar to read",
+    mainSuffix: " (main)",
+    choose: "Choose",
+    chosen: "Calendar chosen.",
+    synced: "Outlook synced.",
+    oneMoment: "One moment…",
+    refreshNow: "Refresh now",
+    chooseCalendar: "Choose the calendar",
+    reconnect: "Reconnect Outlook",
+    confirmDisconnect:
+      "Disconnect Outlook? Your Outlook blocks will be removed from the app right away.",
+    disconnect: "Disconnect",
+    disconnected: "Outlook disconnected: its blocks were removed.",
+    returns: {
+      connecte: "Outlook connected and synced.",
+      "connecte-erreur": "Outlook is connected, but the first sync didn't work (see above).",
+      refuse: "Outlook connection cancelled.",
+      expire: "The Outlook connection expired. Start again.",
+      echec: "The Outlook connection didn't work. Try again.",
+      "non-configure": "Outlook isn't set up on this site yet.",
+    },
+  },
+  subscriptions: {
+    title: "Online calendars",
+    description:
+      "Subscribe to a calendar that updates on its own (Formula 1 schedule, your team, holidays…), with or without Outlook. You choose whether it counts as busy time. Nobody else sees your subscribed calendars.",
+    busyQuestion: "Do these events count as busy time?",
+    busyYes: "Yes, I'm busy",
+    busyYesHint: ": the app suggests nothing at those times (your friends see “Busy”).",
+    busyNo: "No, just to see",
+    busyNoHint:
+      ": shown in my schedule, without blocking my free time (e.g. F1 races). Nobody else sees them.",
+    done: "Done.",
+    justToSee: "just to see",
+    lastUpdate: (when: string) => `Last update: ${when}`,
+    notYet: "not yet",
+    keepLast: (when: string | null) =>
+      ` We keep the last known version${when ? ` (${when})` : ""}. If the link no longer works, remove this calendar.`,
+    countsAsBusy: "Counts as busy time",
+    refresh: "Refresh",
+    confirmRemove: (name: string) =>
+      `Remove “${name}”? Its events will no longer be shown or used.`,
+    remove: "Remove",
+    full: (max: number) => `You've reached ${max} subscribed calendars: remove one to add another.`,
+    chooseBusy: "Choose whether this calendar counts as busy time.",
+    addByLink: "Add by link",
+    link: "Calendar link (.ics or webcal://)",
+    linkPlaceholder: "webcal://example.com/calendar.ics",
+    linkHint:
+      "On the calendar's website, look for “Subscribe”, “iCal” or “Add to Outlook / Google”, then copy the link. Careful: a secret link (e.g. Google's “secret address in iCal format”) gives access to the whole calendar; don't share it with anyone else.",
+    name: "Name (optional)",
+    namePlaceholder: "E.g. Formula 1",
+    oneMoment: "One moment…",
+    add: "Add the calendar",
+    fromOutlook: "From your Outlook account",
+    fromOutlookHint:
+      "The calendars you subscribe to in Outlook (and your other calendars) show up here. Event titles aren't read: they carry the calendar's name.",
+    noOtherOutlook: "No other calendar in your Outlook account.",
+    seeOutlook: "See my Outlook calendars",
+    outlookCalendar: "Outlook calendar",
+    subscribedSuffix: " (subscribed)",
+    addShort: "Add",
+    footer:
+      "We read 8 weeks starting this week. Automatic update every 6 hours while the app is open, or with “Refresh”. If a link stops responding, we keep the last version and warn you here.",
+  },
+};

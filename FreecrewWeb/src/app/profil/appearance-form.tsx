@@ -10,7 +10,6 @@ import {
   CLE_ACCENT,
   CLE_THEME,
   EVENEMENT_APPARENCE,
-  THEME_LIBELLES,
   THEME_PAR_DEFAUT,
   THEMES,
   type AccentId,
@@ -18,6 +17,7 @@ import {
   lireAccent,
   lireTheme,
 } from "@/lib/ux/apparence";
+import { useI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 const ICONES: Record<ChoixTheme, typeof Sun> = { systeme: Monitor, clair: Sun, sombre: Moon };
@@ -65,13 +65,15 @@ const PASTILLE =
  * S'applique tout de suite et reste enregistré sur cet appareil (pas de bouton Enregistrer).
  */
 export function AppearanceForm() {
+  const { t: msg } = useI18n();
+  const ta = msg.profile.appearance;
   const theme = useChoix(CLE_THEME, lireTheme, THEME_PAR_DEFAUT);
   const accent = useChoix(CLE_ACCENT, lireAccent, ACCENT_PAR_DEFAUT);
 
   return (
     <div className="flex flex-col gap-6">
       <fieldset className="flex flex-col gap-3">
-        <legend className="mb-3 text-sm font-medium">Thème</legend>
+        <legend className="mb-3 text-sm font-medium">{ta.theme}</legend>
         <div className="grille-4-demi sm:flex sm:flex-wrap sm:gap-2">
           {THEMES.map((t) => {
             const Icone = ICONES[t];
@@ -97,19 +99,16 @@ export function AppearanceForm() {
                   className="sr-only"
                 />
                 <Icone className="size-4" aria-hidden />
-                {THEME_LIBELLES[t]}
+                {ta.themes[t]}
               </label>
             );
           })}
         </div>
-        <p className="text-muted-foreground text-xs">
-          « Selon l&apos;appareil » passe en sombre en même temps que ton téléphone ou ton
-          ordinateur.
-        </p>
+        <p className="text-muted-foreground text-xs">{ta.themeHint}</p>
       </fieldset>
 
       <fieldset className="flex flex-col gap-3">
-        <legend className="mb-3 text-sm font-medium">Couleur d&apos;accent</legend>
+        <legend className="mb-3 text-sm font-medium">{ta.accent}</legend>
         <div className="flex flex-wrap gap-2">
           {ACCENTS.map((a) => {
             const actif = accent === a.id;
@@ -139,21 +138,15 @@ export function AppearanceForm() {
                 >
                   {actif && <Check className="size-3.5" strokeWidth={3} />}
                 </span>
-                {a.libelle}
+                {ta.accents[a.id]}
               </label>
             );
           })}
         </div>
-        <p className="text-muted-foreground text-xs">
-          Pour les boutons, les liens actifs et le contour de sélection. Les couleurs des jours et
-          des blocs de l&apos;horaire ne changent pas.
-        </p>
+        <p className="text-muted-foreground text-xs">{ta.accentHint}</p>
       </fieldset>
 
-      <p className="text-muted-foreground text-xs">
-        Enregistré sur cet appareil seulement : ton téléphone et ton ordinateur peuvent avoir des
-        réglages différents.
-      </p>
+      <p className="text-muted-foreground text-xs">{ta.deviceOnly}</p>
     </div>
   );
 }

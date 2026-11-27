@@ -44,7 +44,9 @@ const DEFAULT_CENTER: L.LatLngExpression = [45.5017, -73.5673];
  * place-map-lazy.tsx) : Leaflet touche `window` dès l'import.
  */
 export default function PlaceMap({ points, onPick, className }: PlaceMapProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const osmCredit =
+    locale === "en" ? "OpenStreetMap contributors" : "les contributeurs d’OpenStreetMap";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
@@ -59,8 +61,7 @@ export default function PlaceMap({ points, onPick, className }: PlaceMapProps) {
     const map = L.map(containerRef.current, { center: DEFAULT_CENTER, zoom: 11 });
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">les contributeurs d’OpenStreetMap</a>',
+      attribution: `&copy; <a href="https://www.openstreetmap.org/copyright">${osmCredit}</a>`,
     }).addTo(map);
     map.on("click", (e: L.LeafletMouseEvent) => onPickRef.current?.(e.latlng.lat, e.latlng.lng));
     layerRef.current = L.layerGroup().addTo(map);
@@ -70,7 +71,7 @@ export default function PlaceMap({ points, onPick, className }: PlaceMapProps) {
       mapRef.current = null;
       layerRef.current = null;
     };
-  }, []);
+  }, [osmCredit]);
 
   useEffect(() => {
     const map = mapRef.current;

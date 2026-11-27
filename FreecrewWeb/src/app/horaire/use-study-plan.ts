@@ -7,7 +7,8 @@ import type { Flash } from "@/components/flash-message";
 import { addMinutesTo, zonedTime } from "@/lib/scheduling/time";
 import { formatClock, MINUTES_PER_DAY } from "@/lib/scheduling/weeklyBlocks";
 import type { SessionView, StudyPlanView } from "@/lib/study/service";
-import { plural } from "@/lib/ux/plural";
+import { useI18n } from "@/lib/i18n/client";
+import type { Locale } from "@/lib/i18n/config";
 
 import type { StudyProps } from "./types";
 
@@ -15,16 +16,18 @@ import type { StudyProps } from "./types";
 const STORAGE_KEY = "tlc-etude-propositions";
 const STORAGE_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 
-function readSaved(): StudyPlanView | null {
+function readSaved(locale: Locale): StudyPlanView | null {
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const saved = JSON.parse(raw) as { plan?: StudyPlanView; savedAt?: number };
+    const saved = JSON.parse(raw) as { plan?: StudyPlanView; savedAt?: number; locale?: string };
     if (
       !saved.plan ||
       !Array.isArray(saved.plan.sessions) ||
       !Array.isArray(saved.plan.warnings) ||
       typeof saved.savedAt !== "number" ||
+      // Les textes des séances sont dans la langue du calcul : on oublie si la langue a changé.
+      saved.locale !== locale ||
       Date.now() - saved.savedAt > STORAGE_MAX_AGE_MS
     ) {
       return null;
@@ -35,10 +38,13 @@ function readSaved(): StudyPlanView | null {
   }
 }
 
-function writeSaved(plan: StudyPlanView | null) {
+function writeSaved(plan: StudyPlanView | null, locale: Locale) {
   try {
     if (plan) {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ plan, savedAt: Date.now() }));
+      window.sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ plan, savedAt: Date.now(), locale }),
+      );
     } else {
       window.sessionStorage.removeItem(STORAGE_KEY);
     }
@@ -69,16 +75,21 @@ export function useStudyPlan(
   { onFlash, onShow }: { onFlash: (f: Flash) => void; onShow: (s: SessionView) => void },
 ) {
   const router = useRouter();
+  const { locale, t, tr } = useI18n();
+  const tf = t.schedule.studyFlash;
   const [plan, setPlanState] = useState<StudyPlanView | null>(null);
   const [loading, setLoading] = useState<"planifier" | "replanifier" | null>(null);
   const [busy, setBusy] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const started = useRef(false);
 
-  const setPlan = useCallback((next: StudyPlanView | null) => {
-    setPlanState(next);
-    writeSaved(next && next.sessions.length + next.warnings.length > 0 ? next : null);
-  }, []);
+  const setPlan = useCallback(
+    (next: StudyPlanView | null) => {
+      setPlanState(next);
+      writeSaved(next && next.sessions.length + next.warnings.length > 0 ? next : null, locale);
+    },
+    [locale],
+  );
 
   const run = useCallback(
     async (kind: "planifier" | "replanifier") => {
@@ -99,10 +110,10 @@ export function useStudyPlan(
         const first = r.value.sessions[0];
         if (first) onShow(first);
         else if (r.value.warnings.length === 0) {
-          onFlash({ type: "ok", text: "Tout est déjà planifié : rien de plus à proposer." });
+          onFlash({ type: "ok", text: tf.nothingMore });
         }
       } catch {
-        onFlash({ type: "erreur", text: "Le calcul n'a pas fonctionné. Réessaie." });
+        onFlash({ type: "erreur", text: tf.computeFailed });
       } finally {
         setLoading(null);
         // L'adresse ne relance plus le calcul si on recharge la page.
@@ -111,7 +122,7 @@ export function useStudyPlan(
         }
       }
     },
-    [study, onFlash, onShow, setPlan, router],
+    [study, onFlash, onShow, setPlan, router, tf],
   );
 
   useEffect(() => {
@@ -119,10 +130,10 @@ export function useStudyPlan(
     started.current = true;
     if (study.start) void run(study.start);
     else {
-      const saved = readSaved();
+      const saved = readSaved(locale);
       if (saved) setPlanState(saved);
     }
-  }, [study, run]);
+  }, [study, run, locale]);
 
   /** Déplace une séance (glisser ou flèches) : le serveur la revalide avant qu'elle bouge. */
   const move = useCallback(
@@ -147,7 +158,7 @@ export function useStudyPlan(
         });
         if (!r.ok) {
           setErrorKey(key);
-          onFlash({ type: "erreur", text: `Séance non déplacée : ${r.error}` });
+          onFlash({ type: "erreur", text: tf.notMoved(tr(r.error)) });
           return;
         }
         setPlan({
@@ -156,14 +167,14 @@ export function useStudyPlan(
             .map((x) => (x.key === key ? r.value : x))
             .sort((a, b) => a.start.localeCompare(b.start)),
         });
-        onFlash({ type: "ok", text: `Séance déplacée : ${r.value.label}.` });
+        onFlash({ type: "ok", text: tf.moved(r.value.label) });
       } catch {
-        onFlash({ type: "erreur", text: "La vérification n'a pas fonctionné. Réessaie." });
+        onFlash({ type: "erreur", text: tf.checkFailed });
       } finally {
         setBusy(false);
       }
     },
-    [study, plan, onFlash, setPlan],
+    [study, plan, onFlash, setPlan, tf, tr],
   );
 
   const nudge = useCallback(
@@ -182,13 +193,10 @@ export function useStudyPlan(
       setPlan(rest.length === 0 ? null : { ...plan, sessions: rest });
       onFlash({
         type: "ok",
-        text:
-          rest.length === 0
-            ? "Propositions retirées. Rien n'a été ajouté à ton horaire."
-            : `${plural(keys.length, "séance refusée", "séances refusées")}.`,
+        text: rest.length === 0 ? tf.allRefused : tf.refused(keys.length),
       });
     },
-    [plan, onFlash, setPlan],
+    [plan, onFlash, setPlan, tf],
   );
 
   const accept = useCallback(
@@ -209,19 +217,16 @@ export function useStudyPlan(
         setPlan(rest.length === 0 ? null : { ...plan, sessions: rest });
         onFlash({
           type: "ok",
-          text:
-            plan.mode === "replan"
-              ? `${plural(r.count, "séance déplacée", "séances déplacées")} dans ton horaire.`
-              : `${plural(r.count, "séance ajoutée", "séances ajoutées")} à ton horaire.`,
+          text: plan.mode === "replan" ? tf.movedIn(r.count) : tf.addedTo(r.count),
         });
         router.refresh();
       } catch {
-        onFlash({ type: "erreur", text: "L'enregistrement n'a pas fonctionné. Réessaie." });
+        onFlash({ type: "erreur", text: tf.saveFailed });
       } finally {
         setBusy(false);
       }
     },
-    [study, plan, onFlash, setPlan, router],
+    [study, plan, onFlash, setPlan, router, tf],
   );
 
   return { plan, loading, busy, errorKey, run, move, nudge, refuse, accept };

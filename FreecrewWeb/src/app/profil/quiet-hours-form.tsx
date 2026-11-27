@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { formatClock, formatClockFr } from "@/lib/scheduling/weeklyBlocks";
+import { useI18n } from "@/lib/i18n/client";
+import { formatClockLocale } from "@/lib/i18n/format";
+import { formatClock } from "@/lib/scheduling/weeklyBlocks";
 
 import { enregistrerHeuresCalmes } from "./actions";
 
@@ -21,6 +23,8 @@ const SELECT =
 
 /** « Heures où je ne sors pas » : avant telle heure, après telle heure. */
 export function QuietHoursForm({ before, after }: { before: number | null; after: number | null }) {
+  const { locale, t, tr } = useI18n();
+  const tq = t.profile.quiet;
   const [avant, setAvant] = useState(before === null ? "" : formatClock(before));
   const [apres, setApres] = useState(after === null ? "" : formatClock(after));
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -34,41 +38,39 @@ export function QuietHoursForm({ before, after }: { before: number | null; after
         setMessage(null);
         startTransition(async () => {
           const r = await enregistrerHeuresCalmes({ before: avant, after: apres });
-          setMessage(
-            r.ok ? { ok: true, text: "Heures enregistrées." } : { ok: false, text: r.error },
-          );
+          setMessage(r.ok ? { ok: true, text: tq.saved } : { ok: false, text: tr(r.error) });
         });
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="calme-avant">Je ne sors pas avant</Label>
+          <Label htmlFor="calme-avant">{tq.before}</Label>
           <select
             id="calme-avant"
             className={SELECT}
             value={avant}
             onChange={(e) => setAvant(e.target.value)}
           >
-            <option value="">Pas de limite</option>
+            <option value="">{tq.noLimit}</option>
             {options(5 * 60, 12 * 60, before).map((m) => (
               <option key={m} value={formatClock(m)}>
-                {formatClockFr(m)}
+                {formatClockLocale(m, locale)}
               </option>
             ))}
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label htmlFor="calme-apres">Je ne sors pas après</Label>
+          <Label htmlFor="calme-apres">{tq.after}</Label>
           <select
             id="calme-apres"
             className={SELECT}
             value={apres}
             onChange={(e) => setApres(e.target.value)}
           >
-            <option value="">Pas de limite</option>
+            <option value="">{tq.noLimit}</option>
             {options(17 * 60, 23 * 60 + 30, after).map((m) => (
               <option key={m} value={formatClock(m)}>
-                {formatClockFr(m)}
+                {formatClockLocale(m, locale)}
               </option>
             ))}
           </select>
@@ -83,7 +85,7 @@ export function QuietHoursForm({ before, after }: { before: number | null; after
         </p>
       )}
       <Button type="submit" disabled={pending} className="sm:self-start">
-        {pending ? "Enregistrement…" : "Enregistrer ces heures"}
+        {pending ? t.common.saving : tq.save}
       </Button>
     </form>
   );

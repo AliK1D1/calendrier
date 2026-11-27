@@ -1,7 +1,6 @@
 "use client";
 
 import { Languages } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
 import { setLocaleAction } from "@/lib/i18n/actions";
@@ -11,11 +10,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Bouton de langue de l'en-tête : passe à l'autre langue (FR ↔ EN). Le choix est gardé dans
- * un cookie, puis la page est redessinée dans la nouvelle langue.
+ * un cookie, puis la page est rechargée dans la nouvelle langue.
  */
 export function LanguageSwitcher({ className }: { className?: string }) {
   const { locale, t } = useI18n();
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const next: Locale = LOCALES.find((l) => l !== locale) ?? locale;
 
@@ -26,7 +24,10 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       onClick={() =>
         startTransition(async () => {
           await setLocaleAction(next);
-          router.refresh();
+          // Rechargement complet, pas router.refresh() : les résultats déjà affichés (moments
+          // trouvés, séances proposées, messages) ont été calculés dans l'ancienne langue et
+          // resteraient sinon dans l'état des composants client.
+          window.location.reload();
         })
       }
       lang={next}

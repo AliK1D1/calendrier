@@ -6,6 +6,7 @@ import { TravelModePicker } from "@/components/travel-mode-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/lib/i18n/client";
 import { DISPLAY_NAME_MAX } from "@/lib/places/validation";
 import type { TravelMode } from "@/lib/scheduling/types";
 
@@ -18,6 +19,7 @@ export function ProfileForm({
   displayName: string;
   travelMode: TravelMode;
 }) {
+  const { t, tr } = useI18n();
   const [name, setName] = useState(displayName);
   const [mode, setMode] = useState<TravelMode>(travelMode);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -32,13 +34,13 @@ export function ProfileForm({
         startTransition(async () => {
           const r = await enregistrerProfil({ displayName: name, travelMode: mode });
           setMessage(
-            r.ok ? { ok: true, text: "Profil enregistré." } : { ok: false, text: r.error },
+            r.ok ? { ok: true, text: t.profile.you.saved } : { ok: false, text: tr(r.error) },
           );
         });
       }}
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="display-name">Ton nom (vu par tes amis)</Label>
+        <Label htmlFor="display-name">{t.profile.you.name}</Label>
         <Input
           id="display-name"
           value={name}
@@ -58,7 +60,7 @@ export function ProfileForm({
         </p>
       )}
       <Button type="submit" disabled={pending} className="sm:self-start">
-        {pending ? "Enregistrement…" : "Enregistrer"}
+        {pending ? t.common.saving : t.common.save}
       </Button>
     </form>
   );

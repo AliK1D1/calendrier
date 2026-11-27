@@ -14,6 +14,7 @@ import { type BusyBlockInput, expandBusyBlocks } from "@/lib/db/convert";
 import type { Locale } from "@/lib/i18n/config";
 import { formatInstantClock } from "@/lib/i18n/format";
 import { getMessages } from "@/lib/i18n/messages";
+import { translateServerText } from "@/lib/i18n/serverText";
 import { DEFAULT_BUFFER_MINUTES } from "@/lib/meetups/search";
 import { type LeaveBy, leaveByTime, previousStop, transitQueryFor } from "@/lib/scheduling/leaveBy";
 import { TIME_ZONE } from "@/lib/scheduling/time";
@@ -113,7 +114,9 @@ function transitLine(legs: readonly TransitLeg[], locale: Locale): string | null
   if (legs.length === 0) return null;
   const t = getMessages(locale).plans.leave;
   const shown = legs.slice(0, MAX_LEGS_SHOWN).map((l) => {
-    const name = l.line ? `${l.vehicle} ${l.line}` : l.vehicle;
+    // Le nom du véhicule vient de Google en français : traduit à l'affichage.
+    const vehicle = translateServerText(l.vehicle, locale);
+    const name = l.line ? `${vehicle} ${l.line}` : vehicle;
     const stop = l.stop ? t.stop(l.stop) : "";
     return t.legAt(name, formatInstantClock(l.departAt, locale), stop);
   });
